@@ -20,6 +20,7 @@ from webserver.constants import (
     META_SOURCE_AI,
     META_SOURCE_AMAZON,
     META_SOURCE_BAIDU,
+    META_SOURCE_BIQUGE,
     META_SOURCE_DOUBAN,
     META_SOURCE_GOOGLE,
     META_SOURCE_XHSD,
@@ -308,7 +309,7 @@ class BookRefer(BaseHandler):
 
             tasks["tomato"] = _tomato
 
-        if hasattr(biquge, "BiqugeApi"):
+        if META_SOURCE_BIQUGE in sources:
 
             def _biquge():
                 api = biquge.BiqugeApi(copy_image=False)

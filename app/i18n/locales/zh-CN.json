@@ -779,7 +779,8 @@
         "baidu": "百度百科",
         "google": "Google Books",
         "amazon": "Amazon",
-        "xinhua": "新华书店"
+        "xinhua": "新华书店",
+        "biquge": "笔趣阁"
       }
     },
     "users": {

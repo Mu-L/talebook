@@ -749,7 +749,8 @@
         "baidu": "Baidu Baike",
         "google": "Google Books",
         "amazon": "Amazon",
-        "xinhua": "Xinhua Bookstore"
+        "xinhua": "Xinhua Bookstore",
+        "biquge": "Biquge"
       }
     },
     "users": {

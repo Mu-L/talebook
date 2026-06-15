@@ -45,11 +45,12 @@ class DoubanV2MetaPlugin:
             return None
 
     def get_metadata_by_provider(self, provider_value, mi=None):
-        # 按标题重新搜索，找到 provider_value 匹配的条目后下载封面
-        title = mi.title if mi else None
-        if not title:
+        # 用与搜索时相同的 query（优先 isbn）重新搜索，找到 provider_value 匹配的条目后构建完整元数据。
+        # 若仅按标题重搜，初次用 ISBN 搜到的条目可能不在结果中，导致选择静默失效。
+        query = (mi.isbn or mi.title) if mi else None
+        if not query:
             return mi
-        items, search_url = api.search(title)
+        items, search_url = api.search(query, max_count=10)
         for item in items:
             if str(item.get("id")) == str(provider_value):
                 try:

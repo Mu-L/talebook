@@ -41,6 +41,19 @@ class NeodbMetaPlugin:
             return None
 
     def get_metadata_by_provider(self, provider_value, mi=None):
+        # 用与搜索时相同的 query（优先 isbn）重新搜索，匹配 provider_value（NeoDB 条目 URL）
+        # 对应的条目，构建包含标题/作者/出版社/简介/封面的完整元数据。
+        query = (mi.isbn or mi.title) if mi else None
+        if query:
+            items = api.search(query, max_count=10)
+            for item in items:
+                if item.get("url") == provider_value:
+                    try:
+                        return api.build_metadata(item, isbn=getattr(mi, "isbn", None), copy_image=True)
+                    except Exception:
+                        logging.error("NeoDB获取详情失败，provider_value=%s", provider_value)
+                        break
+        # 兜底：对已有 cover_url 直接下载封面
         cover_url = getattr(mi, "cover_url", None)
         if mi and cover_url:
             cover_data = api.get_cover(cover_url)

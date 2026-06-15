@@ -12,6 +12,25 @@ export default defineNuxtPlugin((nuxtApp) => {
     }
   }
 
+  // 统一处理后端返回的控制类错误信封（未安装/未邀请/未登录/异常），触发跳转或提示。
+  async function handleErrorEnvelope(data) {
+    if (data.err === 'not_installed') {
+      console.log('[Talebook] Redirecting to /install');
+      await nuxtApp.runWithContext(() => navigateTo('/install', { redirectCode: 302 }));
+    } else if (data.err === 'not_invited') {
+      const route = useRoute();
+      var next = route.fullPath;
+      next = next ? '?next=' + next : '';
+      if (route.path !== '/welcome') {
+        await nuxtApp.runWithContext(() => navigateTo('/welcome' + next, { redirectCode: 302 }));
+      }
+    } else if (data.err === 'user.need_login') {
+      await nuxtApp.runWithContext(() => navigateTo('/login', { redirectCode: 302 }));
+    } else if (data.err === 'exception') {
+      store.setAlert({ type: 'error', msg: data.msg, to: null });
+    }
+  }
+
   async function backend(url, options) {
     if (url === undefined) {
       throw 'url is undefined ';
@@ -73,21 +92,7 @@ export default defineNuxtPlugin((nuxtApp) => {
         throw msg;
       }
 
-      if (data.err === 'not_installed') {
-        console.log('[Talebook] Redirecting to /install');
-        await nuxtApp.runWithContext(() => navigateTo('/install', { redirectCode: 302 }));
-      } else if (data.err === 'not_invited') {
-        const route = useRoute();
-        var next = route.fullPath;
-        next = next ? '?next=' + next : '';
-        if (route.path !== '/welcome') {
-          await nuxtApp.runWithContext(() => navigateTo('/welcome' + next, { redirectCode: 302 }));
-        }
-      } else if (data.err === 'user.need_login') {
-        await nuxtApp.runWithContext(() => navigateTo('/login', { redirectCode: 302 }));
-      } else if (data.err === 'exception') {
-        store.setAlert({ type: 'error', msg: data.msg, to: null });
-      }
+      await handleErrorEnvelope(data);
       return data;
 
     } catch (e) {
@@ -116,6 +121,22 @@ export default defineNuxtPlugin((nuxtApp) => {
     const rsp = await fetch(server + '/api' + url, args);
     if (!rsp.ok) {
       throw new Error('stream request failed: ' + rsp.status);
+    }
+    // 流式接口返回 application/x-ndjson；若在流处理器运行前发生 @auth/@js 层错误
+    // （如会话过期返回 {"err":"user.need_login"}），响应是普通 JSON，没有换行符，
+    // parseNdjson 不会 yield 任何内容，页面会静默空白。此处先按普通 JSON 处理错误信封，
+    // 复用 backend() 的跳转/提示逻辑。
+    const contentType = rsp.headers.get('Content-Type') || '';
+    if (!contentType.includes('ndjson')) {
+      let data;
+      try {
+        data = await rsp.json();
+      } catch (e) {
+        return;
+      }
+      await handleErrorEnvelope(data);
+      yield data;
+      return;
     }
     yield* parseNdjson(rsp);
   }

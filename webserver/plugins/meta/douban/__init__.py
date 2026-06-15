@@ -1,4 +1,5 @@
 from .api import (  # noqa: F401
+    CHROME_HEADERS,
     KEY,
     DoubanBookApi,
     SimpleMetaData,

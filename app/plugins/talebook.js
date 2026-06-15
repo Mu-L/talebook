@@ -96,10 +96,61 @@ export default defineNuxtPlugin((nuxtApp) => {
     }
   }
 
+  // 流式请求：返回 NDJSON 异步迭代器，调用方用 for await 逐条消费。
+  // 约定首行为 meta（total/title/err 等），后续行为数据项。
+  async function* backend_stream(url, options) {
+    if (url === undefined) {
+      throw 'url is undefined ';
+    }
+    var args = {
+      mode: 'cors', redirect: 'follow', credentials: 'include',
+    };
+
+    const config = useRuntimeConfig();
+    const server = import.meta.server ? config.public.api_url : window.location.origin;
+
+    if (options !== undefined) {
+      Object.assign(args, options);
+    }
+
+    const rsp = await fetch(server + '/api' + url, args);
+    if (!rsp.ok) {
+      throw new Error('stream request failed: ' + rsp.status);
+    }
+    yield* parseNdjson(rsp);
+  }
+
   return {
     provide: {
       alert: showAlert,
-      backend: backend
+      backend: backend,
+      backend_stream: backend_stream
     }
   };
 });
+
+// 解析 NDJSON（换行分隔的 JSON）流：逐行 yield 已解析的对象，跳过空行与非法行，
+// 并正确拼接跨 chunk 被截断的行。单独导出以便单元测试。
+export async function* parseNdjson(response) {
+  const reader = response.body.getReader();
+  const decoder = new TextDecoder();
+  let buffer = '';
+
+  while (true) {
+    const { done, value } = await reader.read();
+    if (done) break;
+
+    buffer += decoder.decode(value, { stream: true });
+    const lines = buffer.split('\n');
+    buffer = lines.pop();
+
+    for (const line of lines) {
+      if (!line.trim()) continue;
+      try {
+        yield JSON.parse(line);
+      } catch (e) {
+        // 跳过不完整/非法的行
+      }
+    }
+  }
+}

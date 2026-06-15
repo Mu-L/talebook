@@ -39,7 +39,7 @@ import { useI18n } from 'vue-i18n';
 
 const store = useMainStore();
 const { t } = useI18n();
-const { $backend, $alert } = useNuxtApp();
+const { $backend, $backend_stream, $alert } = useNuxtApp();
 const route = useRoute();
 
 store.setNavbar(true);
@@ -61,55 +61,23 @@ const fetchBooks = async (p = 1) => {
     loading.value = true;
     books.value = [];
 
-    const config = useRuntimeConfig();
-    const server = import.meta.server ? config.public.api_url : window.location.origin;
-    const fullUrl = server + `/api/scopedbooks?start=${(p - 1) * page_size}&size=${page_size}&stream=1`;
+    const url = `/scopedbooks?start=${(p - 1) * page_size}&size=${page_size}&stream=1`;
 
+    let firstLine = true;
     try {
-        const response = await fetch(fullUrl, {
-            mode: 'cors', redirect: 'follow', credentials: 'include',
-        });
-
-        if (!response.ok) {
-            if ($alert) $alert('error', t('errors.networkError'));
-            loading.value = false;
-            return;
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let firstLine = true;
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    const data = JSON.parse(line);
-                    if (firstLine) {
-                        firstLine = false;
-                        if (data.err === 'exception') {
-                            if ($alert) $alert('error', data.msg || t('errors.networkError'));
-                            loading.value = false;
-                            return;
-                        }
-                        total.value = data.total || 0;
-                        page_cnt.value = total.value > 0 ? Math.max(1, Math.ceil(total.value / page_size)) : 0;
-                        page.value = p;
-                        title.value = data.title || t('navigation.scopedBooks');
-                    } else {
-                        books.value.push(data);
-                    }
-                } catch (e) {
-                    // skip malformed lines
+        for await (const data of $backend_stream(url)) {
+            if (firstLine) {
+                firstLine = false;
+                if (data.err === 'exception') {
+                    if ($alert) $alert('error', data.msg || t('errors.networkError'));
+                    return;
                 }
+                total.value = data.total || 0;
+                page_cnt.value = total.value > 0 ? Math.max(1, Math.ceil(total.value / page_size)) : 0;
+                page.value = p;
+                title.value = data.title || t('navigation.scopedBooks');
+            } else {
+                books.value.push(data);
             }
         }
     } catch (error) {

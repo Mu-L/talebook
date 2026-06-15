@@ -1038,7 +1038,7 @@ import BookCards_Small from '~/components/BookCards_Small.vue';
 const route = useRoute();
 const router = useRouter();
 const store = useMainStore();
-const { $backend, $alert } = useNuxtApp();
+const { $backend, $backend_stream, $alert } = useNuxtApp();
 const { t } = useI18n();
 
 const bookid = route.params.bid;
@@ -1349,52 +1349,20 @@ const get_refer = async () => {
     refer_books_loading.value = true;
     refer_books.value = [];
 
-    const config = useRuntimeConfig();
-    const server = import.meta.server ? config.public.api_url : window.location.origin;
-    const fullUrl = server + `/api/book/${bookid}/refer?stream=1`;
-
+    let firstLine = true;
     try {
-        const response = await fetch(fullUrl, {
-            mode: 'cors', redirect: 'follow', credentials: 'include',
-        });
-
-        if (!response.ok) {
-            refer_books_loading.value = false;
-            return;
-        }
-
-        const reader = response.body.getReader();
-        const decoder = new TextDecoder();
-        let buffer = '';
-        let firstLine = true;
-
-        while (true) {
-            const { done, value } = await reader.read();
-            if (done) break;
-
-            buffer += decoder.decode(value, { stream: true });
-            const lines = buffer.split('\n');
-            buffer = lines.pop();
-
-            for (const line of lines) {
-                if (!line.trim()) continue;
-                try {
-                    const data = JSON.parse(line);
-                    if (firstLine) {
-                        firstLine = false;
-                        refer_books_loading.value = false;
-                    } else {
-                        data.href = '';
-                        if (!data.cover_url || data.cover_url === '') {
-                            data.img = '/get/cover/0';
-                        } else {
-                            data.img = '/get/pcover?url=' + encodeURIComponent(data.cover_url);
-                        }
-                        refer_books.value.push(data);
-                    }
-                } catch (e) {
-                    // skip malformed lines
+        for await (const data of $backend_stream(`/book/${bookid}/refer?stream=1`)) {
+            if (firstLine) {
+                firstLine = false;
+                refer_books_loading.value = false;
+            } else {
+                data.href = '';
+                if (!data.cover_url || data.cover_url === '') {
+                    data.img = '/get/cover/0';
+                } else {
+                    data.img = '/get/pcover?url=' + encodeURIComponent(data.cover_url);
                 }
+                refer_books.value.push(data);
             }
         }
     } catch (e) {

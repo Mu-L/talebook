@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
+import asyncio
 import base64
 import json
 import logging
@@ -112,12 +113,14 @@ class FakeHandler(BaseHandler):
         h.rsp_headers = {}
         h.rsp = None
         h.cookie = {}
+        h._finished = False
         h.session = get_db()
 
     def write(self, rsp):
         self.rsp = rsp
 
     def finish(self):
+        self._finished = True
         return None
 
     def set_header(self, k, v):
@@ -879,6 +882,9 @@ class TestJsonResponse(TestApp):
     def raise_(self, err):
         raise err
 
+    def run_js(self, handler, func):
+        asyncio.run(webserver.handlers.base.js(func)(handler))
+
     def assertHeaders(self, headers):
         self.assertEqual(
             headers,
@@ -892,7 +898,7 @@ class TestJsonResponse(TestApp):
     def test_err(self):
         f = FakeHandler()
         with mock.patch("traceback.format_exc", return_value=""):
-            webserver.handlers.base.js(lambda x: self.raise_(RuntimeError()))(f)
+            self.run_js(f, lambda x: self.raise_(RuntimeError()))
         self.assertTrue(isinstance(f.rsp["msg"], str))
         self.assertEqual(f.rsp["err"], "exception")
         self.assertHeaders(f.rsp_headers)
@@ -900,9 +906,9 @@ class TestJsonResponse(TestApp):
     def test_finish(self):
         f = FakeHandler()
         with mock.patch("traceback.format_exc", return_value=""):
-            webserver.handlers.base.js(lambda x: self.raise_(web.Finish()))(f)
-        self.assertEqual(f.rsp, "")
-        self.assertHeaders(f.rsp_headers)
+            self.run_js(f, lambda x: self.raise_(web.Finish()))
+        self.assertEqual(f.rsp, None)
+        self.assertEqual(f.rsp_headers, {})
 
 
 class TestInviteMode(TestApp):

@@ -401,10 +401,12 @@ const fetchBooks = async (p = 1) => {
         }
     });
   
+    // 连载状态筛选走网络书专用接口
     if (statusFilter.value !== 'all') {
         query.status = statusFilter.value;
     }
 
+    // 构建查询字符串
     const queryString = Object.keys(query)
         .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(query[key])}`)
         .join('&');
@@ -413,7 +415,7 @@ const fetchBooks = async (p = 1) => {
     const config = useRuntimeConfig();
     const server = import.meta.server ? config.public.api_url : window.location.origin;
     const fullUrl = server + endpoint + '?' + queryString;
-  
+
     try {
         const response = await fetch(fullUrl, {
             mode: 'cors', redirect: 'follow', credentials: 'include',

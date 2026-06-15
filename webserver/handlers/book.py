@@ -3,13 +3,13 @@
 import asyncio
 import concurrent.futures
 import datetime
-import time
 import json
 import logging
 import os
 import random
 import re
 import shutil
+import time
 import urllib
 
 import tornado.escape
@@ -259,10 +259,7 @@ class BookRefer(BaseHandler):
         loop = asyncio.get_event_loop()
         executor = concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks))
         try:
-            pending_map = {
-                loop.run_in_executor(executor, fn): name
-                for name, fn in tasks.items()
-            }
+            pending_map = {loop.run_in_executor(executor, fn): name for name, fn in tasks.items()}
             deadline = time.time() + self.REFER_TIMEOUT
 
             while pending_map:

@@ -23,8 +23,7 @@ from bs4 import BeautifulSoup
 KEY = "neodb"
 
 _BASE_URL = "https://neodb.social"
-_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36")
+_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
 
 _HEADERS = {
     "User-Agent": _UA,

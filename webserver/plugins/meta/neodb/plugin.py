@@ -3,7 +3,6 @@
 
 import logging
 
-from webserver.constants import META_SOURCE_NEODB
 
 from . import api
 from .api import KEY

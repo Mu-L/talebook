@@ -21,15 +21,16 @@ from html.parser import HTMLParser
 
 KEY = "douban_v2"
 
-_UA = ("Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) "
-       "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36")
+_UA = "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/148.0.0.0 Safari/537.36"
 
 _SEARCH_HEADERS = {
     "User-Agent": _UA,
     "Referer": "https://book.douban.com/",
-    "Accept": ("text/html,application/xhtml+xml,application/xml;q=0.9,"
-               "image/avif,image/webp,image/apng,*/*;q=0.8,"
-               "application/signed-exchange;v=b3;q=0.7"),
+    "Accept": (
+        "text/html,application/xhtml+xml,application/xml;q=0.9,"
+        "image/avif,image/webp,image/apng,*/*;q=0.8,"
+        "application/signed-exchange;v=b3;q=0.7"
+    ),
     "Accept-Language": "zh-CN,zh;q=0.9",
 }
 
@@ -40,12 +41,12 @@ _SEARCH_BASE = "https://search.douban.com/book/subject_search"
 
 def _parse_js_challenge_cookies(html):
     cookies = {}
-    m_wt = re.search(r'WTKkN\s*:\s*(\d+)', html)
-    m_bo = re.search(r'bOYDu\s*:\s*(\d+)', html)
-    m_wy = re.search(r'wyeCN\s*:\s*(\d+)', html)
+    m_wt = re.search(r"WTKkN\s*:\s*(\d+)", html)
+    m_bo = re.search(r"bOYDu\s*:\s*(\d+)", html)
+    m_wy = re.search(r"wyeCN\s*:\s*(\d+)", html)
     if m_wt and m_bo and m_wy:
         cookies["__tst_status"] = str(int(m_wt.group(1)) + int(m_bo.group(1)) + int(m_wy.group(1)))
-    m_eo = re.search(r'iTyzs\s*\([^,]+,\s*(\d+)\)', html)
+    m_eo = re.search(r"iTyzs\s*\([^,]+,\s*(\d+)\)", html)
     if m_eo:
         cookies["EO_Bot_Ssid"] = m_eo.group(1)
     return cookies
@@ -173,7 +174,9 @@ def get_book_detail(book_url, search_url):
 
     parser = _BookDetailParser()
     parser.feed(resp.text)
-    logging.info("[D2]parsed book detail: authors=%s, isbn=%s, intro_len=%d", parser.authors, parser.isbn, len(parser.get_intro() or ""))
+    logging.info(
+        "[D2]parsed book detail: authors=%s, isbn=%s, intro_len=%d", parser.authors, parser.isbn, len(parser.get_intro() or "")
+    )
     return {
         "intro": parser.get_intro() or None,
         "authors": parser.authors,

@@ -5,7 +5,6 @@
 import logging
 
 from webserver.i18n import _
-from webserver.constants import META_SOURCE_DOUBAN_V2
 
 from . import api
 from .api import KEY
@@ -55,7 +54,8 @@ class DoubanV2MetaPlugin:
             if str(item.get("id")) == str(provider_value):
                 try:
                     return api.build_metadata(
-                        item, search_url,
+                        item,
+                        search_url,
                         isbn=getattr(mi, "isbn", None),
                         copy_image=True,
                     )

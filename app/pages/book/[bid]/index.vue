@@ -1038,7 +1038,7 @@ import BookCards_Small from '~/components/BookCards_Small.vue';
 const route = useRoute();
 const router = useRouter();
 const store = useMainStore();
-const { $backend, $alert } = useNuxtApp();
+const { $backend, $backend_stream, $alert } = useNuxtApp();
 const { t } = useI18n();
 
 const bookid = route.params.bid;
@@ -1347,19 +1347,24 @@ const sendToDevice = async () => {
 const get_refer = async () => {
     dialog_refer.value = true;
     refer_books_loading.value = true;
+    refer_books.value = [];
 
+    let firstLine = true;
     try {
-        const rsp = await $backend(`/book/${bookid}/refer`);
-        refer_books.value = rsp.books.map((b) => {
-            b.href = '';
-            // 如果没有封面地址，使用默认封面
-            if (!b.cover_url || b.cover_url === '') {
-                b.img = '/get/cover/0';
+        for await (const data of $backend_stream(`/book/${bookid}/refer?stream=1`)) {
+            if (firstLine) {
+                firstLine = false;
+                refer_books_loading.value = false;
             } else {
-                b.img = '/get/pcover?url=' + encodeURIComponent(b.cover_url);
+                data.href = '';
+                if (!data.cover_url || data.cover_url === '') {
+                    data.img = '/get/cover/0';
+                } else {
+                    data.img = '/get/pcover?url=' + encodeURIComponent(data.cover_url);
+                }
+                refer_books.value.push(data);
             }
-            return b;
-        });
+        }
     } catch (e) {
         console.error(e);
     } finally {

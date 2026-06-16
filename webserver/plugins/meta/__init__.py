@@ -13,3 +13,6 @@ from .xhsd.api import XhsdBookApi, KEY as XHSD_KEY, XHSD_ISBN  # noqa: F401
 # 七猫小说 metadata plugin
 from .qimao.api import QimaoNovelApi, KEY as QIMAO_KEY, QIMAO_ISBN  # noqa: F401
 from .qimao.api import get_qimao_metadata  # noqa: F401
+
+# Douban metadata plugin
+from .douban.api import DoubanBookApi, KEY as DOUBAN_KEY, str2date  # noqa: F401

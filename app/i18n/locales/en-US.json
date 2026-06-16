@@ -751,7 +751,9 @@
         "amazon": "Amazon",
         "xinhua": "Xinhua Bookstore",
         "tomato": "Tomato Novel",
-        "qimao": "Qimao Novel"
+        "qimao": "Qimao Novel",
+        "douban_v2": "Douban V2",
+        "neodb": "NeoDB"
       }
     },
     "users": {

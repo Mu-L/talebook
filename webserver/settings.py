@@ -164,6 +164,18 @@ settings = {
     'GEETEST_CAPTCHA_ID': '',              # 极验 Captcha ID (公钥)
     'GEETEST_CAPTCHA_KEY': '',             # 极验 Captcha Key (私钥)
 
+    # 主题系统配置
+    'themes_path': '/data/books/themes/',
+    'ACTIVE_THEME': '',
+    'THEME_STORE_INDEX_URL': 'https://cdn.jsdelivr.net/gh/talebook/store@main/index.json',
+    'THEME_ALLOWED_DOMAINS': [
+        'github.com',
+        'raw.githubusercontent.com',
+        'gitee.com',
+        'cdn.jsdelivr.net',
+        'objects.githubusercontent.com',
+    ],
+
     'FRIENDS': [
         { "text": u"鸠摩搜索", "href": "https://www.jiumodiary.com/" },
         { "text": u"追更神器", "href": "https://github.com/hectorqin/reader" },

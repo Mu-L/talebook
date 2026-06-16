@@ -4,7 +4,7 @@ import logging
 
 
 def routes():
-    from . import admin, book, booksource_admin, captcha, files, meta, network_library, opds, scan, user
+    from . import admin, book, booksource_admin, captcha, files, meta, network_library, opds, scan, theme, user
 
     routes = []
     routes += admin.routes()
@@ -19,4 +19,5 @@ def routes():
     routes += captcha_routes
     logging.info("CAPTCHA routes registered: %s", [r[0] for r in captcha_routes])
     routes += files.routes()
+    routes += theme.routes()
     return routes

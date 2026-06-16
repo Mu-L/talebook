@@ -202,6 +202,7 @@
     "localLibrary": "本地书库",
     "networkLibrary": "网络书库",
     "bookSources": "书源管理",
+    "themes": "主题管理",
     "systemLogs": "系统日志"
   },
   "network": {
@@ -966,5 +967,18 @@
         "item": "评分 {0} / {1}"
       }
     }
+  },
+  "theme": {
+    "title": "主题管理",
+    "description": "安装并管理界面主题，支持替换顶栏、底栏等布局组件。",
+    "install": "安装主题",
+    "installUrlLabel": "主题包下载地址",
+    "installUrlPlaceholder": "输入 ZIP 主题包的 HTTPS 下载链接（仅支持 GitHub/Gitee/jsDelivr）",
+    "installed": "已安装的主题",
+    "noThemes": "暂无已安装主题，请从上方输入下载链接安装。",
+    "active": "已激活",
+    "activate": "激活",
+    "deactivate": "恢复默认",
+    "deleteConfirm": "确认删除此主题？"
   }
 }

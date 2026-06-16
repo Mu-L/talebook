@@ -197,6 +197,7 @@
     "localLibrary": "Local Library",
     "networkLibrary": "Network Library",
     "bookSources": "Book Sources",
+    "themes": "Themes",
     "systemLogs": "System Logs"
   },
   "network": {
@@ -950,5 +951,18 @@
   "error": {
     "otherError": "Other Error",
     "pageNotFound": "Page Not Found"
+  },
+  "theme": {
+    "title": "Theme Management",
+    "description": "Install and manage UI themes. Themes can replace layout components like the header and footer.",
+    "install": "Install Theme",
+    "installUrlLabel": "Theme package URL",
+    "installUrlPlaceholder": "Enter HTTPS URL to a ZIP theme package (GitHub/Gitee/jsDelivr only)",
+    "installed": "Installed Themes",
+    "noThemes": "No themes installed. Enter a download URL above to install one.",
+    "active": "Active",
+    "activate": "Activate",
+    "deactivate": "Use Default",
+    "deleteConfirm": "Delete this theme?"
   }
 }

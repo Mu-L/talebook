@@ -1,12 +1,26 @@
 <template>
     <v-app :theme="store.theme">
         <Loading />
-        <AppHeader v-if="store.nav" />
+        <template v-if="store.nav">
+            <ClientOnly>
+                <component :is="dynamicHeader" />
+                <template #fallback>
+                    <AppHeader />
+                </template>
+            </ClientOnly>
+        </template>
         <v-main>
             <v-container fluid>
                 <AppPress v-if="store.nav" />
                 <slot />
-                <AppFooter v-if="store.nav" />
+                <template v-if="store.nav">
+                    <ClientOnly>
+                        <component :is="dynamicFooter" />
+                        <template #fallback>
+                            <AppFooter />
+                        </template>
+                    </ClientOnly>
+                </template>
             </v-container>
 
             <v-dialog
@@ -55,22 +69,51 @@
 </template>
 
 <script setup>
-import { computed, onMounted } from 'vue';
+import { shallowRef, computed, onMounted } from 'vue';
 import { useRouter, useHead } from 'nuxt/app';
 import { useMainStore } from '@/stores/main';
+import { useThemeStore } from '@/stores/theme';
 import { useDisplay } from 'vuetify';
 import Loading from '@/components/Loading.vue';
+import AppHeader from '@/components/AppHeader.vue';
+import AppFooter from '@/components/AppFooter.vue';
 
 const store = useMainStore();
+const themeStore = useThemeStore();
 const display = useDisplay();
 const router = useRouter();
+
+const dynamicHeader = shallowRef(AppHeader);
+const dynamicFooter = shallowRef(AppFooter);
 
 useHead({
     title: computed(() => store.site_title),
     titleTemplate: computed(() => store.site_title_template),
 });
 
-onMounted(() => {
+onMounted(async () => {
     store.setLoading(false);
+
+    await themeStore.fetchActiveTheme();
+    const theme = themeStore.activeTheme;
+    if (!theme?.components) return;
+
+    if (theme.components.AppHeader) {
+        try {
+            const mod = await import(/* @vite-ignore */ theme.components.AppHeader);
+            dynamicHeader.value = mod.default || mod;
+        } catch (e) {
+            console.warn('主题 Header 加载失败，使用默认', e);
+        }
+    }
+
+    if (theme.components.AppFooter) {
+        try {
+            const mod = await import(/* @vite-ignore */ theme.components.AppFooter);
+            dynamicFooter.value = mod.default || mod;
+        } catch (e) {
+            console.warn('主题 Footer 加载失败，使用默认', e);
+        }
+    }
 });
 </script>

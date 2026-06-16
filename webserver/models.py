@@ -637,5 +637,42 @@ class OnlineBookMeta(Base, SQLAlchemyMixin):
         }
 
 
+class InstalledTheme(Base, SQLAlchemyMixin):
+    """已安装的主题。"""
+
+    __tablename__ = "installed_themes"
+
+    id = Column(Integer, primary_key=True)
+    name = Column(String(100), unique=True, nullable=False, index=True)
+    version = Column(String(20), default="")
+    author = Column(String(100), default="")
+    description = Column(String(500), default="")
+    active = Column(Boolean, default=False)
+    installed_at = Column(DateTime)
+    data = Column(MutableDict.as_mutable(JSONType), default={})
+
+    def __init__(self, name, version="", author="", description=""):
+        super(InstalledTheme, self).__init__()
+        self.name = name
+        self.version = version
+        self.author = author
+        self.description = description
+        self.active = False
+        self.installed_at = datetime.datetime.now()
+        self.data = {}
+
+    def to_dict(self):
+        return {
+            "id": self.id,
+            "name": self.name,
+            "version": self.version,
+            "author": self.author,
+            "description": self.description,
+            "active": bool(self.active),
+            "installed_at": self.installed_at.strftime("%Y-%m-%d %H:%M:%S") if self.installed_at else None,
+            "components": self.data.get("components", {}),
+        }
+
+
 def user_syncdb(engine):
     Base.metadata.create_all(engine)

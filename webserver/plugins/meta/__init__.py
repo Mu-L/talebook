@@ -14,4 +14,4 @@ from .xhsd.api import XhsdBookApi, KEY as XHSD_KEY, XHSD_ISBN  # noqa: F401
 from .biquge.api import BiqugeApi, KEY as BIQUGE_KEY, BIQUGE_ISBN  # noqa: F401
 
 # Douban metadata plugin
-from .douban import DoubanBookApi, KEY as DOUBAN_KEY, str2date  # noqa: F401
+from .douban.api import DoubanBookApi, KEY as DOUBAN_KEY, str2date  # noqa: F401

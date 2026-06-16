@@ -781,6 +781,7 @@
         "google": "Google Books",
         "amazon": "Amazon",
         "xinhua": "新华书店",
+        "biquge": "笔趣阁",
         "douban_v2": "豆瓣V2",
         "neodb": "NeoDB"
       }

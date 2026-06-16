@@ -27,7 +27,6 @@ from webserver.constants import (
     META_SOURCE_GOOGLE,
     META_SOURCE_NEODB,
     META_SOURCE_QIMAO,
-    META_SOURCE_TOMATO,
     META_SOURCE_XHSD,
     SUPPORTED_EBOOK_FORMATS,
 )

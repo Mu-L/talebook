@@ -10,6 +10,9 @@ from .calibre.api import CalibreMetadataApi, KEY as CALIBRE_KEY  # noqa: F401
 # Xinhua Bookstore metadata plugin
 from .xhsd.api import XhsdBookApi, KEY as XHSD_KEY, XHSD_ISBN  # noqa: F401
 
+# Biquge (笔趣阁) metadata plugin
+from .biquge.api import BiqugeApi, KEY as BIQUGE_KEY, BIQUGE_ISBN  # noqa: F401
+
 # 七猫小说 metadata plugin
 from .qimao.api import QimaoNovelApi, KEY as QIMAO_KEY, QIMAO_ISBN  # noqa: F401
 from .qimao.api import get_qimao_metadata  # noqa: F401

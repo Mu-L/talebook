@@ -846,6 +846,7 @@ const metaSourceItems = computed(() => {
         'xinhua',
         'tomato',
         'qimao',
+        'biquge',
         'ai',
         'neodb',
     ];

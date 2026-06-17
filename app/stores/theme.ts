@@ -22,7 +22,7 @@ export const useThemeStore = defineStore('themePlugin', () => {
     async function fetchActiveTheme() {
         const { $backend } = useNuxtApp()
         try {
-            const res = await $backend('/api/themes/active')
+            const res = await $backend('/themes/active')
             if (res.err === 'ok') {
                 activeTheme.value = res.theme
             }
@@ -33,7 +33,7 @@ export const useThemeStore = defineStore('themePlugin', () => {
 
     async function activate(name: string) {
         const { $backend } = useNuxtApp()
-        const res = await $backend('/api/themes/activate', {
+        const res = await $backend('/themes/activate', {
             method: 'POST',
             body: JSON.stringify({ name }),
             headers: { 'Content-Type': 'application/json' },
@@ -46,7 +46,7 @@ export const useThemeStore = defineStore('themePlugin', () => {
 
     async function deactivate() {
         const { $backend } = useNuxtApp()
-        const res = await $backend('/api/themes/activate', {
+        const res = await $backend('/themes/activate', {
             method: 'POST',
             body: JSON.stringify({ name: '' }),
             headers: { 'Content-Type': 'application/json' },

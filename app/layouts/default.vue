@@ -69,7 +69,7 @@
 </template>
 
 <script setup>
-import { shallowRef, computed, onMounted } from 'vue';
+import { shallowRef, computed, onMounted, watch } from 'vue';
 import { useRouter, useHead } from 'nuxt/app';
 import { useMainStore } from '@/stores/main';
 import { useThemeStore } from '@/stores/theme';
@@ -91,12 +91,12 @@ useHead({
     titleTemplate: computed(() => store.site_title_template),
 });
 
-onMounted(async () => {
-    store.setLoading(false);
-
-    await themeStore.fetchActiveTheme();
-    const theme = themeStore.activeTheme;
-    if (!theme?.components) return;
+async function applyThemeComponents(theme) {
+    if (!theme?.components) {
+        dynamicHeader.value = AppHeader;
+        dynamicFooter.value = AppFooter;
+        return;
+    }
 
     if (theme.components.AppHeader) {
         try {
@@ -104,7 +104,10 @@ onMounted(async () => {
             dynamicHeader.value = mod.default || mod;
         } catch (e) {
             console.warn('主题 Header 加载失败，使用默认', e);
+            dynamicHeader.value = AppHeader;
         }
+    } else {
+        dynamicHeader.value = AppHeader;
     }
 
     if (theme.components.AppFooter) {
@@ -113,7 +116,21 @@ onMounted(async () => {
             dynamicFooter.value = mod.default || mod;
         } catch (e) {
             console.warn('主题 Footer 加载失败，使用默认', e);
+            dynamicFooter.value = AppFooter;
         }
+    } else {
+        dynamicFooter.value = AppFooter;
     }
+}
+
+onMounted(async () => {
+    store.setLoading(false);
+    await themeStore.fetchActiveTheme();
+    await applyThemeComponents(themeStore.activeTheme);
+});
+
+// 管理员激活/停用主题后立即切换组件，无需刷新页面
+watch(() => themeStore.activeTheme, async (theme) => {
+    await applyThemeComponents(theme);
 });
 </script>

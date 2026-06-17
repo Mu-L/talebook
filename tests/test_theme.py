@@ -7,6 +7,7 @@ import os
 import zipfile
 from unittest import mock
 
+from tests import test_main
 from tests.test_main import TestApp, TestWithAdminUser, get_db
 from tests.test_main import setUpModule as init
 from webserver import models
@@ -14,6 +15,8 @@ from webserver import models
 
 def setUpModule():
     init()
+    # users.db fixture 中不含 installed_themes 表，需在测试前创建
+    models.user_syncdb(test_main._app._engine)
 
 
 def make_theme_zip(theme_name="test-theme", version="1.0.0"):
@@ -124,6 +127,7 @@ class TestThemeAdmin(TestWithAdminUser):
         mock_response = mock.MagicMock()
         mock_response.raise_for_status.return_value = None
         mock_response.iter_content.return_value = iter([zip_bytes])
+        mock_response.url = "https://github.com/talebook/test-theme/archive/main.zip"
         mock_get.return_value = mock_response
 
         with tempfile.TemporaryDirectory() as tmpdir:
@@ -144,9 +148,23 @@ class TestThemeAdmin(TestWithAdminUser):
         mock_response = mock.MagicMock()
         mock_response.raise_for_status.return_value = None
         mock_response.iter_content.return_value = iter([big_chunk])
+        mock_response.url = "https://github.com/talebook/big-theme/archive/main.zip"
         mock_get.return_value = mock_response
 
         body = json.dumps({"download_url": "https://github.com/talebook/big-theme/archive/main.zip"})
+        d = self.json("/api/themes/install", method="POST", body=body)
+        self.assertEqual(d["err"], "params.invalid")
+
+    @mock.patch("webserver.handlers.theme.requests.get")
+    def test_install_redirect_ssrf_blocked(self, mock_get):
+        """重定向到非白名单域名必须被拒绝。"""
+        mock_response = mock.MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.iter_content.return_value = iter([b""])
+        mock_response.url = "http://169.254.169.254/latest/meta-data/"
+        mock_get.return_value = mock_response
+
+        body = json.dumps({"download_url": "https://github.com/talebook/theme/archive/main.zip"})
         d = self.json("/api/themes/install", method="POST", body=body)
         self.assertEqual(d["err"], "params.invalid")
 
@@ -244,6 +262,58 @@ class TestSafeExtract(TestApp):
             os.makedirs(dest)
             safe_extract(zip_path, dest)
             self.assertTrue(os.path.exists(os.path.join(dest, "theme.json")))
+
+    def test_safe_extract_strip_prefix(self):
+        """safe_extract 应剥离 GitHub 存档根目录前缀（如 'repo-main/'）。"""
+        import tempfile
+
+        from webserver.handlers.theme import safe_extract
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr(zipfile.ZipInfo("repo-main/"), "")  # 目录条目
+            zf.writestr("repo-main/theme.json", '{"name": "ok"}')
+            zf.writestr("repo-main/components/Header.js", "export default {};")
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            zip_path = os.path.join(tmpdir, "theme.zip")
+            with open(zip_path, "wb") as f:
+                f.write(buf.getvalue())
+
+            dest = os.path.join(tmpdir, "dest")
+            os.makedirs(dest)
+            safe_extract(zip_path, dest, strip_prefix="repo-main/")
+            self.assertTrue(os.path.exists(os.path.join(dest, "theme.json")))
+            self.assertTrue(os.path.exists(os.path.join(dest, "components", "Header.js")))
+            self.assertFalse(os.path.exists(os.path.join(dest, "repo-main")))
+
+    def test_safe_extract_zip_bomb_blocked(self):
+        """safe_extract 必须阻止 ZIP bomb（解压后超过大小限制）。"""
+        import tempfile
+
+        from webserver.handlers import theme as theme_module
+        from webserver.handlers.theme import safe_extract
+
+        # 暂时调低限制，便于用小数据测试
+        original_limit = theme_module.MAX_UNCOMPRESSED_THEME_SIZE
+        theme_module.MAX_UNCOMPRESSED_THEME_SIZE = 100
+        try:
+            buf = io.BytesIO()
+            with zipfile.ZipFile(buf, "w") as zf:
+                zf.writestr("file1.txt", "x" * 60)
+                zf.writestr("file2.txt", "y" * 60)  # 合计 120 > 100
+
+            with tempfile.TemporaryDirectory() as tmpdir:
+                zip_path = os.path.join(tmpdir, "bomb.zip")
+                with open(zip_path, "wb") as f:
+                    f.write(buf.getvalue())
+
+                dest = os.path.join(tmpdir, "dest")
+                os.makedirs(dest)
+                with self.assertRaises(ValueError):
+                    safe_extract(zip_path, dest)
+        finally:
+            theme_module.MAX_UNCOMPRESSED_THEME_SIZE = original_limit
 
 
 class TestIsAllowedUrl(TestApp):

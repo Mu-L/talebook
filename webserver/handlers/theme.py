@@ -20,6 +20,7 @@ from webserver.models import InstalledTheme
 CONF = loader.get_settings()
 
 MAX_THEME_SIZE = 10 * 1024 * 1024  # 10MB
+MAX_UNCOMPRESSED_THEME_SIZE = 100 * 1024 * 1024  # 100MB
 
 
 def is_allowed_url(url):
@@ -31,14 +32,32 @@ def is_allowed_url(url):
     return any(host == d or host.endswith("." + d) for d in allowed)
 
 
-def safe_extract(zip_path, dest_dir):
+def safe_extract(zip_path, dest_dir, strip_prefix=""):
+    """解压 ZIP 到 dest_dir，支持剥离存档根目录前缀，并防范路径穿越和 ZIP bomb。"""
     dest_dir = os.path.realpath(dest_dir)
+    total_uncompressed = 0
     with zipfile.ZipFile(zip_path) as zf:
         for member in zf.infolist():
-            target = os.path.realpath(os.path.join(dest_dir, member.filename))
+            total_uncompressed += member.file_size
+            if total_uncompressed > MAX_UNCOMPRESSED_THEME_SIZE:
+                raise ValueError(_("主题包解压后超过 100MB 限制"))
+
+            filename = member.filename
+            if strip_prefix and filename.startswith(strip_prefix):
+                filename = filename[len(strip_prefix):]
+                if not filename:
+                    continue  # 跳过存档根目录本身
+
+            target = os.path.realpath(os.path.join(dest_dir, filename))
             if target != dest_dir and not target.startswith(dest_dir + os.sep):
                 raise ValueError(_("路径穿越攻击: %s") % member.filename)
-            zf.extract(member, dest_dir)
+
+            if filename.endswith("/"):
+                os.makedirs(target, exist_ok=True)
+            else:
+                os.makedirs(os.path.dirname(target), exist_ok=True)
+                with zf.open(member) as src, open(target, "wb") as dst:
+                    dst.write(src.read())
 
 
 def get_themes_path():
@@ -73,6 +92,9 @@ class ThemeInstallHandler(BaseHandler):
         try:
             resp = requests.get(download_url, timeout=30, stream=True)
             resp.raise_for_status()
+            # 防范重定向型 SSRF：验证最终落地 URL 也在白名单内
+            if not is_allowed_url(resp.url):
+                return {"err": "params.invalid", "msg": _("重定向目标地址不在允许列表中")}
         except Exception as e:
             logging.warning("主题下载失败: %s", e)
             return {"err": "network.error", "msg": _("下载失败：%s") % str(e)}
@@ -107,7 +129,11 @@ class ThemeInstallHandler(BaseHandler):
             themes_path = get_themes_path()
             dest_dir = os.path.join(themes_path, theme_name)
             os.makedirs(dest_dir, exist_ok=True)
-            safe_extract(tmp_path, dest_dir)
+            # 剥离 GitHub/Gitee 存档的根目录前缀（如 "repo-branch/"）
+            strip_prefix = ""
+            if "/" in theme_json_path:
+                strip_prefix = theme_json_path.rsplit("/", 1)[0] + "/"
+            safe_extract(tmp_path, dest_dir, strip_prefix=strip_prefix)
 
         except ValueError as e:
             return {"err": "security.error", "msg": str(e)}

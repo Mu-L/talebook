@@ -156,7 +156,7 @@ function showMsg(msg, color = 'success') {
 }
 
 async function fetchThemes() {
-    const res = await $backend('/api/themes');
+    const res = await $backend('/themes');
     if (res.err === 'ok') {
         themes.value = res.themes;
     }
@@ -165,7 +165,7 @@ async function fetchThemes() {
 async function installTheme() {
     installing.value = true;
     try {
-        const res = await $backend('/api/themes/install', {
+        const res = await $backend('/themes/install', {
             method: 'POST',
             body: JSON.stringify({ download_url: installUrl.value }),
             headers: { 'Content-Type': 'application/json' },
@@ -216,7 +216,7 @@ async function deleteTheme(name) {
     if (!confirm(t('theme.deleteConfirm'))) return;
     deleting.value = name;
     try {
-        const res = await $backend(`/api/themes/${encodeURIComponent(name)}`, { method: 'DELETE' });
+        const res = await $backend(`/themes/${encodeURIComponent(name)}`, { method: 'DELETE' });
         if (res.err === 'ok') {
             showMsg(res.msg || '已删除');
             if (themeStore.activeTheme?.name === name) {

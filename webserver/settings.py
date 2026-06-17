@@ -171,6 +171,7 @@ settings = {
     'THEME_ALLOWED_DOMAINS': [
         'github.com',
         'raw.githubusercontent.com',
+        'codeload.github.com',
         'gitee.com',
         'cdn.jsdelivr.net',
         'objects.githubusercontent.com',

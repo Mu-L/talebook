@@ -1,26 +1,24 @@
 <template>
-    <v-row class="mt-6">
-        <v-col
-            cols="12"
-            class="text-center"
-        >
-            <v-divider class="mb-3" />
-            <p class="text-caption text-medium-emphasis">
-                Powered by
-                <v-btn
-                    variant="text"
-                    size="small"
-                    href="https://github.com/talebook/talebook"
-                    target="_blank"
-                >
-                    Talebook
-                </v-btn>
-                &bull; Theme: {{THEME_NAME}}
-            </p>
-        </v-col>
-    </v-row>
+    <footer :style="footerStyle">
+        <p :style="textStyle">
+            Powered by
+            <a
+                :style="linkStyle"
+                href="https://github.com/talebook/talebook"
+                target="_blank"
+                rel="noopener noreferrer"
+            >Talebook</a>
+            &bull; Theme: {{THEME_NAME}}
+        </p>
+    </footer>
 </template>
 
 <script setup>
-// vue and vuetify components are provided by the Talebook host app.
+const footerStyle = {
+    borderTop: '1px solid rgba(0,0,0,0.12)',
+    padding: '12px 16px',
+    textAlign: 'center',
+};
+const textStyle = { margin: '0', fontSize: '0.8rem', color: 'rgba(0,0,0,0.54)' };
+const linkStyle = { color: '#1a73e8', textDecoration: 'none' };
 </script>

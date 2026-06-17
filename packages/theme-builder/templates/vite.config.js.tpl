@@ -3,9 +3,8 @@ import vue from '@vitejs/plugin-vue';
 import { resolve } from 'node:path';
 
 // Pre-configured Vite config for Talebook themes.
-// vue, vuetify, pinia, and vue-router are marked as external so the theme
-// reuses the host app's instances — keeping bundle size small and avoiding
-// duplicate Vue reactivity systems.
+// Each component is built as a self-contained ESM file (vue bundled inline)
+// so it can be loaded via native browser dynamic import() without an import map.
 export default defineConfig({
     plugins: [vue()],
     build: {
@@ -17,22 +16,13 @@ export default defineConfig({
                 AppFooter: resolve('src/AppFooter.vue'),
             },
             formats: ['es'],
-            fileName: (format, entryName) => `components/${entryName}.js`,
+            // Output to components/ so the ZIP layout matches what Talebook serves:
+            //   <theme-name>/components/AppHeader.js
+            //   <theme-name>/components/AppFooter.js
+            fileName: (format, entryName) => `${entryName}.js`,
         },
-        rollupOptions: {
-            // These packages are provided by Talebook at runtime.
-            // Do NOT include them in the theme bundle.
-            external: ['vue', 'vuetify', 'vuetify/components', 'vuetify/directives', 'pinia', 'vue-router'],
-            output: {
-                globals: {
-                    vue: 'Vue',
-                    vuetify: 'Vuetify',
-                    pinia: 'Pinia',
-                    'vue-router': 'VueRouter',
-                },
-            },
-        },
-        outDir: 'dist',
+        // Output directly into components/ — keep src/ for source only.
+        outDir: 'components',
         emptyOutDir: true,
     },
 });

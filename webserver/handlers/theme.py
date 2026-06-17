@@ -21,6 +21,7 @@ CONF = loader.get_settings()
 
 MAX_THEME_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_UNCOMPRESSED_THEME_SIZE = 100 * 1024 * 1024  # 100MB
+_REDIRECT_CODES = {301, 302, 303, 307, 308}
 
 
 def is_allowed_url(url):
@@ -90,11 +91,17 @@ class ThemeInstallHandler(BaseHandler):
             return {"err": "params.invalid", "msg": _("不允许的下载地址，仅支持 GitHub/Gitee/jsDelivr")}
 
         try:
-            resp = requests.get(download_url, timeout=30, stream=True)
+            # 禁止自动跟随重定向，逐跳验证每个 Location，防范 redirect-based SSRF
+            resp = requests.get(download_url, timeout=30, stream=True, allow_redirects=False)
             resp.raise_for_status()
-            # 防范重定向型 SSRF：验证最终落地 URL 也在白名单内
-            if not is_allowed_url(resp.url):
-                return {"err": "params.invalid", "msg": _("重定向目标地址不在允许列表中")}
+            hops = 0
+            while resp.status_code in _REDIRECT_CODES and hops < 5:
+                redirect_url = resp.headers.get("Location", "")
+                if not is_allowed_url(redirect_url):
+                    return {"err": "params.invalid", "msg": _("重定向目标地址不在允许列表中")}
+                resp = requests.get(redirect_url, timeout=30, stream=True, allow_redirects=False)
+                resp.raise_for_status()
+                hops += 1
         except Exception as e:
             logging.warning("主题下载失败: %s", e)
             return {"err": "network.error", "msg": _("下载失败：%s") % str(e)}
@@ -128,6 +135,9 @@ class ThemeInstallHandler(BaseHandler):
 
             themes_path = get_themes_path()
             dest_dir = os.path.join(themes_path, theme_name)
+            # 重装时清空旧文件，防止残留过期资源
+            if os.path.isdir(dest_dir):
+                shutil.rmtree(dest_dir)
             os.makedirs(dest_dir, exist_ok=True)
             # 剥离 GitHub/Gitee 存档的根目录前缀（如 "repo-branch/"）
             strip_prefix = ""

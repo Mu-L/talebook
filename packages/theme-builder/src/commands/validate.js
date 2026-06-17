@@ -71,8 +71,10 @@ export async function validateCommand(options) {
         process.exit(1);
     }
 
-    const distDir = join(themeDir, 'dist');
-    const { valid, errors, warnings } = validateThemeJson(themeJson, distDir);
+    // Validate against the project root: after "theme-builder build" the output
+    // lands in components/ at the project root, which is the same layout the
+    // backend serves under /static/themes/<name>/.
+    const { valid, errors, warnings } = validateThemeJson(themeJson, themeDir);
 
     if (warnings.length > 0) {
         console.warn('\nWarnings:');

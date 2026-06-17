@@ -157,16 +157,46 @@ class TestThemeAdmin(TestWithAdminUser):
 
     @mock.patch("webserver.handlers.theme.requests.get")
     def test_install_redirect_ssrf_blocked(self, mock_get):
-        """重定向到非白名单域名必须被拒绝。"""
+        """重定向到非白名单域名必须被拒绝（逐跳校验 Location）。"""
         mock_response = mock.MagicMock()
         mock_response.raise_for_status.return_value = None
-        mock_response.iter_content.return_value = iter([b""])
-        mock_response.url = "http://169.254.169.254/latest/meta-data/"
+        mock_response.status_code = 302
+        mock_response.headers = {"Location": "http://169.254.169.254/latest/meta-data/"}
         mock_get.return_value = mock_response
 
         body = json.dumps({"download_url": "https://github.com/talebook/theme/archive/main.zip"})
         d = self.json("/api/themes/install", method="POST", body=body)
         self.assertEqual(d["err"], "params.invalid")
+
+    @mock.patch("webserver.handlers.theme.requests.get")
+    def test_install_allowed_redirect(self, mock_get):
+        """重定向到白名单域名（如 codeload.github.com）应正常完成安装。"""
+        import tempfile
+
+        zip_bytes = make_theme_zip("test-theme")
+
+        # 第一次调用返回 302 重定向到 codeload.github.com
+        redirect_resp = mock.MagicMock()
+        redirect_resp.raise_for_status.return_value = None
+        redirect_resp.status_code = 302
+        redirect_resp.headers = {"Location": "https://codeload.github.com/talebook/test-theme/zip/refs/heads/main"}
+
+        # 第二次调用（跟随重定向）返回实际内容
+        final_resp = mock.MagicMock()
+        final_resp.raise_for_status.return_value = None
+        final_resp.status_code = 200
+        final_resp.iter_content.return_value = iter([zip_bytes])
+
+        mock_get.side_effect = [redirect_resp, final_resp]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("webserver.handlers.theme.get_themes_path", return_value=tmpdir):
+                with mock.patch("webserver.handlers.theme.safe_extract"):
+                    body = json.dumps({"download_url": "https://github.com/talebook/test-theme/archive/main.zip"})
+                    d = self.json("/api/themes/install", method="POST", body=body)
+
+        self.assertEqual(d["err"], "ok")
+        self.assertEqual(d["theme"]["name"], "test-theme")
 
     def test_activate_not_found(self):
         body = json.dumps({"name": "nonexistent-theme"})
@@ -322,6 +352,7 @@ class TestIsAllowedUrl(TestApp):
 
         self.assertTrue(is_allowed_url("https://github.com/talebook/theme.zip"))
         self.assertTrue(is_allowed_url("https://raw.githubusercontent.com/talebook/theme/main/theme.zip"))
+        self.assertTrue(is_allowed_url("https://codeload.github.com/talebook/theme/zip/refs/heads/main"))
         self.assertTrue(is_allowed_url("https://gitee.com/talebook/theme.zip"))
         self.assertTrue(is_allowed_url("https://cdn.jsdelivr.net/gh/talebook/theme@main/theme.zip"))
 

@@ -751,6 +751,8 @@
         "google": "Google Books",
         "amazon": "Amazon",
         "xinhua": "Xinhua Bookstore",
+        "tomato": "Tomato Novel",
+        "qimao": "Qimao Novel",
         "biquge": "Biquge",
         "douban_v2": "Douban V2",
         "neodb": "NeoDB"

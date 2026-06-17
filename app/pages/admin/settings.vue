@@ -733,6 +733,12 @@ const dbTypeOptions = computed(() => [
     { text: t('admin.settings.option.dbMysql'), value: 'mysql' },
 ]);
 
+const buildUserDatabaseUrl = () => {
+    const user = encodeURIComponent(dbNewUser.value);
+    const pass = encodeURIComponent(dbNewPass.value);
+    return `mysql+pymysql://${user}:${pass}@${dbNewHost.value}:${dbNewPort.value}/${dbNewName.value}?charset=utf8mb4`;
+};
+
 // 人机验证提供商选项
 const captchaProviders = [
     { text: t('admin.settings.option.none'), value: '' },
@@ -1072,12 +1078,7 @@ const run = (func) => {
 const testDbConnection = () => {
     dbTesting.value = true;
     var data = new URLSearchParams();
-    data.append('db_type', dbNewType.value);
-    data.append('db_host', dbNewHost.value);
-    data.append('db_port', dbNewPort.value);
-    data.append('db_name', dbNewName.value);
-    data.append('db_user', dbNewUser.value);
-    data.append('db_pass', dbNewPass.value);
+    data.append('user_database', buildUserDatabaseUrl());
     $backend('/admin/testdb', { method: 'POST', body: data })
         .then(rsp => {
             if (rsp.err === 'ok') {
@@ -1093,18 +1094,13 @@ const migrateDb = (force = false) => {
     dbMigrateDialog.value = false;
     dbMigrating.value = true;
     var data = new URLSearchParams();
-    data.append('db_type', dbNewType.value);
-    data.append('db_host', dbNewHost.value);
-    data.append('db_port', dbNewPort.value);
-    data.append('db_name', dbNewName.value);
-    data.append('db_user', dbNewUser.value);
-    data.append('db_pass', dbNewPass.value);
+    data.append('user_database', buildUserDatabaseUrl());
     if (force) data.append('force', '1');
     $backend('/admin/migratedb', { method: 'POST', body: data })
         .then(rsp => {
             if (rsp.err === 'ok') {
                 if ($alert) $alert('success', t('admin.settings.message.dbMigrateSuccess'));
-                settings.value.user_database = `mysql+pymysql://${dbNewUser.value}:***@${dbNewHost.value}:${dbNewPort.value}/${dbNewName.value}`;
+                settings.value.user_database = buildUserDatabaseUrl().replace(`:${encodeURIComponent(dbNewPass.value)}@`, ':***@');
             } else if (rsp.err === 'db.target_has_data') {
                 dbTargetDataCount.value = rsp.count || 0;
                 dbForceDialog.value = true;

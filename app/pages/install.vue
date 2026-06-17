@@ -240,6 +240,13 @@ const dbTypeItems = computed(() => [
     { text: t('install.dbTypeMysql'), value: 'mysql' },
 ]);
 
+const buildUserDatabaseUrl = () => {
+    if (db_type.value === 'sqlite') return 'sqlite:////data/books/calibre-webserver.db';
+    const user = encodeURIComponent(db_user.value);
+    const pass = encodeURIComponent(db_pass.value);
+    return `mysql+pymysql://${user}:${pass}@${db_host.value}:${db_port.value}/${db_name.value}?charset=utf8mb4`;
+};
+
 const rules = {
     user: v => ( v && 20 >= v.length && v.length >= 5) || $t('install.userRule'),
     pass: v => ( v && 20 >= v.length && v.length >= 8) || $t('install.passRule'),
@@ -280,12 +287,7 @@ const check_install = () => {
 const testDbConnection = async () => {
     dbTesting.value = true;
     var data = new URLSearchParams();
-    data.append('db_type', db_type.value);
-    data.append('db_host', db_host.value);
-    data.append('db_port', db_port.value);
-    data.append('db_name', db_name.value);
-    data.append('db_user', db_user.value);
-    data.append('db_pass', db_pass.value);
+    data.append('user_database', buildUserDatabaseUrl());
     try {
         const rsp = await $backend('/admin/testdb', { method: 'POST', body: data });
         if (rsp.err === 'ok') {
@@ -312,14 +314,7 @@ const do_install = async () => {
     data.append('code', code.value);
     data.append('invite', invite.value);
     data.append('title', title.value);
-    data.append('db_type', db_type.value);
-    if (db_type.value !== 'sqlite') {
-        data.append('db_host', db_host.value);
-        data.append('db_port', db_port.value);
-        data.append('db_name', db_name.value);
-        data.append('db_user', db_user.value);
-        data.append('db_pass', db_pass.value);
-    }
+    data.append('user_database', buildUserDatabaseUrl());
 
     tips.value = $t('install.writingConfig');
 

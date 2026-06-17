@@ -413,6 +413,55 @@ def _build_mysql_url(db_host, db_port, db_name, db_user, db_pass):
     return f"mysql+pymysql://{safe_user}:{safe_pass}@{db_host}:{db_port}/{db_name}?charset=utf8mb4"
 
 
+def _get_database_url(handler, allow_sqlite=True):
+    """Read and validate the user_database SQLAlchemy URL submitted by the UI.
+
+    The persisted configuration remains the existing single user_database field;
+    the Vue form may expose host/port/user inputs but must submit the composed URL.
+    Legacy split parameters are accepted as a compatibility fallback only.
+    """
+    from sqlalchemy.engine import make_url
+
+    db_url = handler.get_argument("user_database", "").strip() or handler.get_argument("db_url", "").strip()
+    if not db_url:
+        db_type = handler.get_argument("db_type", "sqlite" if allow_sqlite else "").strip()
+        if allow_sqlite and db_type == "sqlite":
+            return (
+                CONF["user_database"]
+                if CONF["user_database"].startswith("sqlite")
+                else "sqlite:////data/books/calibre-webserver.db"
+            )
+        if db_type in ("mysql", "mariadb"):
+            db_host = handler.get_argument("db_host", "localhost").strip()
+            db_port = handler.get_argument("db_port", "3306").strip()
+            db_name = handler.get_argument("db_name", "").strip()
+            db_user = handler.get_argument("db_user", "").strip()
+            db_pass = handler.get_argument("db_pass", "").strip()
+            if not db_name or not db_user:
+                raise ValueError(_("数据库连接参数不完整"))
+            db_url = _build_mysql_url(db_host, db_port, db_name, db_user, db_pass)
+        else:
+            raise ValueError(_("请选择有效的目标数据库类型"))
+
+    try:
+        parsed = make_url(db_url)
+    except Exception as e:
+        raise ValueError(_("数据库连接地址无效: %s") % str(e))
+
+    driver = parsed.drivername.split("+")[0]
+    if driver == "sqlite":
+        if allow_sqlite:
+            return db_url
+        raise ValueError(_("请选择有效的目标数据库类型"))
+    if driver not in ("mysql", "mariadb"):
+        raise ValueError(_("仅支持 SQLite 或 MySQL/MariaDB 数据库"))
+    if not parsed.database or not parsed.username:
+        raise ValueError(_("数据库连接参数不完整"))
+    if parsed.port is not None and not (1 <= parsed.port <= 65535):
+        raise ValueError(_("端口号范围无效，应在 1-65535 之间"))
+    return db_url
+
+
 class AdminTestDB(BaseHandler):
     """Test whether a database connection is reachable.
 
@@ -432,27 +481,12 @@ class AdminTestDB(BaseHandler):
             if not self.admin_user:
                 return {"err": "permission", "msg": _("无权访问此接口")}
 
-        db_type = self.get_argument("db_type", "sqlite")
-        if db_type == "sqlite":
-            return {"err": "ok", "msg": _("SQLite 无需测试连接")}
-
-        db_host = self.get_argument("db_host", "localhost").strip()
-        db_port = self.get_argument("db_port", "3306").strip()
-        db_name = self.get_argument("db_name", "").strip()
-        db_user = self.get_argument("db_user", "").strip()
-        db_pass = self.get_argument("db_pass", "").strip()
-
-        if not db_name or not db_user:
-            return {"err": "params.invalid", "msg": _("数据库连接参数不完整")}
-
         try:
-            db_port = int(db_port)
-        except ValueError:
-            return {"err": "params.invalid", "msg": _("端口号无效")}
-        if not (1 <= db_port <= 65535):
-            return {"err": "params.invalid", "msg": _("端口号范围无效，应在 1-65535 之间")}
-
-        db_url = _build_mysql_url(db_host, db_port, db_name, db_user, db_pass)
+            db_url = _get_database_url(self)
+        except ValueError as e:
+            return {"err": "params.invalid", "msg": str(e)}
+        if db_url.startswith("sqlite"):
+            return {"err": "ok", "msg": _("SQLite 无需测试连接")}
         try:
             from sqlalchemy import create_engine, text
 
@@ -475,29 +509,12 @@ class AdminMigrateDB(BaseHandler):
         if not self.admin_user:
             return {"err": "permission", "msg": _("无权访问此接口")}
 
-        db_type = self.get_argument("db_type", "").strip()
-        if not db_type or db_type == "sqlite":
-            return {"err": "params.invalid", "msg": _("请选择有效的目标数据库类型")}
-
-        db_host = self.get_argument("db_host", "localhost").strip()
-        db_port = self.get_argument("db_port", "3306").strip()
-        db_name = self.get_argument("db_name", "").strip()
-        db_user = self.get_argument("db_user", "").strip()
-        db_pass = self.get_argument("db_pass", "").strip()
-
-        if not db_name or not db_user:
-            return {"err": "params.invalid", "msg": _("数据库连接参数不完整")}
-
         try:
-            db_port = int(db_port)
-        except ValueError:
-            return {"err": "params.invalid", "msg": _("端口号无效")}
-        if not (1 <= db_port <= 65535):
-            return {"err": "params.invalid", "msg": _("端口号范围无效，应在 1-65535 之间")}
+            new_db_url = _get_database_url(self, allow_sqlite=False)
+        except ValueError as e:
+            return {"err": "params.invalid", "msg": str(e)}
 
         force = self.get_argument("force", "0").strip() == "1"
-
-        new_db_url = _build_mysql_url(db_host, db_port, db_name, db_user, db_pass)
         source_url = CONF["user_database"]
 
         if new_db_url == source_url:
@@ -563,29 +580,15 @@ class AdminInstall(BaseHandler):
         if len(password) < 8 or len(password) > 20 or not re.match(Reader.RE_PASSWORD, password):
             return {"err": "params.password.invalid", "msg": _("密码无效")}
 
-        # Optional database configuration
-        db_type = self.get_argument("db_type", "sqlite").strip()
+        # Optional database configuration. Persist only the existing user_database setting;
+        # the UI may collect separate fields but submits the composed SQLAlchemy URL.
         target_session = self.session
-        target_db_url = None
+        try:
+            target_db_url = _get_database_url(self)
+        except ValueError as e:
+            return {"err": "params.invalid", "msg": str(e)}
 
-        if db_type in ("mysql", "mariadb"):
-            db_host = self.get_argument("db_host", "localhost").strip()
-            db_port = self.get_argument("db_port", "3306").strip()
-            db_name = self.get_argument("db_name", "").strip()
-            db_user = self.get_argument("db_user", "").strip()
-            db_pass = self.get_argument("db_pass", "").strip()
-
-            if not db_name or not db_user:
-                return {"err": "params.invalid", "msg": _("数据库连接参数不完整")}
-
-            try:
-                db_port = int(db_port)
-            except ValueError:
-                return {"err": "params.invalid", "msg": _("端口号无效")}
-            if not (1 <= db_port <= 65535):
-                return {"err": "params.invalid", "msg": _("端口号范围无效，应在 1-65535 之间")}
-
-            target_db_url = _build_mysql_url(db_host, db_port, db_name, db_user, db_pass)
+        if not target_db_url.startswith("sqlite"):
             try:
                 from sqlalchemy import create_engine
                 from sqlalchemy.orm import sessionmaker
@@ -648,7 +651,7 @@ class AdminInstall(BaseHandler):
         else:
             args["INVITE_MODE"] = False
 
-        if target_db_url:
+        if target_db_url and target_db_url != CONF["user_database"]:
             args["user_database"] = target_db_url
 
         logic = SettingsSaverLogic()

@@ -203,17 +203,15 @@ class TestAdminMigrateDB(TestWithAdminUser):
                     with mock.patch("webserver.loader.SettingsLoader.set_store_path", return_value=tmpdir):
                         body = urllib.parse.urlencode(
                             {
-                                "db_type": "mysql",
-                                "db_host": "localhost",
-                                "db_port": "3306",
-                                "db_name": "testdb",
-                                "db_user": "root",
-                                "db_pass": "pass",
+                                "user_database": "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4",
                             }
                         )
                         d = self.json("/api/admin/migratedb", method="POST", body=body)
                 self.assertEqual(d["err"], "ok")
                 self.assertTrue(d.get("need_restart"))
+                self.assertEqual(
+                    main.CONF["user_database"], "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4"
+                )
         finally:
             # restore original db url in CONF
             main.CONF["user_database"] = original_db_url
@@ -252,12 +250,7 @@ class TestAdminMigrateDB(TestWithAdminUser):
                     with mock.patch("webserver.loader.SettingsLoader.set_store_path", return_value=tmpdir):
                         body = urllib.parse.urlencode(
                             {
-                                "db_type": "mysql",
-                                "db_host": "localhost",
-                                "db_port": "3306",
-                                "db_name": "testdb",
-                                "db_user": "root",
-                                "db_pass": "pass",
+                                "user_database": "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4",
                             }
                         )
                         d = self.json("/api/admin/migratedb", method="POST", body=body)
@@ -284,12 +277,7 @@ class TestAdminMigrateDB(TestWithAdminUser):
                     with mock.patch("webserver.loader.SettingsLoader.set_store_path", return_value=tmpdir):
                         body = urllib.parse.urlencode(
                             {
-                                "db_type": "mysql",
-                                "db_host": "localhost",
-                                "db_port": "3306",
-                                "db_name": "testdb",
-                                "db_user": "root",
-                                "db_pass": "pass",
+                                "user_database": "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4",
                                 "force": "1",
                             }
                         )

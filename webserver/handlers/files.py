@@ -109,13 +109,29 @@ class ProxyImageHandler(BaseHandler):
         import requests
 
         p = urllib.parse.urlparse(url)
-        if not self.is_whitelist(p.netloc):
+        if p.scheme not in ("http", "https"):
             self.write("yoho")
             return
 
+        if p.username or p.password:
+            self.write("yoho")
+            return
+
+        host = (p.hostname or "").lower()
+        if not host or not self.is_whitelist(host):
+            self.write("yoho")
+            return
+
+        if p.port is not None and p.port not in (80, 443):
+            self.write("yoho")
+            return
+
+        safe_netloc = host if p.port is None else f"{host}:{p.port}"
+        safe_url = urllib.parse.urlunparse((p.scheme, safe_netloc, p.path, p.params, p.query, ""))
+
         headers = dict(constants.CHROME_HEADERS)
-        headers["Referer"] = url
-        r = requests.get(url, headers=headers)
+        headers["Referer"] = safe_url
+        r = requests.get(safe_url, headers=headers)
         for k, v in r.headers.items():
             self.set_header(k, v)
         self.write(r.content)

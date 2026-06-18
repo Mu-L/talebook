@@ -18,14 +18,18 @@
     "commander": "^12.1.0"
   },
   "peerDependencies": {
-    "vite": "^5.0.0",
     "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^5.0.0",
     "vue": "^3.0.0",
     "vuetify": "^3.0.0"
   },
   "peerDependenciesMeta": {
-    "vite": { "optional": false },
-    "@vitejs/plugin-vue": { "optional": false }
+    "vite": {
+      "optional": false
+    },
+    "@vitejs/plugin-vue": {
+      "optional": false
+    }
   },
   "engines": {
     "node": ">=18.0.0"

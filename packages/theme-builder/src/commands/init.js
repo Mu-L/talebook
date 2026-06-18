@@ -43,13 +43,35 @@ export async function initCommand(themeName, options) {
 
     mkdirSync(join(outputDir, 'src'), { recursive: true });
 
+    const vueTemplates = [
+        'AppHeader',
+        'AppFooter',
+        'AppPress',
+        'BookCards',
+        'BookCards_Small',
+        'BookList',
+        'BookSourceImportDialog',
+        'CaptchaWidget',
+        'ImageCaptchaWidget',
+        'ListBook',
+        'Loading',
+        'MetaList',
+        'OpdsImportDialog',
+        'SSLManager',
+        'SaveOnlineDialog',
+        'SerializeStatusBadge',
+        'Upload',
+    ];
+
     const files = [
         ['package.json.tpl', 'package.json'],
         ['vite.config.js.tpl', 'vite.config.js'],
         ['theme.json.tpl', 'theme.json'],
-        [join('src', 'AppHeader.vue.tpl'), join('src', 'AppHeader.vue')],
-        [join('src', 'AppFooter.vue.tpl'), join('src', 'AppFooter.vue')],
         [join('src', 'index.js.tpl'), join('src', 'index.js')],
+        ...vueTemplates.map(name => [
+            join('src', `${name}.vue.tpl`),
+            join('src', `${name}.vue`),
+        ]),
     ];
 
     for (const [tplRelPath, destRelPath] of files) {
@@ -68,6 +90,6 @@ Next steps:
   npm run build        # build components to dist/
   theme-builder validate  # check theme.json
 
-Customize src/AppHeader.vue and src/AppFooter.vue to create your theme.
+Edit the Vue component files in src/ to customize your theme.
 `);
 }

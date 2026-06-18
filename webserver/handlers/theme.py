@@ -127,32 +127,42 @@ class ThemeInstallHandler(BaseHandler):
     @js
     @is_admin
     def post(self):
-        try:
-            body = json.loads(self.request.body)
-        except (json.JSONDecodeError, TypeError):
-            return {"err": "params.invalid", "msg": _("请求参数格式错误")}
+        content = None
 
-        download_url = body.get("download_url", "").strip()
-        if not download_url:
-            return {"err": "params.invalid", "msg": _("缺少 download_url 参数")}
-
-        if not is_allowed_url(download_url):
-            return {"err": "params.invalid", "msg": _("不允许的下载地址，仅支持 GitHub/Gitee/jsDelivr")}
-
-        try:
-            # 禁止自动跟随重定向，逐跳验证每个 Location，防范 redirect-based SSRF
-            resp = download_theme_archive(download_url)
-        except ValueError as e:
-            return {"err": "params.invalid", "msg": str(e)}
-        except Exception as e:
-            logging.warning("主题下载失败: %s", e)
-            return {"err": "network.error", "msg": _("下载失败：%s") % str(e)}
-
-        content = b""
-        for chunk in resp.iter_content(chunk_size=8192):
-            content += chunk
+        if self.request.files and "theme_file" in self.request.files:
+            file_info = self.request.files["theme_file"][0]
+            content = file_info["body"]
+            filename = file_info.get("filename", "")
+            if not filename.lower().endswith(".zip"):
+                return {"err": "params.invalid", "msg": _("只支持上传 ZIP 格式的主题包")}
             if len(content) > MAX_THEME_SIZE:
                 return {"err": "params.invalid", "msg": _("主题包超过 10MB 限制")}
+        else:
+            try:
+                body = json.loads(self.request.body)
+            except (json.JSONDecodeError, TypeError):
+                return {"err": "params.invalid", "msg": _("请求参数格式错误")}
+
+            download_url = body.get("download_url", "").strip()
+            if not download_url:
+                return {"err": "params.invalid", "msg": _("缺少 download_url 参数")}
+
+            if not is_allowed_url(download_url):
+                return {"err": "params.invalid", "msg": _("不允许的下载地址，仅支持 GitHub/Gitee/jsDelivr")}
+
+            try:
+                resp = download_theme_archive(download_url)
+            except ValueError as e:
+                return {"err": "params.invalid", "msg": str(e)}
+            except Exception as e:
+                logging.warning("主题下载失败: %s", e)
+                return {"err": "network.error", "msg": _("下载失败：%s") % str(e)}
+
+            content = b""
+            for chunk in resp.iter_content(chunk_size=8192):
+                content += chunk
+                if len(content) > MAX_THEME_SIZE:
+                    return {"err": "params.invalid", "msg": _("主题包超过 10MB 限制")}
 
         with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
             tmp.write(content)

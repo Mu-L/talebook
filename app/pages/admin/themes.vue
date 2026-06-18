@@ -10,7 +10,7 @@
                 </p>
 
                 <!-- 安装新主题 -->
-                <v-row class="mb-4">
+                <v-row class="mb-2">
                     <v-col cols="12">
                         <v-text-field
                             v-model="installUrl"
@@ -34,24 +34,40 @@
                     </v-col>
                 </v-row>
 
+                <v-row class="mb-4">
+                    <v-col cols="12">
+                        <v-file-input
+                            v-model="uploadFile"
+                            :label="$t('theme.uploadLabel')"
+                            accept=".zip"
+                            prepend-icon="mdi-folder-zip"
+                            variant="outlined"
+                            density="compact"
+                            hide-details
+                            class="mb-2"
+                        />
+                        <v-btn
+                            color="primary"
+                            :loading="uploading"
+                            :disabled="!uploadFile"
+                            prepend-icon="mdi-upload"
+                            @click="uploadTheme"
+                        >
+                            {{ $t('theme.upload') }}
+                        </v-btn>
+                    </v-col>
+                </v-row>
+
                 <v-divider class="mb-4" />
 
                 <!-- 已安装主题列表 -->
                 <div class="text-subtitle-1 mb-2">
                     {{ $t('theme.installed') }}
                 </div>
-                <v-alert
-                    v-if="themes.length === 0"
-                    type="info"
-                    variant="tonal"
-                    density="compact"
-                >
-                    {{ $t('theme.noThemes') }}
-                </v-alert>
                 <v-row>
                     <v-col
-                        v-for="theme in themes"
-                        :key="theme.name"
+                        v-for="theme in displayThemes"
+                        :key="theme._key"
                         cols="12"
                         sm="6"
                         md="4"
@@ -66,7 +82,7 @@
                                     :color="theme.active ? 'primary' : 'default'"
                                     class="mr-2"
                                 >
-                                    mdi-palette
+                                    {{ theme._isDefault ? 'mdi-palette-outline' : 'mdi-palette' }}
                                 </v-icon>
                                 <span class="font-weight-bold">{{ theme.name }}</span>
                                 <v-chip
@@ -79,16 +95,18 @@
                                 </v-chip>
                             </div>
                             <div class="text-caption text-medium-emphasis mb-1">
-                                v{{ theme.version }}
-                                <span v-if="theme.author"> · {{ theme.author }}</span>
+                                <template v-if="!theme._isDefault">
+                                    v{{ theme.version }}
+                                    <span v-if="theme.author"> · {{ theme.author }}</span>
+                                </template>
                             </div>
-                            <div
-                                v-if="theme.description"
-                                class="text-body-2 mb-3"
-                            >
+                            <div class="text-body-2 mb-3">
                                 {{ theme.description }}
                             </div>
-                            <div class="d-flex gap-2">
+                            <div
+                                v-if="!theme._isDefault"
+                                class="d-flex gap-2"
+                            >
                                 <v-btn
                                     v-if="!theme.active"
                                     size="small"
@@ -135,7 +153,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, computed, onMounted } from 'vue';
 import { useNuxtApp } from 'nuxt/app';
 import { useThemeStore } from '@/stores/theme';
 import { useMainStore } from '@/stores/main';
@@ -148,8 +166,29 @@ const mainStore = useMainStore();
 const themes = ref([]);
 const installUrl = ref('');
 const installing = ref(false);
+const uploadFile = ref(null);
+const uploading = ref(false);
 const activating = ref('');
 const deleting = ref('');
+
+const displayThemes = computed(() => {
+    const hasActiveCustomTheme = themes.value.some(t => t.active);
+    const list = [
+        {
+            _key: '__default__',
+            _isDefault: true,
+            name: t('theme.defaultTheme'),
+            description: t('theme.defaultThemeDescription'),
+            active: !hasActiveCustomTheme,
+        },
+        ...themes.value.map(t => ({
+            ...t,
+            _key: t.name,
+            _isDefault: false,
+        })),
+    ];
+    return list;
+});
 
 const snackbar = ref({ show: false, msg: '', color: 'success' });
 
@@ -182,6 +221,29 @@ async function installTheme() {
         }
     } finally {
         installing.value = false;
+    }
+}
+
+async function uploadTheme() {
+    if (!uploadFile.value) return;
+    uploading.value = true;
+    try {
+        const formData = new FormData();
+        formData.append('theme_file', uploadFile.value);
+        const res = await $backend('/themes/install', {
+            method: 'POST',
+            body: formData,
+        });
+        if (res.err === 'ok') {
+            showMsg(res.msg || '安装成功');
+            uploadFile.value = null;
+            await fetchThemes();
+            await themeStore.fetchActiveTheme();
+        } else {
+            showMsg(res.msg || '安装失败', 'error');
+        }
+    } finally {
+        uploading.value = false;
     }
 }
 

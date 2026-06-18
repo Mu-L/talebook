@@ -9,6 +9,10 @@ function renderTemplate(content, vars) {
     return content.replace(/\{\{(\w+)\}\}/g, (_, key) => vars[key] ?? `{{${key}}}`);
 }
 
+function jsonEscape(val) {
+    return JSON.stringify(String(val)).slice(1, -1);
+}
+
 function copyTemplate(srcPath, destPath, vars) {
     const content = readFileSync(srcPath, 'utf-8');
     writeFileSync(destPath, renderTemplate(content, vars));
@@ -30,8 +34,8 @@ export async function initCommand(themeName, options) {
 
     const vars = {
         THEME_NAME: themeName,
-        THEME_AUTHOR: options.author || 'unknown',
-        THEME_DESCRIPTION: options.description || 'A custom Talebook theme',
+        THEME_AUTHOR: jsonEscape(options.author || 'unknown'),
+        THEME_DESCRIPTION: jsonEscape(options.description || 'A custom Talebook theme'),
         THEME_VERSION: '1.0.0',
     };
 

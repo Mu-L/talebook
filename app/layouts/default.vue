@@ -86,6 +86,8 @@ const router = useRouter();
 const dynamicHeader = shallowRef(AppHeader);
 const dynamicFooter = shallowRef(AppFooter);
 
+let applyThemeGeneration = 0;
+
 useHead({
     title: computed(() => store.site_title),
     titleTemplate: computed(() => store.site_title_template),
@@ -98,35 +100,36 @@ function withThemeVersion(url, theme) {
 }
 
 async function applyThemeComponents(theme) {
-    if (!theme?.components) {
-        dynamicHeader.value = AppHeader;
-        dynamicFooter.value = AppFooter;
-        return;
+    const generation = ++applyThemeGeneration;
+
+    let header = AppHeader;
+    let footer = AppFooter;
+
+    if (theme?.components) {
+        if (theme.components.AppHeader) {
+            try {
+                const mod = await import(/* @vite-ignore */ withThemeVersion(theme.components.AppHeader, theme));
+                header = mod.default || mod;
+            } catch (e) {
+                console.warn('主题 Header 加载失败，使用默认', e);
+            }
+        }
+
+        if (theme.components.AppFooter) {
+            try {
+                const mod = await import(/* @vite-ignore */ withThemeVersion(theme.components.AppFooter, theme));
+                footer = mod.default || mod;
+            } catch (e) {
+                console.warn('主题 Footer 加载失败，使用默认', e);
+            }
+        }
     }
 
-    if (theme.components.AppHeader) {
-        try {
-            const mod = await import(/* @vite-ignore */ withThemeVersion(theme.components.AppHeader, theme));
-            dynamicHeader.value = mod.default || mod;
-        } catch (e) {
-            console.warn('主题 Header 加载失败，使用默认', e);
-            dynamicHeader.value = AppHeader;
-        }
-    } else {
-        dynamicHeader.value = AppHeader;
-    }
+    // Discard if a newer activation started while we were awaiting imports
+    if (generation !== applyThemeGeneration) return;
 
-    if (theme.components.AppFooter) {
-        try {
-            const mod = await import(/* @vite-ignore */ withThemeVersion(theme.components.AppFooter, theme));
-            dynamicFooter.value = mod.default || mod;
-        } catch (e) {
-            console.warn('主题 Footer 加载失败，使用默认', e);
-            dynamicFooter.value = AppFooter;
-        }
-    } else {
-        dynamicFooter.value = AppFooter;
-    }
+    dynamicHeader.value = header;
+    dynamicFooter.value = footer;
 }
 
 onMounted(async () => {

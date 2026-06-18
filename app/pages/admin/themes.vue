@@ -138,10 +138,12 @@
 import { ref, onMounted } from 'vue';
 import { useNuxtApp } from 'nuxt/app';
 import { useThemeStore } from '@/stores/theme';
+import { useMainStore } from '@/stores/main';
 
 const { $backend } = useNuxtApp();
 const { t } = useI18n();
 const themeStore = useThemeStore();
+const mainStore = useMainStore();
 
 const themes = ref([]);
 const installUrl = ref('');
@@ -174,6 +176,7 @@ async function installTheme() {
             showMsg(res.msg || '安装成功');
             installUrl.value = '';
             await fetchThemes();
+            await themeStore.fetchActiveTheme();
         } else {
             showMsg(res.msg || '安装失败', 'error');
         }
@@ -231,5 +234,8 @@ async function deleteTheme(name) {
     }
 }
 
-onMounted(fetchThemes);
+onMounted(async () => {
+    mainStore.setNavbar(true);
+    await fetchThemes();
+});
 </script>

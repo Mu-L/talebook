@@ -118,6 +118,21 @@ class TestThemeAdmin(TestWithAdminUser):
         self.assertEqual(d["err"], "params.invalid")
 
     @mock.patch("webserver.handlers.theme.requests.get")
+    def test_install_reserved_name_rejected(self, mock_get):
+        """主题名为保留名称（active/install/activate）时必须拒绝，避免路由冲突。"""
+        for reserved in ("active", "install", "activate"):
+            zip_bytes = make_theme_zip(reserved)
+            mock_response = mock.MagicMock()
+            mock_response.raise_for_status.return_value = None
+            mock_response.status_code = 200
+            mock_response.iter_content.return_value = iter([zip_bytes])
+            mock_get.return_value = mock_response
+
+            body = json.dumps({"download_url": "https://github.com/talebook/test-theme/archive/main.zip"})
+            d = self.json("/api/themes/install", method="POST", body=body)
+            self.assertEqual(d["err"], "params.invalid", f"保留名称 '{reserved}' 应被拒绝")
+
+    @mock.patch("webserver.handlers.theme.requests.get")
     def test_install_dot_theme_name_rejected(self, mock_get):
         """主题名为 . 时必须拒绝，避免目标目录变成 themes 根目录。"""
         zip_bytes = make_theme_zip(".")

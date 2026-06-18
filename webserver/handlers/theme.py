@@ -24,6 +24,7 @@ MAX_THEME_SIZE = 10 * 1024 * 1024  # 10MB
 MAX_UNCOMPRESSED_THEME_SIZE = 100 * 1024 * 1024  # 100MB
 _REDIRECT_CODES = {301, 302, 303, 307, 308}
 _THEME_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
+_RESERVED_THEME_NAMES = {"active", "install", "activate"}
 
 
 def is_allowed_url(url):
@@ -171,7 +172,7 @@ class ThemeInstallHandler(BaseHandler):
                 theme_meta = json.loads(zf.read(theme_json_path).decode("utf-8"))
 
             theme_name = theme_meta.get("name", "").strip()
-            if not is_valid_theme_name(theme_name):
+            if not is_valid_theme_name(theme_name) or theme_name in _RESERVED_THEME_NAMES:
                 return {"err": "params.invalid", "msg": _("theme.json 中 name 字段无效")}
 
             components = normalize_components(theme_name, theme_meta.get("components", {}))
@@ -239,12 +240,12 @@ class ThemeActivateHandler(BaseHandler):
                 return {"err": "not_found", "msg": _("主题不存在")}
 
         self.session.query(InstalledTheme).update({"active": False})
-        self.session.commit()
-
         if name:
             theme.active = True
             self.session.add(theme)
-            self.session.commit()
+        self.session.commit()
+
+        if name:
             CONF["ACTIVE_THEME"] = name
             return {"err": "ok", "msg": _("已激活主题：%s") % name, "theme": theme.to_dict()}
 

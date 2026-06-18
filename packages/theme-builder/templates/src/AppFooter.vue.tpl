@@ -1,24 +1,57 @@
 <template>
-    <footer :style="footerStyle">
-        <p :style="textStyle">
-            Powered by
-            <a
-                :style="linkStyle"
-                href="https://github.com/talebook/talebook"
-                target="_blank"
-                rel="noopener noreferrer"
-            >Talebook</a>
-            &bull; Theme: {{THEME_NAME}}
-        </p>
-    </footer>
+    <v-row>
+        <v-col
+            cols="12"
+            class="text-center"
+        >
+            <v-divider class="mt-10 mb-3" />
+            <p
+                v-if="footer_extra_html"
+                class="mb-0 text-center footer-text press-content"
+                v-html="footer_extra_html"
+            />
+            <p
+                class="mb-0 text-center footer-text press-content"
+                v-html="footer_text"
+            />
+            <p>
+                <v-btn
+                    small
+                    variant="text"
+                    target="_blank"
+                    href="https://github.com/talebook/talebook"
+                >
+                    Github
+                </v-btn>
+                | <v-btn
+                    small
+                    variant="text"
+                    target="_blank"
+                    href="https://hub.docker.com/r/talebook/talebook"
+                >
+                    Docker
+                </v-btn>
+                | <v-btn
+                    small
+                    variant="text"
+                    target="_blank"
+                    href="http://talebook.org"
+                >
+                    Project
+                </v-btn>
+            </p>
+        </v-col>
+    </v-row>
 </template>
 
 <script setup>
-const footerStyle = {
-    borderTop: '1px solid rgba(0,0,0,0.12)',
-    padding: '12px 16px',
-    textAlign: 'center',
-};
-const textStyle = { margin: '0', fontSize: '0.8rem', color: 'rgba(0,0,0,0.54)' };
-const linkStyle = { color: '#1a73e8', textDecoration: 'none' };
+import { useMainStore } from '@/stores/main';
+
+const store = useMainStore();
+const footer_text = computed(() => store.sys.footer || '');
+const footer_extra_html = computed(() => store.sys.footer_extra_html || '');
 </script>
+
+<style>
+
+</style>

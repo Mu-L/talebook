@@ -5,7 +5,7 @@ import json
 import unittest
 import warnings
 from unittest import mock
-from tests.test_main import TestWithUserLogin, setUpModule as init, testdir, get_db
+from tests.test_main import TestApp, TestWithUserLogin, setUpModule as init, testdir, get_db
 
 
 def setUpModule():

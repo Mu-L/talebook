@@ -440,7 +440,6 @@ import { useMainStore } from '@/stores/main';
 import { useI18n } from '#i18n';
 
 const store = useMainStore();
-const { $backend } = useNuxtApp();
 const display = useDisplay();
 const router = useRouter();
 const route = useRoute();
@@ -451,7 +450,7 @@ const visit_admin_pages = ref(false);
 const sidebar = ref(null);
 const btn_search = ref(false);
 const search = ref('');
-const messages = ref([]);
+const messages = computed(() => store.messages);
 
 const mobile_search = ref(null);
 const search_input = ref(null);
@@ -530,15 +529,8 @@ const items = computed(() => {
 onMounted(() => {
     visit_admin_pages.value = route.path.indexOf('/admin/') == 0;
     sidebar.value = display.lgAndUp.value;
-    $backend('/user/info').then((rsp) => {
+    store.bootstrap().then((rsp) => {
         err.value = rsp.err;
-        store.login(rsp);
-        store.setTitle(rsp.sys.title);
-    });
-    $backend('/user/messages').then((rsp) => {
-        if (rsp.err == 'ok') {
-            messages.value = rsp.messages;
-        }
     });
 });
 
@@ -569,14 +561,7 @@ function do_search() {
 }
 
 function hidemsg(idx, msgid) {
-    $backend('/user/messages', {
-        method: 'POST',
-        body: JSON.stringify({ id: msgid }),
-    }).then((rsp) => {
-        if (rsp.err == 'ok') {
-            messages.value.splice(idx, 1);
-        }
-    });
+    store.hideMessage(idx, msgid);
 }
 
 function toggleTheme() {

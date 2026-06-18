@@ -118,6 +118,43 @@ class TestThemeAdmin(TestWithAdminUser):
         self.assertEqual(d["err"], "params.invalid")
 
     @mock.patch("webserver.handlers.theme.requests.get")
+    def test_install_dot_theme_name_rejected(self, mock_get):
+        """主题名为 . 时必须拒绝，避免目标目录变成 themes 根目录。"""
+        zip_bytes = make_theme_zip(".")
+        mock_response = mock.MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.status_code = 200
+        mock_response.iter_content.return_value = iter([zip_bytes])
+        mock_get.return_value = mock_response
+
+        body = json.dumps({"download_url": "https://github.com/talebook/test-theme/archive/main.zip"})
+        d = self.json("/api/themes/install", method="POST", body=body)
+        self.assertEqual(d["err"], "params.invalid")
+
+    @mock.patch("webserver.handlers.theme.requests.get")
+    def test_install_external_component_url_rejected(self, mock_get):
+        """组件地址必须限定在本主题的 /static/themes/<name>/ 目录下。"""
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            theme_json = {
+                "name": "test-theme",
+                "version": "1.0.0",
+                "components": {"AppHeader": "https://evil.com/AppHeader.js"},
+            }
+            zf.writestr("theme.json", json.dumps(theme_json))
+            zf.writestr("components/AppHeader.js", "export default {};")
+
+        mock_response = mock.MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.status_code = 200
+        mock_response.iter_content.return_value = iter([buf.getvalue()])
+        mock_get.return_value = mock_response
+
+        body = json.dumps({"download_url": "https://github.com/talebook/test-theme/archive/main.zip"})
+        d = self.json("/api/themes/install", method="POST", body=body)
+        self.assertEqual(d["err"], "security.error")
+
+    @mock.patch("webserver.handlers.theme.requests.get")
     def test_install_success(self, mock_get):
         """正常安装流程：ZIP 包合法，主题应被记录到数据库。"""
         import tempfile
@@ -197,6 +234,40 @@ class TestThemeAdmin(TestWithAdminUser):
 
         self.assertEqual(d["err"], "ok")
         self.assertEqual(d["theme"]["name"], "test-theme")
+
+    @mock.patch("webserver.handlers.theme.requests.get")
+    def test_failed_reinstall_keeps_existing_files(self, mock_get):
+        """重装解压失败时，不应删除当前正在服务的旧主题目录。"""
+        import tempfile
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("theme.json", json.dumps({
+                "name": "test-theme",
+                "version": "2.0.0",
+                "components": {"AppHeader": "/static/themes/test-theme/components/AppHeader.js"},
+            }))
+            zf.writestr("../evil.js", "bad")
+
+        mock_response = mock.MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.status_code = 200
+        mock_response.iter_content.return_value = iter([buf.getvalue()])
+        mock_get.return_value = mock_response
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            theme_dir = os.path.join(tmpdir, "test-theme")
+            os.makedirs(theme_dir)
+            old_file = os.path.join(theme_dir, "old.js")
+            with open(old_file, "w") as f:
+                f.write("old")
+
+            with mock.patch("webserver.handlers.theme.get_themes_path", return_value=tmpdir):
+                body = json.dumps({"download_url": "https://github.com/talebook/test-theme/archive/main.zip"})
+                d = self.json("/api/themes/install", method="POST", body=body)
+
+            self.assertEqual(d["err"], "security.error")
+            self.assertTrue(os.path.exists(old_file))
 
     def test_activate_not_found(self):
         body = json.dumps({"name": "nonexistent-theme"})

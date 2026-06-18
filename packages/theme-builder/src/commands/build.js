@@ -4,7 +4,7 @@ import { spawnSync } from 'node:child_process';
 
 export async function buildCommand(options) {
     const configPath = resolve(options.config || 'vite.config.js');
-    const outDir = options.outDir || 'dist';
+    const outDir = options.outDir || 'components';
 
     if (!existsSync(configPath)) {
         console.error(`ERROR: Vite config not found: ${configPath}`);

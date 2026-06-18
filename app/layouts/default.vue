@@ -91,6 +91,12 @@ useHead({
     titleTemplate: computed(() => store.site_title_template),
 });
 
+function withThemeVersion(url, theme) {
+    const version = encodeURIComponent(theme?.version || theme?.installed_at || Date.now());
+    const separator = url.includes('?') ? '&' : '?';
+    return `${url}${separator}v=${version}`;
+}
+
 async function applyThemeComponents(theme) {
     if (!theme?.components) {
         dynamicHeader.value = AppHeader;
@@ -100,7 +106,7 @@ async function applyThemeComponents(theme) {
 
     if (theme.components.AppHeader) {
         try {
-            const mod = await import(/* @vite-ignore */ theme.components.AppHeader);
+            const mod = await import(/* @vite-ignore */ withThemeVersion(theme.components.AppHeader, theme));
             dynamicHeader.value = mod.default || mod;
         } catch (e) {
             console.warn('主题 Header 加载失败，使用默认', e);
@@ -112,7 +118,7 @@ async function applyThemeComponents(theme) {
 
     if (theme.components.AppFooter) {
         try {
-            const mod = await import(/* @vite-ignore */ theme.components.AppFooter);
+            const mod = await import(/* @vite-ignore */ withThemeVersion(theme.components.AppFooter, theme));
             dynamicFooter.value = mod.default || mod;
         } catch (e) {
             console.warn('主题 Footer 加载失败，使用默认', e);
@@ -125,7 +131,7 @@ async function applyThemeComponents(theme) {
 
 onMounted(async () => {
     store.setLoading(false);
-    await themeStore.fetchActiveTheme();
+    await Promise.all([store.bootstrap(), themeStore.fetchActiveTheme()]);
     await applyThemeComponents(themeStore.activeTheme);
 });
 

@@ -131,7 +131,7 @@ class ProxyImageHandler(BaseHandler):
 
         headers = dict(constants.CHROME_HEADERS)
         headers["Referer"] = safe_url
-        r = requests.get(safe_url, headers=headers)
+        r = requests.get(safe_url, headers=headers, allow_redirects=False, timeout=10)
         for k, v in r.headers.items():
             self.set_header(k, v)
         self.write(r.content)

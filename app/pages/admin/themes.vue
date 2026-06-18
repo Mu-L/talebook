@@ -103,30 +103,19 @@
                             <div class="text-body-2 mb-3">
                                 {{ theme.description }}
                             </div>
-                            <div
-                                v-if="!theme._isDefault"
-                                class="d-flex gap-2"
-                            >
+                            <div class="d-flex gap-2">
                                 <v-btn
-                                    v-if="!theme.active"
                                     size="small"
-                                    color="primary"
-                                    variant="tonal"
-                                    :loading="activating === theme.name"
-                                    @click="activateTheme(theme.name)"
+                                    :color="theme.active ? undefined : 'primary'"
+                                    :variant="theme.active ? 'text' : 'tonal'"
+                                    :disabled="theme.active"
+                                    :loading="activating === theme._key"
+                                    @click="activateTheme(theme._key)"
                                 >
-                                    {{ $t('theme.activate') }}
+                                    {{ theme.active ? $t('theme.active') : $t('theme.activate') }}
                                 </v-btn>
                                 <v-btn
-                                    v-else
-                                    size="small"
-                                    variant="tonal"
-                                    :loading="activating === '__deactivate__'"
-                                    @click="deactivateTheme"
-                                >
-                                    {{ $t('theme.deactivate') }}
-                                </v-btn>
-                                <v-btn
+                                    v-if="!theme._isDefault"
                                     size="small"
                                     color="error"
                                     variant="text"
@@ -173,21 +162,25 @@ const deleting = ref('');
 
 const displayThemes = computed(() => {
     const hasActiveCustomTheme = themes.value.some(t => t.active);
-    const list = [
-        {
-            _key: '__default__',
-            _isDefault: true,
-            name: t('theme.defaultTheme'),
-            description: t('theme.defaultThemeDescription'),
-            active: !hasActiveCustomTheme,
-        },
-        ...themes.value.map(t => ({
-            ...t,
-            _key: t.name,
-            _isDefault: false,
-        })),
-    ];
-    return list;
+    const defaultItem = {
+        _key: '__default__',
+        _isDefault: true,
+        name: t('theme.defaultTheme'),
+        description: t('theme.defaultThemeDescription'),
+        active: !hasActiveCustomTheme,
+    };
+    const customItems = themes.value.map(t => ({
+        ...t,
+        _key: t.name,
+        _isDefault: false,
+    }));
+
+    if (hasActiveCustomTheme) {
+        const activeTheme = customItems.find(t => t.active);
+        const otherCustom = customItems.filter(t => !t.active);
+        return [activeTheme, defaultItem, ...otherCustom];
+    }
+    return [defaultItem, ...customItems];
 });
 
 const snackbar = ref({ show: false, msg: '', color: 'success' });
@@ -247,30 +240,20 @@ async function uploadTheme() {
     }
 }
 
-async function activateTheme(name) {
-    activating.value = name;
+async function activateTheme(key) {
+    activating.value = key;
     try {
-        const res = await themeStore.activate(name);
+        let res;
+        if (key === '__default__') {
+            res = await themeStore.deactivate();
+        } else {
+            res = await themeStore.activate(key);
+        }
         if (res.err === 'ok') {
             showMsg(res.msg || '已激活');
             await fetchThemes();
         } else {
             showMsg(res.msg || '激活失败', 'error');
-        }
-    } finally {
-        activating.value = '';
-    }
-}
-
-async function deactivateTheme() {
-    activating.value = '__deactivate__';
-    try {
-        const res = await themeStore.deactivate();
-        if (res.err === 'ok') {
-            showMsg(res.msg || '已恢复默认主题');
-            await fetchThemes();
-        } else {
-            showMsg(res.msg || '操作失败', 'error');
         }
     } finally {
         activating.value = '';

@@ -1,27 +1,56 @@
 import { defineConfig } from 'vite';
 import vue from '@vitejs/plugin-vue';
 import { resolve } from 'node:path';
+import { readdirSync } from 'node:fs';
 
-// Pre-configured Vite config for Talebook themes.
-// Each component is built as a self-contained ESM file (vue bundled inline)
-// so it can be loaded via native browser dynamic import() without an import map.
+// Auto-discover all Vue component files in src/
+const srcDir = resolve('src');
+const entries = {};
+for (const file of readdirSync(srcDir)) {
+    const match = file.match(/^(.+)\.vue$/);
+    if (match) {
+        entries[match[1]] = resolve(srcDir, file);
+    }
+}
+
+// Host-provided dependencies — not bundled, loaded at runtime from the Talebook app
+const hostExternals = [
+    'vue',
+    'vue-router',
+    'vue-i18n',
+    'vuetify',
+    'nuxt/app',
+];
+
 export default defineConfig({
     plugins: [vue()],
+    resolve: {
+        alias: {
+            // @ maps to the host app's source root — all @/ imports are external
+            '@': resolve(__dirname, 'node_modules/.host-app'),
+        },
+    },
     build: {
         lib: {
-            // Each component is compiled to its own ESM file.
-            // Add or remove entries to match the components in theme.json.
-            entry: {
-                AppHeader: resolve('src/AppHeader.vue'),
-                AppFooter: resolve('src/AppFooter.vue'),
-            },
+            entry: entries,
             formats: ['es'],
-            // Output to components/ so the ZIP layout matches what Talebook serves:
-            //   <theme-name>/components/AppHeader.js
-            //   <theme-name>/components/AppFooter.js
             fileName: (format, entryName) => `${entryName}.js`,
         },
-        // Output directly into components/ — keep src/ for source only.
+        rollupOptions: {
+            external: (id) => {
+                // Explicit host packages
+                if (hostExternals.includes(id)) return true;
+                // Nuxt aliases: @/stores/..., #i18n, ~/utils/...
+                if (id.startsWith('@/') || id.startsWith('#') || id.startsWith('~/')) return true;
+                // Sub-paths of host packages (e.g. vuetify/components, vue/dist/...)
+                if (hostExternals.some(pkg => id === pkg || id.startsWith(pkg + '/'))) return true;
+                return false;
+            },
+            output: {
+                // Preserve module structure so each component is self-contained
+                preserveModules: false,
+            },
+        },
         outDir: 'components',
         emptyOutDir: true,
     },

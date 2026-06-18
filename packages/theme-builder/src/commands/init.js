@@ -88,6 +88,7 @@ Next steps:
   npm install
   npm run dev          # start Vite in watch mode
   npm run build        # build components to dist/
+  npm run pack         # build + pack into theme.zip (one-command)
   theme-builder validate  # check theme.json
 
 Edit the Vue component files in src/ to customize your theme.

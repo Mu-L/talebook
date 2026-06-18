@@ -5,7 +5,9 @@
   "type": "module",
   "scripts": {
     "build": "vite build",
-    "dev": "vite build --watch"
+    "dev": "vite build --watch",
+    "pack": "theme-builder pack",
+    "validate": "theme-builder validate"
   },
   "devDependencies": {
     "@vitejs/plugin-vue": "^5.0.0",

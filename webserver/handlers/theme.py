@@ -172,8 +172,13 @@ class ThemeInstallHandler(BaseHandler):
             if not zipfile.is_zipfile(tmp_path):
                 return {"err": "params.invalid", "msg": _("文件不是有效的 ZIP 格式")}
 
-            with zipfile.ZipFile(tmp_path) as zf:
+            try:
+                zf = zipfile.ZipFile(tmp_path)
                 names = zf.namelist()
+            except zipfile.BadZipFile as e:
+                return {"err": "params.invalid", "msg": _("ZIP 文件损坏或不兼容：%s") % str(e)}
+
+            with zf:
                 theme_json_candidates = [n for n in names if n.endswith("theme.json") and n.count("/") <= 1]
                 if not theme_json_candidates:
                     return {"err": "params.invalid", "msg": _("ZIP 包中缺少 theme.json 文件")}

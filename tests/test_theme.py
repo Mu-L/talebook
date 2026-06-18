@@ -117,8 +117,9 @@ class TestThemeAdmin(TestWithAdminUser):
         d = self.json("/api/themes/install", method="POST", body=body)
         self.assertEqual(d["err"], "params.invalid")
 
+    @mock.patch("webserver.handlers.theme._assert_public_host")
     @mock.patch("webserver.handlers.theme.requests.get")
-    def test_install_reserved_name_rejected(self, mock_get):
+    def test_install_reserved_name_rejected(self, mock_get, mock_assert_host):
         """主题名为保留名称（active/install/activate）时必须拒绝，避免路由冲突。"""
         for reserved in ("active", "install", "activate"):
             zip_bytes = make_theme_zip(reserved)
@@ -132,8 +133,9 @@ class TestThemeAdmin(TestWithAdminUser):
             d = self.json("/api/themes/install", method="POST", body=body)
             self.assertEqual(d["err"], "params.invalid", f"保留名称 '{reserved}' 应被拒绝")
 
+    @mock.patch("webserver.handlers.theme._assert_public_host")
     @mock.patch("webserver.handlers.theme.requests.get")
-    def test_install_dot_theme_name_rejected(self, mock_get):
+    def test_install_dot_theme_name_rejected(self, mock_get, mock_assert_host):
         """主题名为 . 时必须拒绝，避免目标目录变成 themes 根目录。"""
         zip_bytes = make_theme_zip(".")
         mock_response = mock.MagicMock()
@@ -146,8 +148,9 @@ class TestThemeAdmin(TestWithAdminUser):
         d = self.json("/api/themes/install", method="POST", body=body)
         self.assertEqual(d["err"], "params.invalid")
 
+    @mock.patch("webserver.handlers.theme._assert_public_host")
     @mock.patch("webserver.handlers.theme.requests.get")
-    def test_install_external_component_url_rejected(self, mock_get):
+    def test_install_external_component_url_rejected(self, mock_get, mock_assert_host):
         """组件地址必须限定在本主题的 /static/themes/<name>/ 目录下。"""
         buf = io.BytesIO()
         with zipfile.ZipFile(buf, "w") as zf:
@@ -169,8 +172,9 @@ class TestThemeAdmin(TestWithAdminUser):
         d = self.json("/api/themes/install", method="POST", body=body)
         self.assertEqual(d["err"], "security.error")
 
+    @mock.patch("webserver.handlers.theme._assert_public_host")
     @mock.patch("webserver.handlers.theme.requests.get")
-    def test_install_success(self, mock_get):
+    def test_install_success(self, mock_get, mock_assert_host):
         """正常安装流程：ZIP 包合法，主题应被记录到数据库。"""
         import tempfile
 
@@ -192,8 +196,9 @@ class TestThemeAdmin(TestWithAdminUser):
         self.assertIn("theme", d)
         self.assertEqual(d["theme"]["name"], "test-theme")
 
+    @mock.patch("webserver.handlers.theme._assert_public_host")
     @mock.patch("webserver.handlers.theme.requests.get")
-    def test_install_oversized_rejected(self, mock_get):
+    def test_install_oversized_rejected(self, mock_get, mock_assert_host):
         """超过 10MB 的主题包必须被拒绝。"""
         big_chunk = b"x" * (11 * 1024 * 1024)
 
@@ -207,8 +212,9 @@ class TestThemeAdmin(TestWithAdminUser):
         d = self.json("/api/themes/install", method="POST", body=body)
         self.assertEqual(d["err"], "params.invalid")
 
+    @mock.patch("webserver.handlers.theme._assert_public_host")
     @mock.patch("webserver.handlers.theme.requests.get")
-    def test_install_redirect_ssrf_blocked(self, mock_get):
+    def test_install_redirect_ssrf_blocked(self, mock_get, mock_assert_host):
         """重定向到非白名单域名必须被拒绝（逐跳校验 Location）。"""
         mock_response = mock.MagicMock()
         mock_response.raise_for_status.return_value = None
@@ -220,8 +226,9 @@ class TestThemeAdmin(TestWithAdminUser):
         d = self.json("/api/themes/install", method="POST", body=body)
         self.assertEqual(d["err"], "params.invalid")
 
+    @mock.patch("webserver.handlers.theme._assert_public_host")
     @mock.patch("webserver.handlers.theme.requests.get")
-    def test_install_allowed_redirect(self, mock_get):
+    def test_install_allowed_redirect(self, mock_get, mock_assert_host):
         """重定向到白名单域名（如 codeload.github.com）应正常完成安装。"""
         import tempfile
 
@@ -250,8 +257,9 @@ class TestThemeAdmin(TestWithAdminUser):
         self.assertEqual(d["err"], "ok")
         self.assertEqual(d["theme"]["name"], "test-theme")
 
+    @mock.patch("webserver.handlers.theme._assert_public_host")
     @mock.patch("webserver.handlers.theme.requests.get")
-    def test_failed_reinstall_keeps_existing_files(self, mock_get):
+    def test_failed_reinstall_keeps_existing_files(self, mock_get, mock_assert_host):
         """重装解压失败时，不应删除当前正在服务的旧主题目录。"""
         import tempfile
 

@@ -414,6 +414,17 @@ router.get('/api/network/save/status', eventHandler(() => {
   return { err: 'ok', found: true, status: 'completed', progress: 100, done: 100, total: 100, book_id: 1, error: '' };
 }));
 
+// Theme API — return empty state so layout doesn't open an error dialog
+router.get('/api/themes/active', eventHandler(() => ({
+  err: 'ok',
+  theme: null,
+})));
+
+router.get('/api/themes', eventHandler(() => ({
+  err: 'ok',
+  themes: [],
+})));
+
 app.use(router.handler);
 
 listen(toNodeListener(app), { hostname: '0.0.0.0', port: Number(process.env.PORT) || 8000 });

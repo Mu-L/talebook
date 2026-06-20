@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
+import datetime
 import ipaddress
 import json
 import logging
@@ -300,6 +301,7 @@ class ThemeInstallHandler(BaseHandler):
             existing.author = theme_meta.get("author", "")
             existing.description = theme_meta.get("description", "")
             existing.data = {"components": components}
+            existing.installed_at = datetime.datetime.now()
             existing.save()
             theme = existing
         else:

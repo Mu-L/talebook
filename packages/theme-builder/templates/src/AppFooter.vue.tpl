@@ -1,57 +1,49 @@
 <template>
-    <v-row>
-        <v-col
-            cols="12"
-            class="text-center"
-        >
-            <v-divider class="mt-10 mb-3" />
-            <p
-                v-if="footer_extra_html"
-                class="mb-0 text-center footer-text press-content"
-                v-html="footer_extra_html"
-            />
-            <p
-                class="mb-0 text-center footer-text press-content"
-                v-html="footer_text"
-            />
-            <p>
-                <v-btn
-                    small
-                    variant="text"
-                    target="_blank"
+    <footer :style="footerStyle">
+        <div :style="containerStyle">
+            <p :style="textStyle">
+                Powered by
+                <a
                     href="https://github.com/talebook/talebook"
-                >
-                    Github
-                </v-btn>
-                | <v-btn
-                    small
-                    variant="text"
                     target="_blank"
+                    rel="noopener"
+                    :style="linkStyle"
+                >Talebook</a>
+                &nbsp;|&nbsp;
+                <a
                     href="https://hub.docker.com/r/talebook/talebook"
-                >
-                    Docker
-                </v-btn>
-                | <v-btn
-                    small
-                    variant="text"
                     target="_blank"
-                    href="http://talebook.org"
-                >
-                    Project
-                </v-btn>
+                    rel="noopener"
+                    :style="linkStyle"
+                >Docker</a>
             </p>
-        </v-col>
-    </v-row>
+        </div>
+    </footer>
 </template>
 
 <script setup>
-import { useMainStore } from '@/stores/main';
+const footerStyle = {
+    borderTop: '1px solid #e0e0e0',
+    padding: '20px 16px',
+    textAlign: 'center',
+    color: '#888',
+    fontSize: '13px',
+    marginTop: '32px',
+    background: '#fafafa',
+};
 
-const store = useMainStore();
-const footer_text = computed(() => store.sys.footer || '');
-const footer_extra_html = computed(() => store.sys.footer_extra_html || '');
+const containerStyle = {
+    maxWidth: '1200px',
+    margin: '0 auto',
+};
+
+const textStyle = {
+    margin: '0',
+    lineHeight: '1.6',
+};
+
+const linkStyle = {
+    color: '#1976d2',
+    textDecoration: 'none',
+};
 </script>
-
-<style>
-
-</style>

@@ -8,7 +8,7 @@ ARG TARGETARCH
 WORKDIR /build
 RUN if [ "x${BUILD_COUNTRY}" = "xCN" ]; then \
     echo "using repo mirrors for ${BUILD_COUNTRY}"; \
-    npm config set registry http://mirrors.tencent.com/npm/; \
+    npm config set registry https://registry.npmmirror.com; \
     fi
 
 COPY app/package.json app/package-lock.json* ./
@@ -39,7 +39,21 @@ RUN mkdir -p /var/lib/apt/lists/partial && \
     chmod -R 0755 /var/lib/apt/lists/ && \
     if [ "x${BUILD_COUNTRY}" = "xCN" ]; then \
         echo "using repo mirrors for ${BUILD_COUNTRY}"; \
-        sed 's@deb.debian.org/debian@mirrors.aliyun.com/debian@' -i /etc/apt/sources.list; \
+        \
+        if [ -f /etc/apt/sources.list ]; then \
+            sed -i 's@deb.debian.org/debian@mirrors.aliyun.com/debian@g' /etc/apt/sources.list; \
+            sed -i 's@security.debian.org@mirrors.aliyun.com/debian-security@g' /etc/apt/sources.list; \
+        fi; \
+        \
+        if [ -d /etc/apt/sources.list.d ]; then \
+            find /etc/apt/sources.list.d -name "*.list" -exec sed -i 's@deb.debian.org/debian@mirrors.aliyun.com/debian@g' {} \; ; \
+            find /etc/apt/sources.list.d -name "*.list" -exec sed -i 's@security.debian.org@mirrors.aliyun.com/debian-security@g' {} \; ; \
+        fi; \
+        \
+        echo "deb http://mirrors.aliyun.com/debian trixie main contrib non-free" > /etc/apt/sources.list; \
+        echo "deb http://mirrors.aliyun.com/debian trixie-updates main contrib non-free" >> /etc/apt/sources.list; \
+        echo "deb http://mirrors.aliyun.com/debian-security trixie-security main contrib non-free" >> /etc/apt/sources.list; \
+        \
         pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/; \
     fi
 
@@ -155,6 +169,11 @@ FROM production AS production-ssr
 USER root
 RUN mkdir -p /var/lib/apt/lists/partial && \
     chmod -R 0755 /var/lib/apt/lists/ && \
+    if [ "x${BUILD_COUNTRY}" = "xCN" ]; then \
+        echo "deb http://mirrors.aliyun.com/debian trixie main contrib non-free" > /etc/apt/sources.list; \
+        echo "deb http://mirrors.aliyun.com/debian trixie-updates main contrib non-free" >> /etc/apt/sources.list; \
+        echo "deb http://mirrors.aliyun.com/debian-security trixie-security main contrib non-free" >> /etc/apt/sources.list; \
+    fi; \
     apt-get update -y && \
     if [ "$TARGETARCH" = "amd64" ]; then \
         curl -fsSL https://deb.nodesource.com/setup_20.x | bash -; \

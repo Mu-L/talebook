@@ -36,6 +36,10 @@ build-ssr:
 	docker build --no-cache=false --build-arg BUILD_COUNTRY=CN --build-arg GIT_VERSION=$(VER) \
 		-f Dockerfile -t $(TAG1) -t $(TAG2) --target production-ssr .
 
+build-dev:
+	docker build --no-cache=false --build-arg BUILD_COUNTRY=CN \
+		-f Dockerfile -t talebook/talebook:dev --target dev .
+
 push:
 	docker push $(IMAGE)
 	docker push $(REPO1)
@@ -79,9 +83,8 @@ up:
 down:
 	docker compose stop
 
-dev: build
-	docker-compose -f dev.yml up # stable server env with develop code
-	npm run dev # run app dev
+dev: build-dev
+	docker-compose -f docker-compose.dev.yml up
 
 dev-ui:
 	cd app && npm run dev

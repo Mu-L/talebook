@@ -8,7 +8,7 @@ ARG TARGETARCH
 WORKDIR /build
 RUN if [ "x${BUILD_COUNTRY}" = "xCN" ]; then \
     echo "using repo mirrors for ${BUILD_COUNTRY}"; \
-    npm config set registry http://mirrors.tencent.com/npm/; \
+    npm config set registry https://registry.npmmirror.com; \
     fi
 
 COPY app/package.json app/package-lock.json* ./
@@ -39,7 +39,21 @@ RUN mkdir -p /var/lib/apt/lists/partial && \
     chmod -R 0755 /var/lib/apt/lists/ && \
     if [ "x${BUILD_COUNTRY}" = "xCN" ]; then \
         echo "using repo mirrors for ${BUILD_COUNTRY}"; \
-        sed 's@deb.debian.org/debian@mirrors.aliyun.com/debian@' -i /etc/apt/sources.list; \
+        \
+        if [ -f /etc/apt/sources.list ]; then \
+            sed -i 's@deb.debian.org/debian@mirrors.aliyun.com/debian@g' /etc/apt/sources.list; \
+            sed -i 's@security.debian.org@mirrors.aliyun.com/debian-security@g' /etc/apt/sources.list; \
+        fi; \
+        \
+        if [ -d /etc/apt/sources.list.d ]; then \
+            find /etc/apt/sources.list.d -name "*.list" -exec sed -i 's@deb.debian.org/debian@mirrors.aliyun.com/debian@g' {} \; ; \
+            find /etc/apt/sources.list.d -name "*.list" -exec sed -i 's@security.debian.org@mirrors.aliyun.com/debian-security@g' {} \; ; \
+        fi; \
+        \
+        echo "deb http://mirrors.aliyun.com/debian trixie main contrib non-free" > /etc/apt/sources.list; \
+        echo "deb http://mirrors.aliyun.com/debian trixie-updates main contrib non-free" >> /etc/apt/sources.list; \
+        echo "deb http://mirrors.aliyun.com/debian-security trixie-security main contrib non-free" >> /etc/apt/sources.list; \
+        \
         pip config set global.index-url https://mirrors.aliyun.com/pypi/simple/; \
     fi
 
@@ -155,6 +169,11 @@ FROM production AS production-ssr
 USER root
 RUN mkdir -p /var/lib/apt/lists/partial && \
     chmod -R 0755 /var/lib/apt/lists/ && \
+    if [ "x${BUILD_COUNTRY}" = "xCN" ]; then \
+        echo "deb http://mirrors.aliyun.com/debian trixie main contrib non-free" > /etc/apt/sources.list; \
+        echo "deb http://mirrors.aliyun.com/debian trixie-updates main contrib non-free" >> /etc/apt/sources.list; \
+        echo "deb http://mirrors.aliyun.com/debian-security trixie-security main contrib non-free" >> /etc/apt/sources.list; \
+    fi; \
     apt-get update -y && \
     if [ "$TARGETARCH" = "amd64" ]; then \
         curl -fsSL https://deb.nodesource.com/setup_20.x | bash -; \
@@ -181,4 +200,83 @@ RUN rm -rf /var/www/talebook/app/.output/public/logo && \
 # 生产环境（spa版，作为默认 docker build 结果）
 FROM production AS production-spa
 # no more actions
+
+
+# ----------------------------------------
+# 开发环境（前端使用 npm run dev，可将本地 app/ 目录挂载进来实时开发）
+# 构建：docker build --target dev -t talebook/talebook:dev .
+# 使用：docker-compose -f dev.yml up
+FROM server AS dev
+ARG BUILD_COUNTRY=""
+ARG GIT_VERSION=""
+ARG TARGETARCH
+ARG TARGETVARIANT
+
+USER root
+
+# Install Node.js 20
+RUN apt-get update -y && \
+    if [ "$TARGETARCH" = "amd64" ] || [ "$TARGETARCH" = "arm64" ]; then \
+        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+        apt-get install -y nodejs; \
+    fi && \
+    apt-get clean && \
+    rm -rf /var/lib/apt/lists/*
+
+ENV TZ=Asia/Shanghai
+ENV LANG=C.UTF-8
+ENV PUID=1000
+ENV PGID=1000
+
+WORKDIR /var/www/talebook
+
+# prepare dirs
+RUN mkdir -p /data/log/nginx/ && \
+    mkdir -p /data/books/library  && \
+    mkdir -p /data/books/extract  && \
+    mkdir -p /data/books/upload  && \
+    mkdir -p /data/books/imports  && \
+    mkdir -p /data/books/convert  && \
+    mkdir -p /data/books/progress  && \
+    mkdir -p /data/books/settings && \
+    mkdir -p /data/books/logo && \
+    mkdir -p /data/books/ssl && \
+    mkdir -p /var/www/talebook/ && \
+    chmod a+w -R /data/log /data/books /var/www
+
+COPY server.py /var/www/talebook/
+COPY docker/ /var/www/talebook/docker/
+COPY webserver/ /var/www/talebook/webserver/
+COPY conf/nginx/ssl.* /data/books/ssl/
+COPY conf/nginx/dev.conf /etc/nginx/conf.d/talebook.conf
+COPY conf/supervisor/dev.conf /etc/supervisor/conf.d/talebook.conf
+
+# 预先安装 npm 依赖（当 app/ 目录未被外部挂载时作为回退）
+COPY app/package.json app/package-lock.json* /var/www/talebook/app/
+RUN cd /var/www/talebook/app && npm ci
+
+# 复制完整 app/ 源码（node_modules 已由上一步安装，.dockerignore 排除本地 node_modules）
+COPY app/ /var/www/talebook/app/
+
+RUN rm -f /etc/nginx/sites-enabled/default /var/www/html -rf && \
+    cd /var/www/talebook/ && \
+    echo "VERSION = \"$GIT_VERSION\"" > webserver/version.py && \
+    echo "ARCH = \"$TARGETARCH$TARGETVARIANT\"" >> webserver/version.py && \
+    echo 'settings = {}' > /data/books/settings/auto.py && \
+    chmod a+w /data/books/settings/auto.py && \
+    calibredb add --library-path=/data/books/library/ -r docker/book/ && \
+    python3 server.py --syncdb  && \
+    python3 server.py --update-config  && \
+    rm -f webserver/*.pyc && \
+    mkdir -p /prebuilt/ && \
+    mv /data/* /prebuilt/ && \
+    chmod +x /var/www/talebook/docker/start-dev.sh && \
+    chmod +x /var/www/talebook/server.py && \
+    chmod +x /var/www/talebook/webserver/migrate_db.py
+
+EXPOSE 80 443
+
+VOLUME ["/data"]
+
+CMD ["/var/www/talebook/docker/start-dev.sh"]
 

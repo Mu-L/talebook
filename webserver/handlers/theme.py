@@ -29,6 +29,20 @@ _REDIRECT_CODES = {301, 302, 303, 307, 308}
 _THEME_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _RESERVED_THEME_NAMES = {"active", "install", "activate"}
 
+# Hardcoded canonical hostnames for the download allowlist.
+# Values are string literals — NOT derived from user input — so that
+# CodeQL's taint tracking sees the host in the reconstructed URL as clean,
+# eliminating the py/full-server-side-request-forgery finding.
+# Keep in sync with THEME_ALLOWED_DOMAINS in settings.py.
+_CANONICAL_HOSTS = {
+    "github.com": "github.com",
+    "raw.githubusercontent.com": "raw.githubusercontent.com",
+    "codeload.github.com": "codeload.github.com",
+    "objects.githubusercontent.com": "objects.githubusercontent.com",
+    "gitee.com": "gitee.com",
+    "cdn.jsdelivr.net": "cdn.jsdelivr.net",
+}
+
 # Private / reserved address spaces that must never be reached via a download URL.
 _PRIVATE_NETS = (
     ipaddress.ip_network("0.0.0.0/8"),
@@ -83,12 +97,14 @@ def _sanitize_url(url):
     """Validate *url* and return a freshly constructed string to break the taint chain.
 
     Performs two checks:
-    1. Domain allowlist — scheme must be https and host must be in THEME_ALLOWED_DOMAINS.
+    1. Domain allowlist — scheme must be https and host must be in _CANONICAL_HOSTS
+       (or THEME_ALLOWED_DOMAINS for runtime-configured extras).
     2. Public-IP check — resolved addresses must not fall in private/reserved ranges.
 
-    After both checks pass the URL is *reconstructed* from its validated components so
-    that CodeQL's taint tracking no longer sees user-supplied bytes flowing into
-    requests.get().
+    The host in the returned URL is taken from _CANONICAL_HOSTS (a module-level
+    constant with literal string values), NOT from the parsed user input.  This
+    means CodeQL's taint tracking cannot propagate the user-supplied host into the
+    requests.get() call, eliminating the py/full-server-side-request-forgery finding.
     """
     parsed = urlparse(url)
     if parsed.scheme != "https":
@@ -96,13 +112,24 @@ def _sanitize_url(url):
     hostname = parsed.hostname
     if not hostname:
         raise ValueError(_("URL 中缺少主机名"))
-    netloc = parsed.netloc.lower()
-    allowed = CONF.get("THEME_ALLOWED_DOMAINS", [])
-    if not any(netloc == d or netloc.endswith("." + d) for d in allowed):
-        raise ValueError(_("不允许的下载地址，仅支持 GitHub/Gitee/jsDelivr"))
+    netloc = (parsed.netloc or "").lower()
+
+    # Look up in the hardcoded dict first — dict value is a literal, not user-tainted.
+    safe_netloc = _CANONICAL_HOSTS.get(netloc)
+    if safe_netloc is None:
+        # Fall back to runtime-configured extra domains (server config, not user input).
+        extra_allowed = CONF.get("THEME_ALLOWED_DOMAINS", [])
+        safe_netloc = next(
+            (d for d in extra_allowed if netloc == d or netloc.endswith("." + d)),
+            None,
+        )
+        if safe_netloc is None:
+            raise ValueError(_("不允许的下载地址，仅支持 GitHub/Gitee/jsDelivr"))
+
     _assert_public_host(hostname)
-    # Reconstruct from validated parts — this is the key step that clears taint
-    safe = "https://" + netloc + (parsed.path or "/")
+
+    # Reconstruct using safe_netloc from the hardcoded dict (not user input).
+    safe = "https://" + safe_netloc + (parsed.path or "/")
     if parsed.query:
         safe += "?" + parsed.query
     return safe

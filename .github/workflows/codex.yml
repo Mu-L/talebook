@@ -46,10 +46,6 @@ jobs:
       )
     runs-on: ubuntu-latest
     env:
-      CODEX_HOME: ${{ runner.temp }}/codex-home
-      CODEX_PR_DIFF: ${{ runner.temp }}/codex-pr.diff
-      CODEX_PR_FILES_JSON: ${{ runner.temp }}/codex-pr-files.json
-      CODEX_REQUEST_JSON: ${{ runner.temp }}/codex-request.json
       CODEX_VERSION: "0.141.0"
     steps:
       - id: context
@@ -62,6 +58,16 @@ jobs:
             const repo = context.repo.repo;
             const eventName = context.eventName;
             const payload = context.payload;
+            const runnerTemp = process.env.RUNNER_TEMP;
+            const codexHome = `${runnerTemp}/codex-home`;
+            const codexPrDiff = `${runnerTemp}/codex-pr.diff`;
+            const codexPrFilesJson = `${runnerTemp}/codex-pr-files.json`;
+            const codexRequestJson = `${runnerTemp}/codex-request.json`;
+
+            core.exportVariable("CODEX_HOME", codexHome);
+            core.exportVariable("CODEX_PR_DIFF", codexPrDiff);
+            core.exportVariable("CODEX_PR_FILES_JSON", codexPrFilesJson);
+            core.exportVariable("CODEX_REQUEST_JSON", codexRequestJson);
 
             let body = "";
             let actor = context.actor;
@@ -133,7 +139,7 @@ jobs:
                 per_page: 100,
               });
               fs.writeFileSync(
-                process.env.CODEX_PR_FILES_JSON,
+                codexPrFilesJson,
                 `${JSON.stringify(files.map((file) => ({
                   filename: file.filename,
                   status: file.status,
@@ -154,7 +160,7 @@ jobs:
                 },
               });
               fs.writeFileSync(
-                process.env.CODEX_PR_DIFF,
+                codexPrDiff,
                 typeof diff.data === "string" ? diff.data : JSON.stringify(diff.data, null, 2),
                 { mode: 0o600 },
               );
@@ -182,7 +188,7 @@ jobs:
             };
 
             fs.writeFileSync(
-              process.env.CODEX_REQUEST_JSON,
+              codexRequestJson,
               `${JSON.stringify(request, null, 2)}\n`,
               { mode: 0o600 },
             );

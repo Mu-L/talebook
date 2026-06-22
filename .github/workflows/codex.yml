@@ -1,0 +1,355 @@
+name: Codex
+
+on:
+  issue_comment:
+    types: [created]
+  pull_request_review_comment:
+    types: [created]
+  pull_request_review:
+    types: [submitted]
+
+permissions:
+  contents: read
+  issues: write
+  pull-requests: read
+
+jobs:
+  codex:
+    name: Respond to maintainer request
+    if: |
+      github.actor != 'github-actions[bot]' &&
+      (
+        (
+          github.event_name == 'issue_comment' &&
+          (
+            contains(github.event.comment.body, '@codex') ||
+            contains(github.event.comment.body, '@Codex') ||
+            contains(github.event.comment.body, '/codex')
+          )
+        ) ||
+        (
+          github.event_name == 'pull_request_review_comment' &&
+          (
+            contains(github.event.comment.body, '@codex') ||
+            contains(github.event.comment.body, '@Codex') ||
+            contains(github.event.comment.body, '/codex')
+          )
+        ) ||
+        (
+          github.event_name == 'pull_request_review' &&
+          (
+            contains(github.event.review.body, '@codex') ||
+            contains(github.event.review.body, '@Codex') ||
+            contains(github.event.review.body, '/codex')
+          )
+        )
+      )
+    runs-on: ubuntu-latest
+    env:
+      CODEX_HOME: ${{ runner.temp }}/codex-home
+      CODEX_PR_DIFF: ${{ runner.temp }}/codex-pr.diff
+      CODEX_PR_FILES_JSON: ${{ runner.temp }}/codex-pr-files.json
+      CODEX_REQUEST_JSON: ${{ runner.temp }}/codex-request.json
+      CODEX_VERSION: "0.141.0"
+    steps:
+      - id: context
+        name: Resolve request context
+        uses: actions/github-script@v7
+        with:
+          script: |
+            const fs = require("fs");
+            const owner = context.repo.owner;
+            const repo = context.repo.repo;
+            const eventName = context.eventName;
+            const payload = context.payload;
+
+            let body = "";
+            let actor = context.actor;
+            let issueNumber = "";
+            let pr = null;
+            let requestKind = eventName;
+
+            if (eventName === "issue_comment") {
+              body = payload.comment.body || "";
+              actor = payload.comment.user.login;
+              issueNumber = String(payload.issue.number);
+              requestKind = payload.issue.pull_request ? "pull_request_comment" : "issue_comment";
+
+              if (payload.issue.pull_request) {
+                const result = await github.rest.pulls.get({
+                  owner,
+                  repo,
+                  pull_number: payload.issue.number,
+                });
+                pr = result.data;
+              }
+            } else if (eventName === "pull_request_review_comment") {
+              body = payload.comment.body || "";
+              actor = payload.comment.user.login;
+              const result = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: payload.pull_request.number,
+              });
+              pr = result.data;
+              issueNumber = String(pr.number);
+              requestKind = "pull_request_review_comment";
+            } else if (eventName === "pull_request_review") {
+              body = payload.review.body || "";
+              actor = payload.review.user.login;
+              const result = await github.rest.pulls.get({
+                owner,
+                repo,
+                pull_number: payload.pull_request.number,
+              });
+              pr = result.data;
+              issueNumber = String(pr.number);
+              requestKind = "pull_request_review";
+            }
+
+            let permission = "none";
+            let authorized = false;
+            try {
+              const permissionResult = await github.rest.repos.getCollaboratorPermissionLevel({
+                owner,
+                repo,
+                username: actor,
+              });
+              permission = permissionResult.data.permission || "none";
+              authorized = ["admin", "maintain", "write"].includes(permission);
+            } catch (error) {
+              core.warning(`Could not resolve repository permission for ${actor}: ${error.message}`);
+            }
+
+            if (!authorized) {
+              core.warning(`Skipping Codex request from ${actor}; repository permission is ${permission}.`);
+            }
+
+            if (authorized && pr) {
+              const files = await github.paginate(github.rest.pulls.listFiles, {
+                owner,
+                repo,
+                pull_number: pr.number,
+                per_page: 100,
+              });
+              fs.writeFileSync(
+                process.env.CODEX_PR_FILES_JSON,
+                `${JSON.stringify(files.map((file) => ({
+                  filename: file.filename,
+                  status: file.status,
+                  additions: file.additions,
+                  deletions: file.deletions,
+                  changes: file.changes,
+                  patch: file.patch || null,
+                })), null, 2)}\n`,
+                { mode: 0o600 },
+              );
+
+              const diff = await github.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
+                owner,
+                repo,
+                pull_number: pr.number,
+                headers: {
+                  accept: "application/vnd.github.v3.diff",
+                },
+              });
+              fs.writeFileSync(
+                process.env.CODEX_PR_DIFF,
+                typeof diff.data === "string" ? diff.data : JSON.stringify(diff.data, null, 2),
+                { mode: 0o600 },
+              );
+            }
+
+            const request = {
+              repository: `${owner}/${repo}`,
+              eventName,
+              requestKind,
+              actor,
+              actorPermission: permission,
+              issueNumber,
+              body,
+              pullRequest: pr ? {
+                number: pr.number,
+                title: pr.title,
+                htmlUrl: pr.html_url,
+                baseRef: pr.base.ref,
+                baseSha: pr.base.sha,
+                headRef: pr.head.ref,
+                headSha: pr.head.sha,
+                headRepo: pr.head.repo.full_name,
+                sameRepository: pr.head.repo.full_name === `${owner}/${repo}`,
+              } : null,
+            };
+
+            fs.writeFileSync(
+              process.env.CODEX_REQUEST_JSON,
+              `${JSON.stringify(request, null, 2)}\n`,
+              { mode: 0o600 },
+            );
+
+            core.setOutput("authorized", authorized ? "true" : "false");
+            core.setOutput("is_pr", pr ? "true" : "false");
+            core.setOutput("issue_number", issueNumber);
+            core.setOutput("pr_number", pr ? String(pr.number) : "");
+            core.setOutput("base_ref", pr ? pr.base.ref : "");
+            core.setOutput("same_repository", pr && pr.head.repo.full_name === `${owner}/${repo}` ? "true" : "false");
+
+      - name: Checkout repository
+        if: steps.context.outputs.authorized == 'true'
+        uses: actions/checkout@v4
+        with:
+          # This workflow runs with repository secrets on comment events. Never
+          # checkout PR head or merge refs here; PR contents are passed as data
+          # through CODEX_PR_DIFF instead.
+          ref: master
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Install Codex CLI
+        if: steps.context.outputs.authorized == 'true'
+        run: npm install -g "@openai/codex@${CODEX_VERSION}"
+
+      - name: Restore Codex ChatGPT auth
+        if: steps.context.outputs.authorized == 'true'
+        env:
+          CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
+        run: |
+          set -euo pipefail
+          if [ -z "${CODEX_AUTH_JSON:-}" ]; then
+            echo "::error::CODEX_AUTH_JSON secret is not set. Run 'codex login' locally with cli_auth_credentials_store = \"file\", then add ~/.codex/auth.json as the CODEX_AUTH_JSON repository secret."
+            exit 1
+          fi
+
+          mkdir -p "$CODEX_HOME"
+          chmod 700 "$CODEX_HOME"
+          printf '%s' "$CODEX_AUTH_JSON" > "$CODEX_HOME/auth.json"
+          chmod 600 "$CODEX_HOME/auth.json"
+
+          if ! jq empty "$CODEX_HOME/auth.json" >/dev/null 2>&1; then
+            echo "::error::CODEX_AUTH_JSON is not valid JSON. Re-copy the full contents of ~/.codex/auth.json into the secret."
+            exit 1
+          fi
+
+          cat > "$CODEX_HOME/config.toml" <<'EOF'
+          cli_auth_credentials_store = "file"
+          approval_policy = "never"
+          sandbox_mode = "workspace-write"
+
+          [sandbox_workspace_write]
+          network_access = false
+
+          [shell_environment_policy]
+          inherit = "core"
+          ignore_default_excludes = false
+          exclude = [
+            "CODEX_AUTH_JSON",
+            "CODEX_HOME",
+            "GITHUB_TOKEN",
+            "GH_TOKEN",
+            "OPENAI_API_KEY",
+            "*TOKEN*",
+            "*SECRET*",
+            "*KEY*",
+          ]
+          EOF
+
+      - name: Build Codex prompt
+        if: steps.context.outputs.authorized == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p .codex/tmp
+          {
+            cat .github/codex/prompts/comment-response.md
+            printf '\n## GitHub Request Context\n\n'
+            jq . "$CODEX_REQUEST_JSON"
+            if [ -s "$CODEX_PR_FILES_JSON" ]; then
+              printf '\n## Pull Request Files\n\n```json\n'
+              jq . "$CODEX_PR_FILES_JSON"
+              printf '\n```\n'
+            fi
+            if [ -s "$CODEX_PR_DIFF" ]; then
+              printf '\n## Pull Request Diff\n\n```diff\n'
+              cat "$CODEX_PR_DIFF"
+              printf '\n```\n'
+            fi
+          } > .codex/tmp/codex-prompt.md
+
+      - id: run_codex
+        name: Run Codex
+        if: steps.context.outputs.authorized == 'true'
+        continue-on-error: true
+        run: |
+          set -euo pipefail
+          codex exec \
+            --skip-git-repo-check \
+            --cd "$GITHUB_WORKSPACE" \
+            --output-last-message .codex/tmp/codex-final.md \
+            --ephemeral \
+            --sandbox workspace-write \
+            < .codex/tmp/codex-prompt.md
+
+      - id: diff
+        name: Capture Codex patch
+        if: always() && steps.context.outputs.authorized == 'true'
+        run: |
+          set -euo pipefail
+          mkdir -p .codex/tmp
+          if git diff --quiet; then
+            echo "has_patch=false" >> "$GITHUB_OUTPUT"
+          else
+            git diff --binary > .codex/tmp/codex.patch
+            echo "has_patch=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Upload Codex patch
+        if: always() && steps.diff.outputs.has_patch == 'true'
+        uses: actions/upload-artifact@v4
+        with:
+          name: codex-patch-${{ github.run_id }}
+          path: .codex/tmp/codex.patch
+          retention-days: 7
+
+      - name: Post Codex response
+        if: always() && steps.context.outputs.authorized == 'true' && steps.context.outputs.issue_number != ''
+        uses: actions/github-script@v7
+        env:
+          CODEX_FINAL_MESSAGE: .codex/tmp/codex-final.md
+          CODEX_RUN_OUTCOME: ${{ steps.run_codex.outcome }}
+          CODEX_HAS_PATCH: ${{ steps.diff.outputs.has_patch }}
+          CODEX_ARTIFACT_NAME: codex-patch-${{ github.run_id }}
+          ISSUE_NUMBER: ${{ steps.context.outputs.issue_number }}
+        with:
+          script: |
+            const fs = require("fs");
+
+            let body = "";
+            if (fs.existsSync(process.env.CODEX_FINAL_MESSAGE)) {
+              body = fs.readFileSync(process.env.CODEX_FINAL_MESSAGE, "utf8").trim();
+            }
+
+            if (!body) {
+              body = process.env.CODEX_RUN_OUTCOME === "success"
+                ? "Codex finished but did not produce a final message."
+                : "Codex could not complete this request. Check the workflow logs for details.";
+            } else if (process.env.CODEX_RUN_OUTCOME !== "success") {
+              body = `Codex could not complete this request. Partial output:\n\n${body}`;
+            }
+
+            if (process.env.CODEX_HAS_PATCH === "true") {
+              body += `\n\n---\nCodex produced local file changes. Download the \`${process.env.CODEX_ARTIFACT_NAME}\` workflow artifact to inspect the patch.`;
+            }
+
+            if (body.length > 64000) {
+              body = `${body.slice(0, 63500)}\n\n...[truncated; see workflow logs for full output]`;
+            }
+
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(process.env.ISSUE_NUMBER),
+              body,
+            });
+
+      - name: Fail if Codex failed
+        if: steps.context.outputs.authorized == 'true' && steps.run_codex.outcome == 'failure'
+        run: exit 1

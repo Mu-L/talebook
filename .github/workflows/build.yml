@@ -17,6 +17,9 @@ env:
   REGISTRY: docker.io
   IMAGE_NAME: ${{ github.repository }}
 
+permissions:
+  contents: read
+
 jobs:
   # ----------------------------------------
   # 计算构建矩阵与公共构建参数。

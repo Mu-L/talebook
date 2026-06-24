@@ -247,13 +247,56 @@ jobs:
         if: steps.context.outputs.authorized == 'true'
         run: npm install -g "@openai/codex@${CODEX_VERSION}"
 
-      - name: Install bubblewrap (sandbox dependency)
+      - name: Setup bubblewrap and AppArmor for sandbox
         if: steps.context.outputs.authorized == 'true'
         run: |
+          set -euo pipefail
+          
+          echo "::group::Installing bubblewrap and dependencies"
           sudo apt-get update
-          sudo apt-get install -y bubblewrap
-          echo "bubblewrap installed successfully:"
-          bwrap --version
+          sudo apt-get install -y bubblewrap uidmap apparmor-profiles apparmor-utils
+          echo "::endgroup::"
+          
+          echo "::group::Configuring AppArmor for bubblewrap"
+          # Install and load the bwrap AppArmor profile
+          PROFILE_SRC="/usr/share/apparmor/extra-profiles/bwrap-userns-restrict"
+          PROFILE_DST="/etc/apparmor.d/bwrap-userns-restrict"
+          
+          if [ -f "$PROFILE_SRC" ]; then
+            sudo install -m 0644 "$PROFILE_SRC" "$PROFILE_DST"
+            sudo apparmor_parser -r "$PROFILE_DST"
+            echo "✅ AppArmor profile loaded successfully"
+          else
+            echo "⚠️  AppArmor profile not found at $PROFILE_SRC, continuing..."
+          fi
+          
+          # Enable userns restrictions with bwrap exception
+          sudo tee /etc/sysctl.d/99-codex-apparmor-hardening.conf >/dev/null <<'EOF'
+          kernel.apparmor_restrict_unprivileged_userns=1
+          kernel.apparmor_restrict_unprivileged_unconfined=1
+          EOF
+          
+          sudo sysctl --system >/dev/null
+          echo "::endgroup::"
+          
+          echo "::group::Verifying installation"
+          # Verify bubblewrap is installed
+          bwrap --version || echo "⚠️  bwrap version check failed"
+          
+          # Test bubblewrap sandbox creation
+          if bwrap --ro-bind / / /bin/true 2>/dev/null; then
+            echo "✅ bubblewrap sandbox test passed"
+          else
+            echo "⚠️  bubblewrap sandbox test failed, but continuing..."
+          fi
+          
+          # Check AppArmor status
+          if sudo aa-status | grep -qE '(^|[[:space:]])bwrap($|[[:space:]])'; then
+            echo "✅ AppArmor profile is active for bwrap"
+          else
+            echo "ℹ️  AppArmor profile not active, Codex may use fallback mode"
+          fi
+          echo "::endgroup::"
 
       - name: Restore Codex ChatGPT auth
         if: steps.context.outputs.authorized == 'true'

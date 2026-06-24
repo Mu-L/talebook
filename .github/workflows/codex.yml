@@ -74,12 +74,15 @@ jobs:
             let issueNumber = "";
             let pr = null;
             let requestKind = eventName;
+            let triggerIssueCommentId = "";
+            let triggerReviewCommentId = "";
 
             if (eventName === "issue_comment") {
               body = payload.comment.body || "";
               actor = payload.comment.user.login;
               issueNumber = String(payload.issue.number);
               requestKind = payload.issue.pull_request ? "pull_request_comment" : "issue_comment";
+              triggerIssueCommentId = String(payload.comment.id);
 
               if (payload.issue.pull_request) {
                 const result = await github.rest.pulls.get({
@@ -92,6 +95,7 @@ jobs:
             } else if (eventName === "pull_request_review_comment") {
               body = payload.comment.body || "";
               actor = payload.comment.user.login;
+              triggerReviewCommentId = String(payload.comment.id);
               const result = await github.rest.pulls.get({
                 owner,
                 repo,
@@ -129,6 +133,34 @@ jobs:
 
             if (!authorized) {
               core.warning(`Skipping Codex request from ${actor}; repository permission is ${permission}.`);
+            }
+
+            if (authorized) {
+              try {
+                if (triggerIssueCommentId) {
+                  await github.rest.reactions.createForIssueComment({
+                    owner,
+                    repo,
+                    comment_id: Number(triggerIssueCommentId),
+                    content: "rocket",
+                  });
+                } else if (triggerReviewCommentId) {
+                  await github.rest.reactions.createForPullRequestReviewComment({
+                    owner,
+                    repo,
+                    comment_id: Number(triggerReviewCommentId),
+                    content: "rocket",
+                  });
+                } else {
+                  core.info("No trigger comment ID is available for an acknowledgement reaction.");
+                }
+              } catch (error) {
+                if (error.status === 422) {
+                  core.info("Acknowledgement reaction already exists or cannot be added to this comment.");
+                } else {
+                  core.warning(`Could not add acknowledgement reaction: ${error.message}`);
+                }
+              }
             }
 
             if (authorized && pr) {

@@ -247,6 +247,14 @@ jobs:
         if: steps.context.outputs.authorized == 'true'
         run: npm install -g "@openai/codex@${CODEX_VERSION}"
 
+      - name: Install bubblewrap (sandbox dependency)
+        if: steps.context.outputs.authorized == 'true'
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y bubblewrap
+          echo "bubblewrap installed successfully:"
+          bwrap --version
+
       - name: Restore Codex ChatGPT auth
         if: steps.context.outputs.authorized == 'true'
         env:

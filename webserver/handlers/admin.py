@@ -183,7 +183,9 @@ class AdminUsers(BaseHandler):
             if self.user_id() == user.id:
                 return {"err": "params.user.invalid", "msg": _("不允许删除自己")}
 
-            self.session.query(Reader).filter(Reader.id == user.id).delete()
+            for sa in user.social_auth.all():
+                self.session.delete(sa)
+            self.session.delete(user)
             self.session.commit()
             return {"err": "ok", "msg": _("删除成功")}
 

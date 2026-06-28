@@ -378,7 +378,8 @@ class TestAdminUsersBatch(TestWithAdminUser):
         ids = self._get_user_ids()
         self.assertTrue(len(ids) >= 2, "测试数据库中需要至少 2 个非管理员用户")
 
-        req = json.dumps({"ids": ids, "permission": "lrsp"})
+        # lrsp 启用登录/阅读/收藏/推送，UED 显式禁用上传/编辑/删除
+        req = json.dumps({"ids": ids, "permission": "lrspUED"})
         d = self.json("/api/admin/users/batch", method="POST", body=req)
         self.assertEqual(d["err"], "ok")
         self.assertEqual(d["updated"], len(ids))
@@ -390,7 +391,7 @@ class TestAdminUsersBatch(TestWithAdminUser):
             self.assertTrue(user.can_read())
             self.assertTrue(user.can_save())
             self.assertTrue(user.can_push())
-            # 未包含在 "lrsp" 中的权限应被禁用
+            # 显式禁用的权限应为 False
             self.assertFalse(user.can_upload())
             self.assertFalse(user.can_edit())
             self.assertFalse(user.can_delete())

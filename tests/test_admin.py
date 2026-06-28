@@ -209,9 +209,7 @@ class TestAdminMigrateDB(TestWithAdminUser):
                         d = self.json("/api/admin/migratedb", method="POST", body=body)
                 self.assertEqual(d["err"], "ok")
                 self.assertTrue(d.get("need_restart"))
-                self.assertEqual(
-                    main.CONF["user_database"], "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4"
-                )
+                self.assertEqual(main.CONF["user_database"], "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4")
         finally:
             # restore original db url in CONF
             main.CONF["user_database"] = original_db_url
@@ -358,3 +356,79 @@ class TestAdminSystemLog(TestWithAdminUser):
         finally:
             user.admin = original_admin
             session.commit()
+
+
+class TestAdminOPDSBrowse(TestWithAdminUser):
+    """AdminOPDSBrowse 接口测试"""
+
+    @mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog")
+    def test_browse_with_full_url(self, mock_fetch):
+        """支持完整 url 字段直接浏览"""
+        mock_fetch.return_value = b"""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test</title>
+</feed>"""
+        body = json.dumps({"url": "http://example.com:8080/opds"})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "ok")
+        self.assertIn("items", d)
+        mock_fetch.assert_called_once()
+        args = mock_fetch.call_args[0]
+        self.assertEqual(args[0], "http://example.com:8080/opds")
+
+    @mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog")
+    def test_browse_with_host_port_path(self, mock_fetch):
+        """向后兼容：支持 host/port/path 三字段形式"""
+        mock_fetch.return_value = b"""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test</title>
+</feed>"""
+        body = json.dumps({"host": "http://example.com", "port": "8080", "path": "/opds"})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "ok")
+        mock_fetch.assert_called_once()
+        args = mock_fetch.call_args[0]
+        # 确认端口不重复拼接：结果应是 http://example.com:8080/opds
+        self.assertIn("8080", args[0])
+        self.assertNotIn("8080:8080", args[0])
+
+    @mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog")
+    def test_browse_host_with_port_not_duplicated(self, mock_fetch):
+        """host 已含端口时，传入 port 字段不应重复拼接"""
+        mock_fetch.return_value = b"""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test</title>
+</feed>"""
+        # host 已含 :8080，再传 port=8080 不应变成 :8080:8080
+        body = json.dumps({"host": "http://example.com:8080", "port": "8080", "path": "/opds"})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "ok")
+        args = mock_fetch.call_args[0]
+        self.assertNotIn("8080:8080", args[0])
+
+    def test_browse_missing_params(self):
+        """url 和 host 均为空时返回参数错误"""
+        body = json.dumps({})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "params.error")
+
+    def test_browse_fetch_failure(self):
+        """OPDS 目录获取失败时返回 error"""
+        with mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog", return_value=None):
+            body = json.dumps({"url": "http://nonexistent.example.com/opds"})
+            d = self.json("/api/admin/opds/browse", method="POST", body=body)
+            self.assertEqual(d["err"], "error")
+
+
+class TestAdminOPDSImportStatus(TestWithAdminUser):
+    """AdminOPDSImportStatus 接口测试"""
+
+    def test_status_returns_counters(self):
+        """状态接口返回计数器字段"""
+        d = self.json("/api/admin/opds/import/status")
+        self.assertEqual(d["err"], "ok")
+        self.assertIn("status", d)
+        self.assertIn("total", d["status"])
+        self.assertIn("done", d["status"])
+        self.assertIn("skip", d["status"])
+        self.assertIn("fail", d["status"])

@@ -8,12 +8,9 @@
                 {{ t('user.readingRecord.currentlyReading') }} [{{ readingCount }}]
             </v-tab>
             <v-tab :value="1">
-                {{ t('user.readingRecord.wantToRead') }} [{{ wantsCount }}]
-            </v-tab>
-            <v-tab :value="2">
                 {{ t('user.readingRecord.finishedReading') }} [{{ finishedCount }}]
             </v-tab>
-            <v-tab :value="3">
+            <v-tab :value="2">
                 {{ t('user.readingRecord.readingRecord') }}
             </v-tab>
         </v-tabs>
@@ -44,30 +41,6 @@
             </v-tabs-window-item>
 
             <v-tabs-window-item :value="1">
-                <div v-if="wantsBooks.length === 0" class="text-center py-8 text-grey">
-                    {{ t('user.readingRecord.noWantToRead') }}
-                </div>
-                <v-row v-else>
-                    <v-col
-                        v-for="book in wantsBooks"
-                        :key="'wants-' + book.id"
-                        cols="4"
-                        sm="2"
-                    >
-                        <v-card
-                            :to="'/book/' + book.id"
-                            class="ma-1"
-                        >
-                            <v-img
-                                :src="book.img"
-                                :aspect-ratio="11 / 15"
-                            />
-                        </v-card>
-                    </v-col>
-                </v-row>
-            </v-tabs-window-item>
-
-            <v-tabs-window-item :value="2">
                 <div v-if="finishedBooks.length === 0" class="text-center py-8 text-grey">
                     {{ t('user.readingRecord.noFinishedReading') }}
                 </div>
@@ -91,7 +64,7 @@
                 </v-row>
             </v-tabs-window-item>
 
-            <v-tabs-window-item :value="3">
+            <v-tabs-window-item :value="2">
                 <div v-if="history.length === 0" class="text-center py-8 text-grey">
                     {{ t('user.history.noHistory') }}
                 </div>
@@ -147,11 +120,9 @@ const { t } = useI18n();
 const activeTab = ref(0);
 const user = ref({});
 const readingBooks = ref([]);
-const wantsBooks = ref([]);
 const finishedBooks = ref([]);
 
 const readingCount = computed(() => readingBooks.value.length);
-const wantsCount = computed(() => wantsBooks.value.length);
 const finishedCount = computed(() => finishedBooks.value.length);
 
 useHead({
@@ -186,17 +157,6 @@ const loadReadingBooks = async () => {
     }
 };
 
-const loadWantsBooks = async () => {
-    try {
-        const rsp = await $backend('/wants');
-        if (rsp.err === 'ok') {
-            wantsBooks.value = rsp.books || [];
-        }
-    } catch (e) {
-        console.error('Failed to load wants books:', e);
-    }
-};
-
 const loadFinishedBooks = async () => {
     try {
         const rsp = await $backend('/read-done');
@@ -211,7 +171,6 @@ const loadFinishedBooks = async () => {
 onMounted(() => {
     mainStore.setNavbar(true);
     loadReadingBooks();
-    loadWantsBooks();
     loadFinishedBooks();
     $backend('/user/info?detail=1')
         .then(rsp => {

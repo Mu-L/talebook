@@ -493,9 +493,12 @@
                             variant="elevated"
                             class="mx-2"
                             :loading="readingStateLoading"
-                            @click="handleReadingStateChange"
+                            @click="toggleWants"
                         >
-                            {{ readingStateButtonText }}
+                            <v-icon start>
+                                mdi-bookshelf
+                            </v-icon>
+                            {{ isWants ? t('book.removeFromWantToRead') : t('book.wantToRead') }}
                         </v-btn>
 
                         <v-btn
@@ -671,23 +674,6 @@
                                 <div v-if="book.id > 0 && store.user.is_login">
                                     <p class="text-h5 mb-2">
                                         {{ book.title }}
-                                        <v-tooltip bottom>
-                                            <template #activator="{ props }">
-                                                <v-btn
-                                                    v-bind="props"
-                                                    icon
-                                                    size="x-small"
-                                                    class="ml-2"
-                                                    :color="isWants ? 'orange' : 'grey'"
-                                                    @click="toggleWants"
-                                                >
-                                                    <v-icon>
-                                                        {{ isWants ? 'mdi-bookmark-plus' : 'mdi-bookmark-plus-outline' }}
-                                                    </v-icon>
-                                                </v-btn>
-                                            </template>
-                                            <span>{{ t('readingState.wantsHint') }}</span>
-                                        </v-tooltip>
                                     </p>
                                 </div>
                                 <div v-else>
@@ -989,12 +975,12 @@
                         <div class="d-flex flex-wrap align-center ga-2">
                             <v-btn
                                 variant="tonal"
-                                :color="isWants ? 'orange' : 'grey'"
+                                :color="isWants ? 'orange' : 'primary'"
                                 size="small"
                                 @click="toggleWants"
                             >
                                 <v-icon start>
-                                    {{ isWants ? 'mdi-bookmark' : 'mdi-bookmark-outline' }}
+                                    {{ isWants ? 'mdi-bookshelf' : 'mdi-bookshelf' }}
                                 </v-icon>
                                 {{ isWants ? t('book.removeFromWantToRead') : t('book.wantToRead') }}
                             </v-btn>
@@ -1671,7 +1657,7 @@ const loadReadingState = async () => {
 const toggleWants = async () => {
     readingStateLoading.value = true;
     try {
-        const rsp = await $backend(`/book/${book.value.id}/wants`, {
+        const rsp = await $backend(`/book/${book.value.id}/case`, {
             method: 'POST',
             body: JSON.stringify({ wants: !isWants.value }),
         });

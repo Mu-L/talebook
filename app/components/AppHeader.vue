@@ -474,6 +474,9 @@ const items = computed(() => {
         { icon: 'mdi-book', href: '/library', text: $t('navigation.localLibrary') },
         { icon: 'mdi-cloud-search', href: '/network', text: $t('navigation.networkLibrary') },
     ];
+    var shelf_links = store.user.is_login
+        ? [{ icon: 'mdi-bookshelf', href: '/user/shelf', text: $t('navigation.myShelf') }]
+        : [];
     var admin_links = [
         {
             icon: 'mdi-cog',
@@ -520,6 +523,7 @@ const items = computed(() => {
 
     return home_links
         .concat(library_links)
+        .concat(shelf_links)
         .concat(store.user.is_admin ? admin_links : [])
         .concat(nav_links)
         .concat(store.sys.friends.length > 0 ? friend_links : [])

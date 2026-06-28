@@ -141,8 +141,8 @@
     "deleteSuccess": "删除成功",
     "deleteFailed": "删除失败",
     "confirmDelete": "确定要删除这本书吗？",
-    "wantToRead": "待读",
-    "removeFromWantToRead": "取消待读",
+    "wantToRead": "加入书架",
+    "removeFromWantToRead": "移除书架",
     "setAsReading": "设为在读",
     "markAsFinished": "标记读完",
     "currentlyReading": "在读",
@@ -157,7 +157,7 @@
     "setReading": "设为在读",
     "setDone": "标记读完",
     "favoriteHint": "点击收藏或取消收藏",
-    "wantsHint": "点击添加到待读清单或从待读清单移除",
+    "wantsHint": "点击加入或移除书架",
     "readingDays": "已阅读 {days} 天",
     "readingWithinOneDay": "已阅读不足一天",
     "completedReading": "本书已在 {date} 读完"
@@ -202,7 +202,8 @@
     "localLibrary": "本地书库",
     "networkLibrary": "网络书库",
     "bookSources": "书源管理",
-    "systemLogs": "系统日志"
+    "systemLogs": "系统日志",
+    "myShelf": "我的书架"
   },
   "network": {
     "title": "网络书库",
@@ -320,6 +321,10 @@
     "emptyInvalid": "暂无已失效书源",
     "jsSkipped": "该书源依赖 JS，无法解析"
   },
+  "shelf": {
+    "pageTitle": "我的书架",
+    "empty": "书架上还没有书，快去加入吧！"
+  },
   "user": {
     "history": {
       "pageTitle": "阅读记录",
@@ -370,11 +375,9 @@
     "readingRecord": {
       "pageTitle": "阅读记录",
       "currentlyReading": "在读",
-      "wantToRead": "待读",
       "finishedReading": "已读完",
       "readingRecord": "阅读记录",
       "noCurrentlyReading": "暂无在读的书籍",
-      "noWantToRead": "暂无待读的书籍",
       "noFinishedReading": "暂无已读完的书籍"
     }
   },

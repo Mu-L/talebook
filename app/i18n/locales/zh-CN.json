@@ -871,6 +871,7 @@
         "batchPermissionTitle": "批量设置用户权限",
         "batchPermissionSubtitle": "将对选中的 {count} 个用户应用以下权限设置",
         "batchPermissionSuccess": "已成功更新 {count} 个用户的权限",
+        "batchPermissionAllDisabledWarning": "当前权限配置将禁用所有权限，这会导致选中用户无法登录和使用任何功能。确定要继续吗？",
         "selectedUsers": "已选择 {count} 个用户"
       },
       "user": {

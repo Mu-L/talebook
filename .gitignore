@@ -52,6 +52,8 @@ coverage.xml
 *.log
 webserver/settings_manual.py
 webserver/settings_auto.py
+webserver/auto.py
+webserver/manual.py
 
 # Flask stuff:
 instance/

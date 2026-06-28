@@ -738,7 +738,12 @@ const saveGuestPermissions = () => {
 };
 
 const openDefaultPermissionDialog = () => {
-    showDefaultPermissionDialog.value = true;
+    $backend('/admin/settings').then(rsp => {
+        if (rsp.err === 'ok') {
+            defaultUserPermissions.value = permissionStringToObject(rsp.settings.DEFAULT_USER_PERMISSION || '');
+        }
+        showDefaultPermissionDialog.value = true;
+    });
 };
 
 const saveDefaultPermissions = () => {
@@ -757,6 +762,10 @@ const saveDefaultPermissions = () => {
 };
 
 const applyBatchPermissions = () => {
+    const allDisabled = Object.values(batchPermissions.value).every(v => !v);
+    if (allDisabled && !window.confirm(t('admin.users.message.batchPermissionAllDisabledWarning'))) {
+        return;
+    }
     batchLoading.value = true;
     const permStr = permissionsToString(batchPermissions.value);
     const ids = selectedUsers.value.map(u => (typeof u === 'object' ? u.id : u));
@@ -788,9 +797,7 @@ onMounted(() => {
                 ALLOW_GUEST_PUSH: rsp.settings.ALLOW_GUEST_PUSH,
                 ALLOW_GUEST_UPLOAD: rsp.settings.ALLOW_GUEST_UPLOAD,
             };
-            if (rsp.settings.DEFAULT_USER_PERMISSION) {
-                defaultUserPermissions.value = permissionStringToObject(rsp.settings.DEFAULT_USER_PERMISSION);
-            }
+            defaultUserPermissions.value = permissionStringToObject(rsp.settings.DEFAULT_USER_PERMISSION || '');
         }
     });
 

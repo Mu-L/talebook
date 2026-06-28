@@ -208,17 +208,16 @@ class AdminUsersBatch(BaseHandler):
 
         if not ids or not isinstance(ids, list):
             return {"err": "params.ids.required", "msg": _("用户ID列表不能为空")}
+        if len(ids) > 500:
+            return {"err": "params.ids.too_many", "msg": _("单次最多批量操作 500 个用户")}
         if not isinstance(permission, str) or not permission:
             return {"err": "params.permission.invalid", "msg": _("权限参数不对")}
 
-        updated = 0
-        for uid in ids:
-            user = self.session.query(Reader).filter(Reader.id == uid).first()
-            if not user:
-                continue
+        users = self.session.query(Reader).filter(Reader.id.in_(ids)).all()
+        for user in users:
             user.set_permission(permission)
             user.save()
-            updated += 1
+        updated = len(users)
 
         return {"err": "ok", "updated": updated, "msg": _("已更新 %d 个用户的权限") % updated}
 

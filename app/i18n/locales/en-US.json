@@ -848,6 +848,7 @@
         "batchPermissionTitle": "Batch Set User Permissions",
         "batchPermissionSubtitle": "The following permissions will be applied to {count} selected users",
         "batchPermissionSuccess": "Successfully updated permissions for {count} users",
+        "batchPermissionAllDisabledWarning": "The current permission configuration will disable all permissions, preventing selected users from logging in or using any features. Are you sure you want to continue?",
         "selectedUsers": "{count} users selected",
         "invalidEmail": "Invalid email format",
         "invalidNickname": "Nickname must be at least 2 characters",

@@ -902,20 +902,19 @@ class AdminOPDSBrowse(BaseHandler):
     def post(self):
         try:
             req = tornado.escape.json_decode(self.request.body)
+            # 优先接受完整 url 字段，兼容旧的 host/port/path 三字段形式
+            url = req.get("url", "")
             host = req.get("host", "")
             port = req.get("port", "")
             path = req.get("path", "")
 
-            if not host:
-                return {"err": "params.error", "msg": _("参数错误，主机地址不能为空")}
+            if not url and not host:
+                return {"err": "params.error", "msg": _("参数错误，必须提供 url 或 host")}
 
-            logging.info(f"OPDS浏览请求: host={host}, port={port}, path={path}")
+            logging.info(f"OPDS浏览请求: url={url}, host={host}, port={port}, path={path}")
 
-            # 创建OPDS导入服务实例
             opds_service = OPDSImportService()
-
-            # 浏览目录
-            result = opds_service.browse_opds_catalog(host, port, path)
+            result = opds_service.browse_opds_catalog(url=url, host=host, port=port, path=path)
 
             if result.get("success"):
                 return {
@@ -941,7 +940,7 @@ class AdminOPDSImportStatus(BaseHandler):
         # 返回全局导入状态（单例模式）
         from webserver.services.opds_import import OPDSImportService
 
-        opds_service = OPDSImportService.get_instance()
+        opds_service = OPDSImportService()
         status = {
             "total": opds_service.count_total,
             "done": opds_service.count_done,
@@ -1039,7 +1038,7 @@ class AdminOPDSImportRetry(BaseHandler):
             def retry_task():
                 from webserver.services.opds_import import OPDSImportService
 
-                opds_service = OPDSImportService.get_instance()
+                opds_service = OPDSImportService()
                 book_data = {
                     "title": sf.title,
                     "author": sf.author,
@@ -1113,7 +1112,7 @@ class AdminOPDSImport(BaseHandler):
             def import_task():
                 from webserver.services.opds_import import OPDSImportService
 
-                opds_service = OPDSImportService.get_instance()
+                opds_service = OPDSImportService()
                 opds_service.reset_counters()
                 if books:
                     opds_service.import_selected_books(opds_url, self.user_id(), delete_after, books)

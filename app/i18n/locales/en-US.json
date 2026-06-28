@@ -783,7 +783,10 @@
       "title": "User Management",
       "button": {
         "addUser": "Add User",
-        "guestPermission": "Guest Permission"
+        "guestPermission": "Guest Permission",
+        "defaultPermission": "New User Default Permissions",
+        "batchPermission": "Batch Set Permissions",
+        "cancelSelection": "Cancel Selection"
       },
       "label": {
         "username": "Username",
@@ -804,6 +807,8 @@
         "allowGuestDownload": "Allow guest download",
         "allowGuestPush": "Allow guest push",
         "allowGuestUpload": "Allow guest upload",
+        "defaultUserPermission": "New User Default Permissions",
+        "defaultUserPermissionHint": "Newly registered or admin-created users will automatically have these permissions applied (leave empty to grant all permissions by default)",
         "registrationPlatform": "Registration Platform",
         "registrationTime": "Registration Time",
         "loginTime": "Login Time",
@@ -839,6 +844,11 @@
       },
       "message": {
         "guestPermissionSaved": "Guest permissions saved successfully!",
+        "defaultPermissionSaved": "New user default permissions saved successfully!",
+        "batchPermissionTitle": "Batch Set User Permissions",
+        "batchPermissionSubtitle": "The following permissions will be applied to {count} selected users",
+        "batchPermissionSuccess": "Successfully updated permissions for {count} users",
+        "selectedUsers": "{count} users selected",
         "invalidEmail": "Invalid email format",
         "invalidNickname": "Nickname must be at least 2 characters",
         "invalidPassword": "Password must be between 8-20 characters",

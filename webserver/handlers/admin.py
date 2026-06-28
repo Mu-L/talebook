@@ -144,9 +144,13 @@ class AdminUsers(BaseHandler):
             user.extra = {"kindle_email": ""}
             user.set_secure_password(password)
 
-            # 设置权限
+            # 设置权限：若未显式指定，则应用系统默认权限
             p = data.get("permission", "")
-            if isinstance(p, str) and p:
+            if not isinstance(p, str):
+                p = ""
+            if not p:
+                p = CONF.get("DEFAULT_USER_PERMISSION", "")
+            if p:
                 user.set_permission(p)
 
             try:
@@ -190,6 +194,33 @@ class AdminUsers(BaseHandler):
             user.set_permission(p)
         user.save()
         return {"err": "ok"}
+
+
+class AdminUsersBatch(BaseHandler):
+    @js
+    @auth
+    def post(self):
+        if not self.admin_user:
+            return {"err": "permission.not_admin", "msg": _("当前用户非管理员")}
+        data = tornado.escape.json_decode(self.request.body)
+        ids = data.get("ids", [])
+        permission = data.get("permission", "")
+
+        if not ids or not isinstance(ids, list):
+            return {"err": "params.ids.required", "msg": _("用户ID列表不能为空")}
+        if not isinstance(permission, str) or not permission:
+            return {"err": "params.permission.invalid", "msg": _("权限参数不对")}
+
+        updated = 0
+        for uid in ids:
+            user = self.session.query(Reader).filter(Reader.id == uid).first()
+            if not user:
+                continue
+            user.set_permission(permission)
+            user.save()
+            updated += 1
+
+        return {"err": "ok", "updated": updated, "msg": _("已更新 %d 个用户的权限") % updated}
 
 
 class AdminTestMail(BaseHandler):
@@ -331,6 +362,7 @@ class AdminSettings(BaseHandler):
             "ALLOW_GUEST_READ",
             "ALLOW_GUEST_UPLOAD",
             "ALLOW_REGISTER",
+            "DEFAULT_USER_PERMISSION",
             "ALLOW_FEEDBACK",
             "FEEDBACK_URL",
             "BOOK_NAMES_FORMAT",
@@ -1310,6 +1342,7 @@ def routes():
     return [
         (r"/api/admin/ssl", AdminSSL),
         (r"/api/admin/users", AdminUsers),
+        (r"/api/admin/users/batch", AdminUsersBatch),
         (r"/api/admin/install", AdminInstall),
         (r"/api/admin/settings", AdminSettings),
         (r"/api/admin/testmail", AdminTestMail),

@@ -813,7 +813,10 @@
       "title": "用户管理",
       "button": {
         "addUser": "添加用户",
-        "guestPermission": "访客权限"
+        "guestPermission": "访客权限",
+        "defaultPermission": "新用户默认权限",
+        "batchPermission": "批量设置权限",
+        "cancelSelection": "取消选择"
       },
       "label": {
         "username": "用户名",
@@ -834,6 +837,8 @@
         "allowGuestDownload": "允许任意下载（访客无需注册和登录）",
         "allowGuestPush": "允许任意推送Kindle（访客无需注册和登录）",
         "allowGuestUpload": "允许访客上传书籍（无需注册和登录）",
+        "defaultUserPermission": "新用户默认权限",
+        "defaultUserPermissionHint": "新注册或管理员创建的用户将自动应用此权限配置（留空则默认开放全部权限）",
         "registrationPlatform": "注册平台",
         "registrationTime": "注册时间",
         "loginTime": "登录时间",
@@ -861,7 +866,12 @@
         "invalidUsername": "用户名必须以小写字母开头，只能包含字母、数字和下划线，长度在5-20个字符之间",
         "invalidPassword": "密码长度必须在8-20个字符之间",
         "invalidNickname": "昵称长度至少为2个字符",
-        "guestPermissionSaved": "访客权限设置保存成功！"
+        "guestPermissionSaved": "访客权限设置保存成功！",
+        "defaultPermissionSaved": "新用户默认权限设置保存成功！",
+        "batchPermissionTitle": "批量设置用户权限",
+        "batchPermissionSubtitle": "将对选中的 {count} 个用户应用以下权限设置",
+        "batchPermissionSuccess": "已成功更新 {count} 个用户的权限",
+        "selectedUsers": "已选择 {count} 个用户"
       },
       "user": {
         "disabled": "已禁止",

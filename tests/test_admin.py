@@ -550,6 +550,13 @@ class TestAdminUsersBatch(TestWithAdminUser):
 class TestAdminDefaultUserPermission(TestWithAdminUser):
     """新用户默认权限配置测试"""
 
+    def _delete_user(self, username):
+        from webserver import models
+
+        session = get_db()
+        session.query(models.Reader).filter(models.Reader.username == username).delete(synchronize_session=False)
+        session.commit()
+
     def test_default_permission_saved_and_returned(self):
         """保存默认权限后，GET settings 应能取回"""
         from webserver import main
@@ -569,11 +576,13 @@ class TestAdminDefaultUserPermission(TestWithAdminUser):
         from webserver import main, models
 
         original = main.CONF.get("DEFAULT_USER_PERMISSION", "")
+        username = "testdefperm"
         try:
+            self._delete_user(username)
             main.CONF["DEFAULT_USER_PERMISSION"] = "lrspUED"
             req = json.dumps(
                 {
-                    "username": "testdefperm",
+                    "username": username,
                     "password": "Passw0rd!",
                     "name": "Test Default",
                     "email": "testdefperm@example.com",
@@ -592,11 +601,8 @@ class TestAdminDefaultUserPermission(TestWithAdminUser):
             self.assertFalse(user.can_upload())
             self.assertFalse(user.can_edit())
             self.assertFalse(user.can_delete())
-
-            # 清理
-            session.delete(user)
-            session.commit()
         finally:
+            self._delete_user(username)
             main.CONF["DEFAULT_USER_PERMISSION"] = original
 
     @mock.patch("webserver.services.mail.MailService.send_mail")
@@ -605,14 +611,16 @@ class TestAdminDefaultUserPermission(TestWithAdminUser):
         from webserver import main, models
 
         original = main.CONF.get("DEFAULT_USER_PERMISSION", "")
+        username = "signuptest"
         try:
+            self._delete_user(username)
             main.CONF["DEFAULT_USER_PERMISSION"] = "lrspUED"
-            body = "email=signuptest@example.com&nickname=signuptest&username=signuptest&password=Passw0rd!"
+            body = "email=signuptest@example.com&nickname=signuptest&username=%s&password=Passw0rd!" % username
             d = self.json("/api/user/sign_up", method="POST", body=body)
             self.assertEqual(d["err"], "ok")
 
             session = get_db()
-            user = session.query(models.Reader).filter(models.Reader.username == "signuptest").first()
+            user = session.query(models.Reader).filter(models.Reader.username == username).first()
             self.assertIsNotNone(user)
             self.assertTrue(user.can_login())
             self.assertTrue(user.can_read())
@@ -621,9 +629,82 @@ class TestAdminDefaultUserPermission(TestWithAdminUser):
             self.assertFalse(user.can_upload())
             self.assertFalse(user.can_edit())
             self.assertFalse(user.can_delete())
-
-            # 清理
-            session.delete(user)
-            session.commit()
         finally:
+            self._delete_user(username)
             main.CONF["DEFAULT_USER_PERMISSION"] = original
+
+
+class TestAdminOPDSBrowse(TestWithAdminUser):
+    """AdminOPDSBrowse 接口测试"""
+
+    @mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog")
+    def test_browse_with_full_url(self, mock_fetch):
+        """支持完整 url 字段直接浏览"""
+        mock_fetch.return_value = b"""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test</title>
+</feed>"""
+        body = json.dumps({"url": "http://example.com:8080/opds"})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "ok")
+        self.assertIn("items", d)
+        mock_fetch.assert_called_once()
+        args = mock_fetch.call_args[0]
+        self.assertEqual(args[0], "http://example.com:8080/opds")
+
+    @mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog")
+    def test_browse_with_host_port_path(self, mock_fetch):
+        """向后兼容：支持 host/port/path 三字段形式"""
+        mock_fetch.return_value = b"""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test</title>
+</feed>"""
+        body = json.dumps({"host": "http://example.com", "port": "8080", "path": "/opds"})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "ok")
+        mock_fetch.assert_called_once()
+        args = mock_fetch.call_args[0]
+        # 确认端口不重复拼接：结果应是 http://example.com:8080/opds
+        self.assertIn("8080", args[0])
+        self.assertNotIn("8080:8080", args[0])
+
+    @mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog")
+    def test_browse_host_with_port_not_duplicated(self, mock_fetch):
+        """host 已含端口时，传入 port 字段不应重复拼接"""
+        mock_fetch.return_value = b"""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test</title>
+</feed>"""
+        # host 已含 :8080，再传 port=8080 不应变成 :8080:8080
+        body = json.dumps({"host": "http://example.com:8080", "port": "8080", "path": "/opds"})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "ok")
+        args = mock_fetch.call_args[0]
+        self.assertNotIn("8080:8080", args[0])
+
+    def test_browse_missing_params(self):
+        """url 和 host 均为空时返回参数错误"""
+        body = json.dumps({})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "params.error")
+
+    def test_browse_fetch_failure(self):
+        """OPDS 目录获取失败时返回 error"""
+        with mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog", return_value=None):
+            body = json.dumps({"url": "http://nonexistent.example.com/opds"})
+            d = self.json("/api/admin/opds/browse", method="POST", body=body)
+            self.assertEqual(d["err"], "error")
+
+
+class TestAdminOPDSImportStatus(TestWithAdminUser):
+    """AdminOPDSImportStatus 接口测试"""
+
+    def test_status_returns_counters(self):
+        """状态接口返回计数器字段"""
+        d = self.json("/api/admin/opds/import/status")
+        self.assertEqual(d["err"], "ok")
+        self.assertIn("status", d)
+        self.assertIn("total", d["status"])
+        self.assertIn("done", d["status"])
+        self.assertIn("skip", d["status"])
+        self.assertIn("fail", d["status"])

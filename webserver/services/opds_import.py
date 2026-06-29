@@ -26,17 +26,6 @@ CONF = loader.get_settings()
 
 
 class OPDSImportService(AsyncService):
-    _instance = None
-    _instance_lock = threading.Lock()
-
-    @classmethod
-    def get_instance(cls):
-        """获取单例实例"""
-        with cls._instance_lock:
-            if cls._instance is None:
-                cls._instance = cls()
-            return cls._instance
-
     def __init__(self):
         super().__init__()
         self.count_total = 0
@@ -59,36 +48,44 @@ class OPDSImportService(AsyncService):
         finally:
             session.close()
 
-    def browse_opds_catalog(self, host, port=None, path=""):
-        """浏览 OPDS 目录结构"""
-        try:
-            if not host.startswith(("http://", "https://")):
-                raise ValueError("Host 必须包含协议前缀 (http://或 https://)")
+    def browse_opds_catalog(self, url=None, host=None, port=None, path=""):
+        """浏览 OPDS 目录结构
 
-            base_url = host
-            if port:
-                try:
+        优先使用完整的 url 参数；若未提供则从 host/port/path 组合（向后兼容）。
+        """
+        try:
+            if url:
+                target_url = url
+            else:
+                if not host:
+                    raise ValueError("必须提供 url 或 host 参数")
+                if not host.startswith(("http://", "https://")):
+                    raise ValueError("Host 必须包含协议前缀 (http://或 https://)")
+
+                parsed = urllib.parse.urlparse(host)
+                if parsed.port:
+                    # host 已包含端口，忽略单独传入的 port
+                    base = host.rstrip("/")
+                elif port:
                     port_num = int(port)
                     if port_num < 1 or port_num > 65535:
                         raise ValueError("端口号必须在 1-65535 之间")
-                except ValueError:
-                    raise ValueError("端口号必须是有效的数字")
+                    base = f"{host.rstrip('/')}:{port_num}"
+                else:
+                    base = host.rstrip("/")
 
-                if base_url.endswith("/"):
-                    base_url = base_url[:-1]
-                base_url += f":{port}"
-            if path:
-                if not path.startswith("/"):
-                    base_url += "/"
-                base_url += path
+                if path:
+                    target_url = base + ("" if path.startswith("/") else "/") + path
+                else:
+                    target_url = base
 
-            logging.info(f"浏览 OPDS 目录：{base_url}")
+            logging.info(f"浏览 OPDS 目录：{target_url}")
 
-            catalog_data = self.fetch_opds_catalog(base_url)
+            catalog_data = self.fetch_opds_catalog(target_url)
             if not catalog_data:
                 return {"error": "无法获取 OPDS 目录内容"}
 
-            result = self.parse_opds_navigation(catalog_data, base_url)
+            result = self.parse_opds_navigation(catalog_data, target_url)
             return result
 
         except Exception as e:

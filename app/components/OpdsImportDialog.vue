@@ -4,7 +4,7 @@
         :model-value="dialogVisible"
         width="800"
         max-height="90vh"
-        @update:model-value="(value) => emit('update:dialogVisible', value)"
+        @update:model-value="onDialogUpdate"
     >
         <v-card>
             <v-card-title>
@@ -19,255 +19,248 @@
                 </v-chip>
             </v-card-title>
             <v-card-text style="padding: 16px;">
-                <!-- 连接信息填写界面 -->
-                <div v-if="opdsImportState === 'connecting'">
-                    <v-row>
-                        <v-col cols="8">
-                            <v-text-field
-                                v-model="opdsHost"
-                                label="主机地址"
-                                placeholder="例如: http://example.com"
+
+                <!-- OPDS 源列表界面 -->
+                <div v-if="opdsImportState === 'source_list'">
+                    <div class="d-flex align-center justify-space-between mb-4">
+                        <div class="text-h6">已保存的 OPDS 源</div>
+                        <v-btn
+                            size="small"
+                            color="primary"
+                            variant="outlined"
+                            @click="showAddOpdsSourceDialog"
+                        >
+                            <v-icon start>mdi-plus</v-icon>
+                            添加 OPDS 源
+                        </v-btn>
+                    </div>
+
+                    <div v-if="opdsSources.length > 0" class="border rounded-lg pa-2">
+                        <v-list class="bg-transparent">
+                            <v-list-item
+                                v-for="source in opdsSources"
+                                :key="source.id"
+                                class="mb-2 rounded-lg"
                                 variant="outlined"
-                                full-width
-                                @keyup.enter="connectToOpds"
-                                @blur="autoFillPortFromHost"
-                            />
-                        </v-col>
-                        <v-col cols="4">
-                            <v-text-field
-                                v-model="opdsPort"
-                                label="端口"
-                                placeholder="例如: 80"
-                                variant="outlined"
-                                full-width
-                                type="number"
-                                @keyup.enter="connectToOpds"
-                            />
-                        </v-col>
-                    </v-row>
-                    <v-text-field
-                        v-model="opdsPath"
-                        label="路径"
-                        placeholder="例如: /opds 或 /opds/root.xml"
-                        variant="outlined"
-                        full-width
-                        class="mt-4"
-                        @keyup.enter="connectToOpds"
-                    />
-                    <div class="text-body-2 text-gray-600 mt-2">
-                        提示：通常OPDS服务地址类似 http://example.com:8080/opds 或 http://example.com/opds/root.xml
-                        <br>注意：如果端口为空，系统会根据协议自动填充默认端口（HTTP: 80, HTTPS: 443）
+                                style="border-width: 1.5px; transition: all 0.2s; cursor: pointer;"
+                                @click="selectOpdsSource(source)"
+                            >
+                                <template #prepend>
+                                    <v-icon
+                                        :color="source.active ? 'primary' : 'grey'"
+                                        size="large"
+                                    >
+                                        mdi-server
+                                    </v-icon>
+                                </template>
+
+                                <v-list-item-title class="font-weight-bold text-body-1 mb-1">
+                                    {{ source.name }}
+                                    <v-chip
+                                        v-if="!source.active"
+                                        size="x-small"
+                                        color="grey"
+                                        class="ml-2"
+                                        variant="flat"
+                                    >
+                                        已停用
+                                    </v-chip>
+                                </v-list-item-title>
+
+                                <v-list-item-subtitle class="text-body-2">
+                                    <div class="text-grey-darken-2 font-weight-medium">{{ source.url }}</div>
+                                    <div v-if="source.description" class="text-grey mt-1">{{ source.description }}</div>
+                                </v-list-item-subtitle>
+
+                                <template #append>
+                                    <v-menu location="end">
+                                        <template #activator="{ props }">
+                                            <v-btn
+                                                size="small"
+                                                variant="text"
+                                                icon="mdi-dots-vertical"
+                                                v-bind="props"
+                                                @click.stop
+                                            />
+                                        </template>
+                                        <v-list>
+                                            <v-list-item
+                                                prepend-icon="mdi-pencil"
+                                                title="编辑"
+                                                @click.stop="editOpdsSource(source)"
+                                            />
+                                            <v-list-item
+                                                prepend-icon="mdi-delete"
+                                                title="删除"
+                                                class="text-red"
+                                                @click.stop="deleteOpdsSource(source)"
+                                            />
+                                        </v-list>
+                                    </v-menu>
+                                </template>
+                            </v-list-item>
+                        </v-list>
+                    </div>
+
+                    <div v-else class="text-body-2 text-grey pa-4 text-center border rounded-lg">
+                        暂无已保存的 OPDS 源，请点击上方按钮添加
+                    </div>
+
+                    <!-- 手动输入区域 -->
+                    <div class="mt-4">
+                        <div class="text-subtitle-2 text-grey-darken-1 mb-2">或手动输入地址连接：</div>
+                        <v-text-field
+                            v-model="opdsUrl"
+                            label="OPDS 目录地址"
+                            placeholder="例如: http://example.com:8080/opds"
+                            variant="outlined"
+                            density="compact"
+                            hide-details
+                            @keyup.enter="connectToOpds"
+                        />
+                        <div class="text-caption text-grey mt-1">
+                            提示：输入完整的 OPDS 地址，包含协议、主机、端口和路径
+                        </div>
                     </div>
                 </div>
-                
+
                 <!-- 目录浏览界面 -->
                 <div v-else-if="opdsImportState === 'browsing'">
-                    <!-- 自定义面包屑导航 -->
-                    <div class="mb-4">
-                        <div class="d-flex align-center flex-wrap pa-0">
-                            <v-icon
-                                size="small"
-                                class="mr-1"
-                            >
-                                mdi-folder
-                            </v-icon>
+                    <!-- 返回按钮 -->
+                    <div class="mb-3">
+                        <v-btn
+                            size="small"
+                            variant="outlined"
+                            @click="backToSourceList"
+                        >
+                            <v-icon start>mdi-arrow-left</v-icon>
+                            返回源列表
+                        </v-btn>
+                    </div>
+
+                    <!-- 面包屑导航 -->
+                    <div class="mb-3">
+                        <div class="d-flex align-center flex-wrap">
+                            <v-icon size="small" class="mr-1">mdi-folder</v-icon>
                             <template
                                 v-for="(crumb, index) in breadcrumbs"
                                 :key="index"
                             >
-                                <div 
-                                    class="d-flex align-center"
+                                <span
+                                    class="text-body-2"
+                                    :class="{
+                                        'text-primary cursor-pointer': !crumb.disabled,
+                                        'text-grey': crumb.disabled
+                                    }"
+                                    @click.stop="handleBreadcrumbClick(crumb, index)"
                                 >
-                                    <span 
-                                        class="text-body-2"
-                                        :class="{
-                                            'text-black cursor-pointer hover:underline hover:text-primary': !crumb.disabled,
-                                            'text-gray-500': crumb.disabled
-                                        }"
-                                        @click.stop="handleBreadcrumbClick(crumb, index)"
-                                    >
-                                        {{ crumb.title }}
-                                    </span>
-                                    <v-icon 
-                                        v-if="index < breadcrumbs.length - 1" 
-                                        size="small" 
-                                        class="mx-1"
-                                    >
-                                        mdi-chevron-right
-                                    </v-icon>
-                                </div>
+                                    {{ crumb.title }}
+                                </span>
+                                <v-icon
+                                    v-if="index < breadcrumbs.length - 1"
+                                    size="small"
+                                    class="mx-1"
+                                >
+                                    mdi-chevron-right
+                                </v-icon>
                             </template>
                         </div>
                     </div>
-                    
+
                     <!-- 目录内容区域 -->
-                    <div 
+                    <div
                         class="border rounded-lg"
-                        style="max-height: 400px; min-height: 200px; overflow-y: auto; position: relative;"
+                        style="max-height: 400px; min-height: 200px; overflow-y: auto;"
                     >
                         <div
                             class="pa-2"
                             :style="{ minHeight: opdsItems.length === 0 ? '200px' : 'auto' }"
                         >
                             <!-- 加载动画 -->
-                            <div 
+                            <div
                                 v-if="opdsLoading && opdsItems.length === 0"
                                 class="text-center py-12"
                             >
-                                <v-progress-circular
-                                    indeterminate
-                                    color="primary"
-                                    size="32"
-                                />
-                                <div class="mt-4 text-body-1 text-gray-600">
-                                    正在加载目录...
-                                </div>
+                                <v-progress-circular indeterminate color="primary" size="32" />
+                                <div class="mt-4 text-body-1 text-grey">正在加载目录...</div>
                             </div>
-                            
+
                             <!-- 返回上级目录 -->
-                            <div 
-                                v-if="currentOpdsPath !== '' && currentOpdsPath !== originalOpdsPath && !opdsLoading"
-                                class="flex items-center pa-3 hover:bg-gray-50 rounded cursor-pointer mb-1"
+                            <div
+                                v-if="navigationHistory.length > 0 && !opdsLoading"
+                                class="d-flex align-center pa-3 rounded cursor-pointer mb-1"
+                                style="cursor: pointer;"
                                 @click="goBackInOpdsPath"
                             >
-                                <v-icon
-                                    class="mr-2"
-                                    color="primary"
-                                >
-                                    mdi-arrow-left
-                                </v-icon>
+                                <v-icon class="mr-2" color="primary">mdi-arrow-left</v-icon>
                                 <span class="text-body-1">返回上级目录</span>
                             </div>
-                            
+
                             <!-- 项目列表 -->
                             <template v-if="!opdsLoading">
-                                <div 
-                                    v-for="(item, index) in opdsItems" 
+                                <div
+                                    v-for="(item, index) in opdsItems"
                                     :key="item.id || index"
                                     class="mb-1"
                                 >
                                     <!-- 文件夹 -->
                                     <div
-                                        v-if="item.type === 'folder' || (!item.type && item.href)"
-                                        class="flex items-center pa-3 hover:bg-gray-50 rounded cursor-pointer"
+                                        v-if="item.type === 'folder'"
+                                        class="d-flex align-center pa-3 rounded cursor-pointer"
                                         @click="navigateToOpdsFolder(item)"
                                     >
-                                        <v-icon
-                                            class="mr-3"
-                                            color="amber"
-                                        >
-                                            mdi-folder
-                                        </v-icon>
-                                        <div class="flex-grow">
-                                            <div class="font-weight-medium text-body-1">
-                                                {{ item.title }}
-                                            </div>
-                                            <div
-                                                v-if="item.summary"
-                                                class="text-caption text-gray-600"
-                                            >
-                                                {{ item.summary }}
-                                            </div>
+                                        <v-icon class="mr-3" color="amber">mdi-folder</v-icon>
+                                        <div class="flex-grow-1">
+                                            <div class="font-weight-medium text-body-1">{{ item.title }}</div>
+                                            <div v-if="item.summary" class="text-caption text-grey">{{ item.summary }}</div>
                                         </div>
-                                        <v-icon size="small">
-                                            mdi-chevron-right
-                                        </v-icon>
+                                        <v-icon size="small">mdi-chevron-right</v-icon>
                                     </div>
-                                    
+
                                     <!-- 书籍 -->
                                     <div
-                                        v-else-if="item.type === 'book' || (!item.type && !item.href)"
-                                        class="flex items-center pa-3 hover:bg-gray-100 rounded"
+                                        v-else-if="item.type === 'book'"
+                                        class="d-flex align-center pa-3 rounded"
                                     >
-                                        <!-- 复选框 - 放在最左边 -->
-                                        <div class="mr-3 flex-shrink-0">
-                                            <v-checkbox
-                                                v-model="selectedOpdsBooks"
-                                                :value="item"
-                                                color="primary"
-                                                hide-details
-                                                class="ma-0 pa-0"
-                                            />
+                                        <v-checkbox
+                                            v-model="selectedOpdsBooks"
+                                            :value="item"
+                                            color="primary"
+                                            hide-details
+                                            class="ma-0 pa-0 mr-2 flex-shrink-0"
+                                        />
+                                        <v-icon class="mr-3 flex-shrink-0" color="blue" size="small">mdi-book</v-icon>
+                                        <div class="flex-grow-1 min-w-0">
+                                            <div class="font-weight-medium text-body-1 text-truncate">{{ item.title }}</div>
+                                            <div v-if="item.author" class="text-caption text-grey">作者: {{ item.author }}</div>
+                                            <div v-if="item.summary" class="text-caption text-grey text-truncate">{{ item.summary }}</div>
                                         </div>
-                                        
-                                        <!-- 书籍图标 -->
-                                        <v-icon
-                                            class="mr-3"
-                                            color="blue"
-                                            size="small"
-                                        >
-                                            mdi-book
-                                        </v-icon>
-                                        
-                                        <!-- 书籍信息 -->
-                                        <div class="flex-grow min-w-0">
-                                            <div class="font-weight-medium text-body-1 truncate">
-                                                {{ item.title }}
-                                            </div>
-                                            <div
-                                                v-if="item.author"
-                                                class="text-caption text-gray-600"
-                                            >
-                                                作者: {{ item.author }}
-                                            </div>
-                                            <div
-                                                v-if="item.summary"
-                                                class="text-caption text-gray-500 truncate"
-                                            >
-                                                {{ item.summary }}
-                                            </div>
-                                        </div>
-                                        
-                                        <!-- 封面图片 -->
-                                        <div
-                                            v-if="item.cover_link"
-                                            class="ml-3 flex-shrink-0"
-                                        >
-                                            <v-avatar
-                                                size="40"
-                                                rounded="sm"
-                                            >
-                                                <v-img 
-                                                    :src="item.cover_link" 
-                                                    alt="封面"
-                                                    cover
-                                                />
+                                        <div v-if="item.cover_link" class="ml-3 flex-shrink-0">
+                                            <v-avatar size="40" rounded="sm">
+                                                <v-img :src="item.cover_link" alt="封面" cover />
                                             </v-avatar>
                                         </div>
                                     </div>
                                 </div>
                             </template>
-                            
+
                             <!-- 空状态 -->
                             <div
                                 v-if="opdsItems.length === 0 && !opdsLoading"
                                 class="text-center py-8"
                             >
-                                <v-icon
-                                    size="48"
-                                    color="grey"
-                                >
-                                    mdi-folder-open-outline
-                                </v-icon>
-                                <div class="mt-2 text-gray-600">
-                                    目录为空
-                                </div>
+                                <v-icon size="48" color="grey">mdi-folder-open-outline</v-icon>
+                                <div class="mt-2 text-grey">目录为空</div>
                             </div>
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- 导入进度界面 -->
                 <div v-else-if="opdsImportState === 'importing'">
                     <div class="text-center py-8">
-                        <v-progress-circular
-                            indeterminate
-                            color="primary"
-                            size="64"
-                        />
-                        <div class="mt-4 text-h6">
-                            正在导入书籍到待处理列表...
-                        </div>
+                        <v-progress-circular indeterminate color="primary" size="64" />
+                        <div class="mt-4 text-h6">正在导入书籍到待处理列表...</div>
                         <div class="mt-2 text-body-1">
                             已导入 {{ opdsImportProgress.done }} / {{ opdsImportProgress.total }} 本
                         </div>
@@ -282,64 +275,28 @@
                             </template>
                         </v-progress-linear>
                         <div class="mt-4">
-                            <v-alert
-                                type="info"
-                                variant="tonal"
-                                class="text-left"
-                            >
-                                <div class="text-body-2">
-                                    <v-icon
-                                        color="info"
-                                        size="small"
-                                    >
-                                        mdi-information
-                                    </v-icon>
-                                    导入的书籍会自动添加到"待处理"列表
-                                </div>
-                                <div class="text-body-2 mt-1">
-                                    导入完成后，您需要在主界面上点击"扫描书籍"按钮来识别这些书籍
-                                </div>
+                            <v-alert type="info" variant="tonal" class="text-left">
+                                <div class="text-body-2">导入的书籍会自动添加到"待处理"列表</div>
+                                <div class="text-body-2 mt-1">导入完成后，请在主界面点击"扫描书籍"按钮来识别这些书籍</div>
                             </v-alert>
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- 导入完成界面 -->
                 <div v-else-if="opdsImportState === 'completed'">
                     <div class="text-center py-8">
-                        <v-icon
-                            size="64"
-                            color="success"
-                        >
-                            mdi-check-circle
-                        </v-icon>
-                        <div class="mt-4 text-h6 text-success">
-                            导入完成！
-                        </div>
+                        <v-icon size="64" color="success">mdi-check-circle</v-icon>
+                        <div class="mt-4 text-h6 text-success">导入完成！</div>
                         <div class="mt-2 text-body-1">
                             成功导入 {{ opdsImportResult.done }} 本书籍到待处理列表
                         </div>
-                        <div
-                            v-if="opdsImportResult.fail > 0"
-                            class="mt-2 text-body-1 text-warning"
-                        >
+                        <div v-if="opdsImportResult.fail > 0" class="mt-2 text-body-1 text-warning">
                             失败 {{ opdsImportResult.fail }} 本
                         </div>
                         <div class="mt-4">
-                            <v-alert
-                                type="success"
-                                variant="tonal"
-                                class="text-left"
-                            >
-                                <div class="text-body-2">
-                                    <v-icon
-                                        color="success"
-                                        size="small"
-                                    >
-                                        mdi-check
-                                    </v-icon>
-                                    书籍已成功添加到扫描目录
-                                </div>
+                            <v-alert type="success" variant="tonal" class="text-left">
+                                <div class="text-body-2">书籍已成功添加到扫描目录</div>
                                 <div class="text-body-2 mt-1">
                                     接下来请：
                                     <ol class="mt-2 pl-4">
@@ -353,32 +310,20 @@
                         </div>
                     </div>
                 </div>
-                
+
                 <!-- 错误状态 -->
                 <div v-else-if="opdsImportState === 'error'">
                     <div class="text-center py-8">
-                        <v-icon
-                            size="64"
-                            color="error"
-                        >
-                            mdi-alert-circle
-                        </v-icon>
-                        <div class="mt-4 text-h6 text-error">
-                            {{ opdsError }}
-                        </div>
+                        <v-icon size="64" color="error">mdi-alert-circle</v-icon>
+                        <div class="mt-4 text-h6 text-error">{{ opdsError }}</div>
                         <div class="mt-4">
-                            <v-btn
-                                color="primary"
-                                @click="resetOpdsImportState"
-                            >
-                                返回连接界面
-                            </v-btn>
+                            <v-btn color="primary" @click="resetOpdsImportState">返回</v-btn>
                         </div>
                     </div>
                 </div>
             </v-card-text>
-            <v-card-actions class="flex w-full items-center justify-end gap-2 pa-4">
-                <!-- 统一的按钮 -->
+
+            <v-card-actions class="d-flex justify-end gap-2 pa-4">
                 <v-btn
                     color="primary"
                     variant="outlined"
@@ -387,26 +332,99 @@
                 >
                     {{ leftButtonText }}
                 </v-btn>
-                <v-btn
-                    :loading="isRightButtonLoading"
-                    :disabled="isRightButtonDisabled"
-                    color="primary"
-                    @click="handleRightButtonClick"
+                <v-tooltip
+                    :text="opdsImportState === 'browsing' && selectedOpdsBooks.length === 0 ? '请先勾选要导入的书籍' : ''"
+                    :disabled="!(opdsImportState === 'browsing' && selectedOpdsBooks.length === 0)"
+                    location="top"
                 >
-                    {{ rightButtonText }}
-                    <template v-if="opdsImportState === 'browsing' && selectedOpdsBooks.length > 0">
-                        ({{ selectedOpdsBooks.length }})
+                    <template #activator="{ props: tooltipProps }">
+                        <span v-bind="tooltipProps">
+                            <v-btn
+                                :loading="isRightButtonLoading"
+                                :disabled="isRightButtonDisabled"
+                                color="primary"
+                                @click="handleRightButtonClick"
+                            >
+                                {{ rightButtonText }}
+                                <template v-if="opdsImportState === 'browsing' && selectedOpdsBooks.length > 0">
+                                    ({{ selectedOpdsBooks.length }})
+                                </template>
+                            </v-btn>
+                        </span>
                     </template>
-                </v-btn>
+                </v-tooltip>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
+
+    <!-- OPDS 源管理对话框 -->
+    <v-dialog v-model="opdsSourceDialogVisible" width="600">
+        <v-card>
+            <v-card-title>{{ opdsSourceDialogTitle }}</v-card-title>
+            <v-card-text>
+                <v-form ref="opdsSourceForm">
+                    <v-text-field
+                        v-model="currentOpdsSource.name"
+                        label="源名称"
+                        placeholder="例如：我的 Calibre 图书馆"
+                        variant="outlined"
+                        required
+                        class="mb-4"
+                    />
+                    <v-text-field
+                        v-model="currentOpdsSource.url"
+                        label="OPDS 目录 URL"
+                        placeholder="例如：http://example.com:8080/opds"
+                        variant="outlined"
+                        required
+                        class="mb-4"
+                        hint="完整的 OPDS 目录地址，包含协议、主机、端口和路径"
+                        persistent-hint
+                    />
+                    <v-textarea
+                        v-model="currentOpdsSource.description"
+                        label="描述"
+                        placeholder="简短描述此 OPDS 源"
+                        variant="outlined"
+                        rows="3"
+                        class="mb-4"
+                    />
+                    <v-checkbox
+                        v-model="currentOpdsSource.active"
+                        label="启用此源"
+                        color="primary"
+                        hide-details
+                    />
+                </v-form>
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer />
+                <v-btn color="grey" variant="outlined" @click="opdsSourceDialogVisible = false">取消</v-btn>
+                <v-btn color="primary" variant="elevated" @click="saveOpdsSource">保存</v-btn>
+            </v-card-actions>
+        </v-card>
+    </v-dialog>
+
+    <!-- 确认导入对话框 -->
+    <v-dialog v-model="confirmDialogVisible" max-width="420">
+        <v-card>
+            <v-card-title>确认导入</v-card-title>
+            <v-card-text>
+                确定要导入选中的 {{ selectedOpdsBooks.length }} 本书籍吗？<br>
+                导入的书籍将添加到"待处理"列表，需要手动扫描后才能完成入库。
+            </v-card-text>
+            <v-card-actions>
+                <v-spacer />
+                <v-btn variant="outlined" @click="onConfirmCancel">取消</v-btn>
+                <v-btn color="primary" @click="onConfirmImport">确认</v-btn>
             </v-card-actions>
         </v-card>
     </v-dialog>
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onBeforeUnmount } from 'vue';
 
-// Props
 const props = defineProps({
     dialogVisible: {
         type: Boolean,
@@ -414,300 +432,204 @@ const props = defineProps({
     }
 });
 
-// Emits
 const emit = defineEmits(['update:dialogVisible', 'refresh-data']);
 
 const { $backend, $alert } = useNuxtApp();
 
-// OPDS Import State
-const opdsHost = ref('');
-const opdsPort = ref('');
-const opdsPath = ref('');
-const opdsImportState = ref('connecting'); // connecting, browsing, importing, completed, error
+// ==================== 状态 ====================
+const opdsUrl = ref('');
+const opdsImportState = ref('source_list'); // source_list, browsing, importing, completed, error
 const currentOpdsPath = ref('');
-const originalOpdsPath = ref(''); // 保存用户输入的原始路径作为根目录
+const originalOpdsPath = ref('');
 const opdsItems = ref([]);
 const selectedOpdsBooks = ref([]);
 const opdsConnection = ref(null);
 const opdsLoading = ref(false);
 const opdsError = ref('');
-
-// 新增：存储导航历史，用于构建面包屑
 const navigationHistory = ref([]);
 
-const opdsImportProgress = ref({
-    done: 0,
-    total: 0,
-    percent: 0
-});
-const opdsImportResult = ref({
-    done: 0,
-    fail: 0
-});
+const opdsImportProgress = ref({ done: 0, total: 0, percent: 0 });
+const opdsImportResult = ref({ done: 0, fail: 0 });
 
-// 计算左侧按钮文本
+// 轮询定时器（提升为组件级，便于清理）
+const pollTimer = ref(null);
+
+// OPDS 源管理
+const opdsSources = ref([]);
+const opdsSourceDialogVisible = ref(false);
+const opdsSourceDialogTitle = ref('');
+const currentOpdsSource = ref({ id: null, name: '', url: '', description: '', active: true });
+
+// 确认对话框
+const confirmDialogVisible = ref(false);
+let pendingImportResolve = null;
+
+// ==================== 计算属性 ====================
 const leftButtonText = computed(() => {
-    switch (opdsImportState.value) {
-        case 'connecting':
-        case 'browsing':
-            return '关闭';
-        case 'importing':
-            return '正在导入...';
-        case 'completed':
-        case 'error':
-            return '返回连接界面';
-        default:
-            return '关闭';
-    }
+    if (opdsImportState.value === 'importing') return '正在导入...';
+    if (opdsImportState.value === 'completed' || opdsImportState.value === 'error') return '返回';
+    return '关闭';
 });
 
-// 计算右侧按钮文本
 const rightButtonText = computed(() => {
     switch (opdsImportState.value) {
-        case 'connecting':
-            return '连接';
-        case 'browsing':
-            return '导入选中书籍';
-        case 'importing':
-            return '正在导入...';
-        case 'completed':
-            return '完成';
-        case 'error':
-            return '重试';
-        default:
-            return '操作';
+        case 'source_list': return '手动连接';
+        case 'browsing': return '导入选中书籍';
+        case 'importing': return '正在导入...';
+        case 'completed': return '完成';
+        case 'error': return '重试';
+        default: return '操作';
     }
 });
 
-// 计算左侧按钮是否禁用
-const isLeftButtonDisabled = computed(() => {
-    return opdsImportState.value === 'importing';
-});
+const isLeftButtonDisabled = computed(() => opdsImportState.value === 'importing');
 
-// 计算右侧按钮是否禁用
 const isRightButtonDisabled = computed(() => {
-    switch (opdsImportState.value) {
-        case 'connecting':
-            return false;
-        case 'browsing':
-            return selectedOpdsBooks.value.length === 0;
-        case 'importing':
-            return true;
-        default:
-            return false;
-    }
+    if (opdsImportState.value === 'source_list') return !opdsUrl.value.trim();
+    if (opdsImportState.value === 'browsing') return selectedOpdsBooks.value.length === 0;
+    if (opdsImportState.value === 'importing') return true;
+    return false;
 });
 
-// 计算右侧按钮是否显示加载状态
-const isRightButtonLoading = computed(() => {
-    return opdsLoading.value || opdsImportState.value === 'importing';
-});
+const isRightButtonLoading = computed(() => opdsLoading.value || opdsImportState.value === 'importing');
 
-// 计算面包屑导航 - 基于导航历史而不是URL路径
 const breadcrumbs = computed(() => {
-    const crumbs = [];
-    
-    // 添加根目录
-    crumbs.push({
-        title: '根目录',
-        disabled: navigationHistory.value.length === 0,
-        path: originalOpdsPath.value
-    });
-    
-    // 添加导航历史中的项目
+    const crumbs = [{ title: '根目录', disabled: navigationHistory.value.length === 0, index: -1 }];
     navigationHistory.value.forEach((item, index) => {
         crumbs.push({
             title: item.title,
             disabled: index === navigationHistory.value.length - 1,
-            path: item.path
+            index
         });
     });
-    
     return crumbs;
 });
 
-// 简单的hash函数
-const hashCode = (str) => {
-    let hash = 0;
-    for (let i = 0; i < str.length; i++) {
-        const char = str.charCodeAt(i);
-        hash = ((hash << 5) - hash) + char;
-        hash = hash & hash; // 转换为32位整数
-    }
-    return hash;
-};
-
-// 从主机地址自动填充端口号
-const autoFillPortFromHost = () => {
-    if (!opdsHost.value || opdsPort.value) {
-        // 如果主机地址为空或已经填写了端口，则不自动填充
-        return;
-    }
-
+// ==================== 工具函数 ====================
+const getOrigin = () => {
     try {
-        // 解析URL
-        let urlString = opdsHost.value;
-        
-        // 确保URL有协议前缀
-        if (!urlString.startsWith('http://') && !urlString.startsWith('https://')) {
-            // 如果不以协议开头，尝试添加http://
-            urlString = 'http://' + urlString;
-            opdsHost.value = urlString;
-        }
-        
-        // 创建URL对象
-        const url = new URL(urlString);
-        
-        // 获取端口号
-        let port = url.port;
-        
-        if (!port) {
-            // 如果没有明确指定端口，根据协议设置默认端口
-            if (url.protocol === 'https:') {
-                port = '443';
-            } else if (url.protocol === 'http:') {
-                port = '80';
-            }
-        }
-        
-        // 设置端口号
-        if (port) {
-            opdsPort.value = port;
-        }
-    } catch (error) {
-        console.log('自动填充端口失败:', error);
-        // 如果URL解析失败，保持现状
+        return new URL(opdsUrl.value).origin;
+    } catch {
+        return '';
     }
 };
 
-// 左侧按钮点击处理
+const processItems = (items) => items.map(item => {
+    if (!item.id && item.href) {
+        let hash = 0;
+        for (let i = 0; i < item.href.length; i++) {
+            hash = Math.imul(31, hash) + item.href.charCodeAt(i) | 0;
+        }
+        item.id = Math.abs(hash);
+    }
+    if (item.href) {
+        try {
+            item.path = new URL(item.href).pathname;
+        } catch {
+            item.path = item.href;
+        }
+    }
+    return item;
+});
+
+const browsePath = async (path) => {
+    const origin = getOrigin();
+    if (!origin) {
+        $alert('error', '无效的 OPDS 地址');
+        return null;
+    }
+    const targetUrl = path ? origin + (path.startsWith('/') ? path : '/' + path) : origin;
+    const response = await $backend('/admin/opds/browse', {
+        method: 'POST',
+        body: JSON.stringify({ url: targetUrl }),
+    });
+    return response;
+};
+
+// ==================== 对话框生命周期 ====================
+const onDialogUpdate = (value) => {
+    emit('update:dialogVisible', value);
+    if (!value) {
+        stopPollTimer();
+    }
+};
+
+onBeforeUnmount(() => {
+    stopPollTimer();
+});
+
+const stopPollTimer = () => {
+    if (pollTimer.value) {
+        clearInterval(pollTimer.value);
+        pollTimer.value = null;
+    }
+};
+
+// ==================== 按钮逻辑 ====================
 const handleLeftButtonClick = () => {
-    switch (opdsImportState.value) {
-        case 'connecting':
-        case 'browsing':
-            emit('update:dialogVisible', false);
-            resetOpdsImportState();
-            break;
-        case 'completed':
-            emit('update:dialogVisible', false);
-            resetOpdsImportState();
-            break;
-        case 'error':
-            resetOpdsImportState();
-            break;
+    if (opdsImportState.value === 'completed' || opdsImportState.value === 'error') {
+        resetOpdsImportState();
+    } else {
+        emit('update:dialogVisible', false);
+        resetOpdsImportState();
     }
 };
 
-// 右侧按钮点击处理
 const handleRightButtonClick = () => {
     switch (opdsImportState.value) {
-        case 'connecting':
-            connectToOpds();
-            break;
-        case 'browsing':
-            importSelectedOpdsBooks();
-            break;
-        case 'completed':
-            handleOpdsImportComplete();
-            break;
-        case 'error':
-            if (currentOpdsPath.value) {
-                // 如果是导航错误，重试连接
-                connectToOpds();
-            } else {
-                // 如果是连接错误，重置状态
-                resetOpdsImportState();
-            }
-            break;
+        case 'source_list': connectToOpds(); break;
+        case 'browsing': importSelectedOpdsBooks(); break;
+        case 'completed': handleOpdsImportComplete(); break;
+        case 'error': resetOpdsImportState(); break;
     }
 };
 
-// 处理面包屑点击
-const handleBreadcrumbClick = (crumb, index) => {
+const handleBreadcrumbClick = (crumb) => {
     if (crumb.disabled) return;
-    
-    if (index === 0) {
-        // 点击根目录
+    if (crumb.index === -1) {
         navigateToOriginalPath();
     } else {
-        // 点击其他面包屑
-        navigateToPath(crumb.path);
+        navigateToHistoryIndex(crumb.index);
     }
 };
 
+// ==================== 连接与导航 ====================
 const connectToOpds = async () => {
-    if (!opdsHost.value) {
-        $alert('error', '请输入主机地址');
+    const raw = opdsUrl.value.trim();
+    if (!raw) {
+        $alert('error', '请输入 OPDS 地址');
+        return;
+    }
+    if (!raw.startsWith('http://') && !raw.startsWith('https://')) {
+        $alert('error', '地址需以 http:// 或 https:// 开头');
         return;
     }
 
-    // 验证URL格式
-    if (!opdsHost.value.startsWith('http://') && !opdsHost.value.startsWith('https://')) {
-        $alert('error', '主机地址需要以 http:// 或 https:// 开头');
+    let parsedUrl;
+    try {
+        parsedUrl = new URL(raw);
+    } catch {
+        $alert('error', '地址格式无效，请检查输入');
         return;
-    }
-
-    // 自动填充端口（如果未填写）
-    if (!opdsPort.value) {
-        autoFillPortFromHost();
-    }
-
-    // 验证端口号
-    if (opdsPort.value) {
-        const portNum = parseInt(opdsPort.value);
-        if (isNaN(portNum) || portNum < 1 || portNum > 65535) {
-            $alert('error', '端口号必须在 1-65535 范围内');
-            return;
-        }
     }
 
     opdsLoading.value = true;
     opdsError.value = '';
-    
+
     try {
-        // 保存原始路径作为根目录
-        originalOpdsPath.value = opdsPath.value || '';
-        
-        // 重置导航历史
+        originalOpdsPath.value = parsedUrl.pathname;
         navigationHistory.value = [];
-        
-        // 调用后端API浏览OPDS目录
+
         const response = await $backend('/admin/opds/browse', {
             method: 'POST',
-            body: JSON.stringify({
-                host: opdsHost.value,
-                port: opdsPort.value,
-                path: opdsPath.value
-            }),
+            body: JSON.stringify({ url: raw }),
         });
-        
+
         if (response.err === 'ok') {
-            // 保存连接信息
             opdsConnection.value = response.current_path;
-            currentOpdsPath.value = originalOpdsPath.value; // 使用原始路径作为当前路径
-            
-            // 处理返回的项目列表
-            opdsItems.value = response.items.map(item => {
-                // 确保每个项目都有id
-                if (!item.id && item.href) {
-                    // 使用href生成一个简单的hash id
-                    item.id = Math.abs(hashCode(item.href));
-                }
-                // 提取路径信息用于显示
-                if (item.href) {
-                    try {
-                        const url = new URL(item.href);
-                        item.path = url.pathname;
-                    } catch (e) {
-                        item.path = item.href;
-                    }
-                }
-                return item;
-            });
-            
-            // 更新状态
+            currentOpdsPath.value = parsedUrl.pathname;
+            opdsItems.value = processItems(response.items);
             opdsImportState.value = 'browsing';
-            $alert('success', '连接成功！');
         } else {
             opdsError.value = response.msg || '连接失败，请检查地址是否正确';
             opdsImportState.value = 'error';
@@ -727,50 +649,19 @@ const navigateToOpdsFolder = async (folder) => {
         $alert('error', '无法导航：缺少链接地址');
         return;
     }
-    
+
     opdsLoading.value = true;
-    
     try {
-        // 解析href获取路径
-        const url = new URL(folder.href);
-        const path = url.pathname;
-        
-        // 调用后端API浏览该路径
-        const response = await $backend('/admin/opds/browse', {
-            method: 'POST',
-            body: JSON.stringify({
-                host: opdsHost.value,
-                port: opdsPort.value,
-                path: path
-            }),
-        });
-        
-        if (response.err === 'ok') {
+        const path = new URL(folder.href).pathname;
+        const response = await browsePath(path);
+
+        if (response && response.err === 'ok') {
             currentOpdsPath.value = path;
-            
-            // 将文件夹信息添加到导航历史
-            navigationHistory.value.push({
-                title: folder.title,
-                path: path
-            });
-            
-            opdsItems.value = response.items.map(item => {
-                if (!item.id && item.href) {
-                    item.id = Math.abs(hashCode(item.href));
-                }
-                // 提取路径信息用于显示
-                if (item.href) {
-                    try {
-                        const url = new URL(item.href);
-                        item.path = url.pathname;
-                    } catch (e) {
-                        item.path = item.href;
-                    }
-                }
-                return item;
-            });
+            navigationHistory.value.push({ title: folder.title, path });
+            selectedOpdsBooks.value = [];
+            opdsItems.value = processItems(response.items);
         } else {
-            $alert('error', response.msg || '导航失败');
+            $alert('error', response?.msg || '导航失败');
         }
     } catch (error) {
         $alert('error', '导航失败：' + error.message);
@@ -780,41 +671,18 @@ const navigateToOpdsFolder = async (folder) => {
 };
 
 const navigateToOriginalPath = async () => {
-    // 导航到原始路径（用户输入的路径）
     opdsLoading.value = true;
-    
     try {
         const response = await $backend('/admin/opds/browse', {
             method: 'POST',
-            body: JSON.stringify({
-                host: opdsHost.value,
-                port: opdsPort.value,
-                path: originalOpdsPath.value
-            }),
+            body: JSON.stringify({ url: opdsUrl.value }),
         });
-        
+
         if (response.err === 'ok') {
             currentOpdsPath.value = originalOpdsPath.value;
-            
-            // 清空导航历史（回到根目录）
             navigationHistory.value = [];
-            
-            // 处理返回的项目列表
-            opdsItems.value = response.items.map(item => {
-                if (!item.id && item.href) {
-                    item.id = Math.abs(hashCode(item.href));
-                }
-                // 提取路径信息用于显示
-                if (item.href) {
-                    try {
-                        const url = new URL(item.href);
-                        item.path = url.pathname;
-                    } catch (e) {
-                        item.path = item.href;
-                    }
-                }
-                return item;
-            });
+            selectedOpdsBooks.value = [];
+            opdsItems.value = processItems(response.items);
         } else {
             $alert('error', response.msg || '返回根目录失败');
         }
@@ -825,111 +693,22 @@ const navigateToOriginalPath = async () => {
     }
 };
 
-const navigateToRoot = async () => {
-    // 导航到根目录（空的路径）
-    opdsLoading.value = true;
-    
-    try {
-        const response = await $backend('/admin/opds/browse', {
-            method: 'POST',
-            body: JSON.stringify({
-                host: opdsHost.value,
-                port: opdsPort.value,
-                path: ''
-            }),
-        });
-        
-        if (response.err === 'ok') {
-            currentOpdsPath.value = '';
-            originalOpdsPath.value = ''; // 更新原始路径
-            opdsItems.value = response.items.map(item => {
-                if (!item.id && item.href) {
-                    item.id = Math.abs(hashCode(item.href));
-                }
-                // 提取路径信息用于显示
-                if (item.href) {
-                    try {
-                        const url = new URL(item.href);
-                        item.path = url.pathname;
-                    } catch (e) {
-                        item.path = item.href;
-                    }
-                }
-                return item;
-            });
-        } else {
-            $alert('error', response.msg || '返回根目录失败');
-        }
-    } catch (error) {
-        $alert('error', '返回根目录失败：' + error.message);
-    } finally {
-        opdsLoading.value = false;
-    }
-};
+const navigateToHistoryIndex = async (targetIndex) => {
+    const target = navigationHistory.value[targetIndex];
+    if (!target) return;
 
-const navigateToPath = async (path) => {
-    // 确保路径格式正确
-    let cleanPath = path;
-    if (cleanPath && !cleanPath.startsWith('/')) {
-        cleanPath = '/' + cleanPath;
-    }
-    cleanPath = cleanPath.replace(/\/+/g, '/');
-    
     opdsLoading.value = true;
-    
     try {
-        const response = await $backend('/admin/opds/browse', {
-            method: 'POST',
-            body: JSON.stringify({
-                host: opdsHost.value,
-                port: opdsPort.value,
-                path: cleanPath
-            }),
-        });
-        
-        if (response.err === 'ok') {
-            currentOpdsPath.value = cleanPath;
-            
-            // 重建导航历史
-            const newHistory = [];
-            
-            // 从原始路径开始构建
-            if (cleanPath !== originalOpdsPath.value) {
-                // 我们需要知道这个路径对应的文件夹名称
-                // 这里简化处理，使用路径的最后一部分作为名称
-                const pathSegments = cleanPath.split('/').filter(s => s);
-                const originalSegments = originalOpdsPath.value.split('/').filter(s => s);
-                
-                // 只添加相对于原始路径的部分
-                for (let i = originalSegments.length; i < pathSegments.length; i++) {
-                    // 这里需要知道每个文件夹的实际名称
-                    // 由于我们没有保存每个文件夹的名称，这里使用路径段作为名称
-                    newHistory.push({
-                        title: pathSegments[i] || '未知文件夹',
-                        path: '/' + pathSegments.slice(0, i + 1).join('/')
-                    });
-                }
-            }
-            
-            navigationHistory.value = newHistory;
-            
-            opdsItems.value = response.items.map(item => {
-                if (!item.id && item.href) {
-                    item.id = Math.abs(hashCode(item.href));
-                }
-                // 提取路径信息用于显示
-                if (item.href) {
-                    try {
-                        const url = new URL(item.href);
-                        item.path = url.pathname;
-                    } catch (e) {
-                        item.path = item.href;
-                    }
-                }
-                return item;
-            });
+        const response = await browsePath(target.path);
+
+        if (response && response.err === 'ok') {
+            currentOpdsPath.value = target.path;
+            // 截断历史到目标层级（不包含目标项本身，因为目标项是当前要进入的）
+            navigationHistory.value = navigationHistory.value.slice(0, targetIndex);
+            selectedOpdsBooks.value = [];
+            opdsItems.value = processItems(response.items);
         } else {
-            $alert('error', response.msg || '导航失败');
+            $alert('error', response?.msg || '导航失败');
         }
     } catch (error) {
         $alert('error', '导航失败：' + error.message);
@@ -939,65 +718,55 @@ const navigateToPath = async (path) => {
 };
 
 const goBackInOpdsPath = async () => {
-    if (!currentOpdsPath.value || currentOpdsPath.value === originalOpdsPath.value) return;
-    
-    // 计算上级目录路径
-    let parentPath = '';
-    if (navigationHistory.value.length > 1) {
-        // 从导航历史获取上一级路径
-        parentPath = navigationHistory.value[navigationHistory.value.length - 2].path;
-    } else if (navigationHistory.value.length === 1) {
+    if (navigationHistory.value.length === 0) return;
+
+    const history = navigationHistory.value;
+    if (history.length === 1) {
         // 回到根目录
-        parentPath = originalOpdsPath.value;
-    } else {
-        // 直接计算上级路径
-        const pathSegments = currentOpdsPath.value.split('/').filter(segment => segment);
-        pathSegments.pop(); // 移除最后一段
-        parentPath = '/' + pathSegments.join('/');
+        await navigateToOriginalPath();
+        return;
     }
-    
+
+    // 回到上一级（倒数第二个历史项）
+    const parent = history[history.length - 2];
     opdsLoading.value = true;
-    
     try {
-        const response = await $backend('/admin/opds/browse', {
-            method: 'POST',
-            body: JSON.stringify({
-                host: opdsHost.value,
-                port: opdsPort.value,
-                path: parentPath
-            }),
-        });
-        
-        if (response.err === 'ok') {
-            currentOpdsPath.value = parentPath;
-            
-            // 更新导航历史：移除最后一项
-            if (navigationHistory.value.length > 0) {
-                navigationHistory.value.pop();
-            }
-            
-            opdsItems.value = response.items.map(item => {
-                if (!item.id && item.href) {
-                    item.id = Math.abs(hashCode(item.href));
-                }
-                // 提取路径信息用于显示
-                if (item.href) {
-                    try {
-                        const url = new URL(item.href);
-                        item.path = url.pathname;
-                    } catch (e) {
-                        item.path = item.href;
-                    }
-                }
-                return item;
-            });
+        const response = await browsePath(parent.path);
+
+        if (response && response.err === 'ok') {
+            currentOpdsPath.value = parent.path;
+            navigationHistory.value = history.slice(0, -1);
+            selectedOpdsBooks.value = [];
+            opdsItems.value = processItems(response.items);
         } else {
-            $alert('error', response.msg || '返回上级目录失败');
+            $alert('error', response?.msg || '返回上级目录失败');
         }
     } catch (error) {
         $alert('error', '返回上级目录失败：' + error.message);
     } finally {
         opdsLoading.value = false;
+    }
+};
+
+// ==================== 导入逻辑 ====================
+const showConfirmDialog = () => new Promise(resolve => {
+    pendingImportResolve = resolve;
+    confirmDialogVisible.value = true;
+});
+
+const onConfirmImport = () => {
+    confirmDialogVisible.value = false;
+    if (pendingImportResolve) {
+        pendingImportResolve(true);
+        pendingImportResolve = null;
+    }
+};
+
+const onConfirmCancel = () => {
+    confirmDialogVisible.value = false;
+    if (pendingImportResolve) {
+        pendingImportResolve(false);
+        pendingImportResolve = null;
     }
 };
 
@@ -1007,48 +776,28 @@ const importSelectedOpdsBooks = async () => {
         return;
     }
 
-    // 确认导入
-    if (!confirm(`确定要导入选中的 ${selectedOpdsBooks.value.length} 本书籍吗？\n\n导入的书籍将添加到"待处理"列表中，您需要手动进行扫描和导入操作。`)) {
-        return;
-    }
+    const confirmed = await showConfirmDialog();
+    if (!confirmed) return;
 
     opdsLoading.value = true;
     opdsImportState.value = 'importing';
-    
-    // 初始化导入进度
-    opdsImportProgress.value = {
-        done: 0,
-        total: selectedOpdsBooks.value.length,
-        percent: 0
-    };
-    
-    // 轮询间隔（毫秒）
-    const pollInterval = 2000;
-    let pollTimer = null;
-    
+    opdsImportProgress.value = { done: 0, total: selectedOpdsBooks.value.length, percent: 0 };
+
     const pollImportStatus = async () => {
         try {
             const statusResp = await $backend('/admin/opds/import/status');
             if (statusResp.err === 'ok' && statusResp.status) {
                 const { total, done, skip, fail } = statusResp.status;
-                // 更新进度
                 opdsImportProgress.value.total = total || selectedOpdsBooks.value.length;
                 opdsImportProgress.value.done = done || 0;
                 opdsImportProgress.value.percent = total > 0 ? Math.round((done / total) * 100) : 0;
-                
-                // 如果导入完成（done >= total 或 total > 0 且 done + skip + fail >= total）
-                const completed = (total > 0 && (done + skip + fail >= total)) || 
-                                  (total === 0 && done > 0);
+
+                const completed = total > 0 && (done + skip + fail >= total);
                 if (completed) {
-                    clearInterval(pollTimer);
-                    opdsImportResult.value = {
-                        done: done,
-                        fail: fail
-                    };
+                    stopPollTimer();
+                    opdsImportResult.value = { done, fail };
                     opdsImportState.value = 'completed';
                     opdsImportProgress.value.percent = 100;
-                    opdsImportProgress.value.done = done;
-                    // 触发数据刷新
                     emit('refresh-data');
                     opdsLoading.value = false;
                 }
@@ -1057,9 +806,8 @@ const importSelectedOpdsBooks = async () => {
             console.warn('轮询导入状态失败:', error);
         }
     };
-    
+
     try {
-        // 调用后端API导入选中的书籍（异步）
         const response = await $backend('/admin/opds/import', {
             method: 'POST',
             body: JSON.stringify({
@@ -1072,13 +820,10 @@ const importSelectedOpdsBooks = async () => {
                 }))
             }),
         });
-        
+
         if (response.err === 'ok') {
-            // 启动轮询
-            pollTimer = setInterval(pollImportStatus, pollInterval);
-            // 立即轮询一次
+            pollTimer.value = setInterval(pollImportStatus, 2000);
             setTimeout(pollImportStatus, 500);
-            // 立即触发数据刷新以显示刚刚插入的下载项
             emit('refresh-data');
         } else {
             $alert('error', response.msg || '导入失败');
@@ -1090,118 +835,158 @@ const importSelectedOpdsBooks = async () => {
         opdsImportState.value = 'error';
         opdsError.value = '导入失败：' + error.message;
         opdsLoading.value = false;
-        if (pollTimer) clearInterval(pollTimer);
+        stopPollTimer();
     }
 };
 
 const handleOpdsImportComplete = () => {
-    // 关闭窗口并重置状态
     emit('update:dialogVisible', false);
-    
-    // 提示用户进行扫描
     $alert('info', 'OPDS书籍已添加到扫描目录，请点击"扫描书籍"按钮进行识别。');
-    
-    // 重置状态
     resetOpdsImportState();
-    
-    // 触发数据刷新
     emit('refresh-data');
 };
 
 const resetOpdsImportState = () => {
-    opdsImportState.value = 'connecting';
+    stopPollTimer();
+    opdsImportState.value = 'source_list';
     currentOpdsPath.value = '';
-    originalOpdsPath.value = ''; // 重置原始路径
+    originalOpdsPath.value = '';
     opdsItems.value = [];
     selectedOpdsBooks.value = [];
     opdsConnection.value = null;
-    opdsHost.value = '';
-    opdsPort.value = '';
-    opdsPath.value = '';
+    opdsUrl.value = '';
     opdsError.value = '';
     opdsLoading.value = false;
     navigationHistory.value = [];
-    opdsImportProgress.value = {
-        done: 0,
-        total: 0,
-        percent: 0
-    };
-    opdsImportResult.value = {
-        done: 0,
-        fail: 0
-    };
+    opdsImportProgress.value = { done: 0, total: 0, percent: 0 };
+    opdsImportResult.value = { done: 0, fail: 0 };
 };
+
+const backToSourceList = () => {
+    stopPollTimer();
+    opdsImportState.value = 'source_list';
+    opdsItems.value = [];
+    selectedOpdsBooks.value = [];
+    navigationHistory.value = [];
+    currentOpdsPath.value = '';
+};
+
+// ==================== OPDS 源管理 ====================
+const loadOpdsSources = async () => {
+    try {
+        const response = await $backend('/admin/opds/sources');
+        if (response.err === 'ok') {
+            opdsSources.value = response.items || [];
+        }
+    } catch (error) {
+        console.error('加载 OPDS 源列表失败:', error);
+    }
+};
+
+const showAddOpdsSourceDialog = () => {
+    opdsSourceDialogTitle.value = '添加 OPDS 源';
+    currentOpdsSource.value = { id: null, name: '', url: '', description: '', active: true };
+    opdsSourceDialogVisible.value = true;
+};
+
+const editOpdsSource = (source) => {
+    opdsSourceDialogTitle.value = '编辑 OPDS 源';
+    currentOpdsSource.value = {
+        id: source.id,
+        name: source.name,
+        url: source.url,
+        description: source.description || '',
+        active: source.active
+    };
+    opdsSourceDialogVisible.value = true;
+};
+
+const saveOpdsSource = async () => {
+    if (!currentOpdsSource.value.name || !currentOpdsSource.value.url) {
+        $alert('error', '名称和 OPDS URL 为必填项');
+        return;
+    }
+
+    const data = {
+        name: currentOpdsSource.value.name,
+        url: currentOpdsSource.value.url,
+        description: currentOpdsSource.value.description,
+        active: currentOpdsSource.value.active
+    };
+
+    try {
+        let response;
+        if (currentOpdsSource.value.id) {
+            data.id = currentOpdsSource.value.id;
+            response = await $backend('/admin/opds/sources', { method: 'PUT', body: JSON.stringify(data) });
+        } else {
+            response = await $backend('/admin/opds/sources', { method: 'POST', body: JSON.stringify(data) });
+        }
+
+        if (response.err === 'ok') {
+            $alert('success', response.msg);
+            opdsSourceDialogVisible.value = false;
+            await loadOpdsSources();
+        } else {
+            $alert('error', response.msg);
+        }
+    } catch (error) {
+        $alert('error', '保存 OPDS 源失败');
+    }
+};
+
+const deleteOpdsSource = async (source) => {
+    if (!confirm('确定要删除此 OPDS 源配置吗？')) return;
+
+    try {
+        const response = await $backend('/admin/opds/sources', {
+            method: 'DELETE',
+            body: JSON.stringify({ id: source.id })
+        });
+
+        if (response.err === 'ok') {
+            $alert('success', response.msg);
+            await loadOpdsSources();
+        } else {
+            $alert('error', response.msg);
+        }
+    } catch (error) {
+        $alert('error', '删除 OPDS 源失败');
+    }
+};
+
+const selectOpdsSource = async (source) => {
+    try {
+        opdsUrl.value = source.url;
+        await connectToOpds();
+    } catch (error) {
+        $alert('error', `无法连接到 OPDS 源: ${source.url}`);
+    }
+};
+
+// 初始化时加载源列表
+loadOpdsSources();
 </script>
 
 <style scoped>
 .cursor-pointer {
     cursor: pointer;
 }
-.hover\:bg-gray-50:hover {
-    background-color: rgba(0, 0, 0, 0.02);
-}
-.hover\:bg-gray-100:hover {
-    background-color: rgba(0, 0, 0, 0.04);
-}
-.truncate {
-    overflow: hidden;
-    text-overflow: ellipsis;
-    white-space: nowrap;
-}
 .min-w-0 {
     min-width: 0;
 }
-
-/* 自定义滚动条样式 - 确保在所有浏览器中都能滚动 */
 .border::-webkit-scrollbar {
     width: 8px;
-    height: 8px;
 }
-
 .border::-webkit-scrollbar-track {
     background: #f1f1f1;
     border-radius: 4px;
 }
-
 .border::-webkit-scrollbar-thumb {
     background: #888;
     border-radius: 4px;
 }
-
 .border::-webkit-scrollbar-thumb:hover {
     background: #555;
-}
-
-/* 确保容器能够正确滚动 */
-.border {
-    overflow: auto !important;
-    -webkit-overflow-scrolling: touch;
-}
-
-/* 面包屑导航链接样式 */
-.v-breadcrumbs-item--link {
-    cursor: pointer;
-    color: #1976d2;
-    text-decoration: none;
-}
-
-.v-breadcrumbs-item--link:hover {
-    text-decoration: underline;
-}
-
-.v-breadcrumbs-item--disabled {
-    color: rgba(0, 0, 0, 0.38);
-    cursor: default;
-}
-
-/* 防止点击事件冒泡 */
-.v-breadcrumbs-item {
-    cursor: pointer;
-}
-
-/* 确保复选框和内容对齐 */
-.v-checkbox {
-    margin: 0;
-    padding: 0;
 }
 </style>

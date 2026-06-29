@@ -144,9 +144,13 @@ class AdminUsers(BaseHandler):
             user.extra = {"kindle_email": ""}
             user.set_secure_password(password)
 
-            # 设置权限
+            # 设置权限：若未显式指定，则应用系统默认权限
             p = data.get("permission", "")
-            if isinstance(p, str) and p:
+            if not isinstance(p, str):
+                p = ""
+            if not p:
+                p = CONF.get("DEFAULT_USER_PERMISSION", "")
+            if p:
                 user.set_permission(p)
 
             try:
@@ -190,6 +194,36 @@ class AdminUsers(BaseHandler):
             user.set_permission(p)
         user.save()
         return {"err": "ok"}
+
+
+class AdminUsersBatch(BaseHandler):
+    @js
+    @auth
+    def post(self):
+        if not self.admin_user:
+            return {"err": "permission.not_admin", "msg": _("当前用户非管理员")}
+        data = tornado.escape.json_decode(self.request.body)
+        ids = data.get("ids", [])
+        permission = data.get("permission", "")
+
+        if not ids or not isinstance(ids, list):
+            return {"err": "params.ids.required", "msg": _("用户ID列表不能为空")}
+        if len(ids) > 500:
+            return {"err": "params.ids.too_many", "msg": _("单次最多批量操作 500 个用户")}
+        if not isinstance(permission, str) or not permission:
+            return {"err": "params.permission.invalid", "msg": _("权限参数不对")}
+
+        current_user_id = self.user_id()
+        if current_user_id in ids:
+            return {"err": "params.user.invalid", "msg": _("不允许批量修改自己的权限")}
+
+        users = self.session.query(Reader).filter(Reader.id.in_(ids)).all()
+        for user in users:
+            user.set_permission(permission)
+        self.session.commit()
+        updated = len(users)
+
+        return {"err": "ok", "updated": updated, "msg": _("已更新 %d 个用户的权限") % updated}
 
 
 class AdminTestMail(BaseHandler):
@@ -331,6 +365,7 @@ class AdminSettings(BaseHandler):
             "ALLOW_GUEST_READ",
             "ALLOW_GUEST_UPLOAD",
             "ALLOW_REGISTER",
+            "DEFAULT_USER_PERMISSION",
             "ALLOW_FEEDBACK",
             "FEEDBACK_URL",
             "BOOK_NAMES_FORMAT",
@@ -1309,6 +1344,7 @@ def routes():
     return [
         (r"/api/admin/ssl", AdminSSL),
         (r"/api/admin/users", AdminUsers),
+        (r"/api/admin/users/batch", AdminUsersBatch),
         (r"/api/admin/install", AdminInstall),
         (r"/api/admin/settings", AdminSettings),
         (r"/api/admin/testmail", AdminTestMail),

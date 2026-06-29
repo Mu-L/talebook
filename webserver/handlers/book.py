@@ -1946,7 +1946,7 @@ class BookWantToRead(BaseHandler):
             self.session.add(reading_state)
         reading_state.set_wants(wants_status)
         self.session.commit()
-        action = "标记为待读" if wants_status else "取消待读"
+        action = "加入书架" if wants_status else "移除书架"
         return {"err": "ok", "msg": _("%s成功") % action}
 
     @js
@@ -1970,7 +1970,7 @@ class BookWantToRead(BaseHandler):
             book_data = utils.BookFormatter(self, book).format()
             book_data["state"] = utils.ReadingStateFormatter.format_reading_state(state_dict[book_id])
             wants_books.append(book_data)
-        return {"err": "ok", "title": _("待读书籍"), "total": len(wants_books), "books": wants_books}
+        return {"err": "ok", "title": _("我的书架"), "total": len(wants_books), "books": wants_books}
 
 
 class BookReading(BaseHandler):

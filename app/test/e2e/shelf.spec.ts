@@ -1,0 +1,47 @@
+import { test, expect } from '@playwright/test';
+import fs from 'fs';
+import path from 'path';
+import { fileURLToPath } from 'url';
+
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = path.dirname(__filename);
+
+const mockDir = path.join(__dirname, 'mocks');
+const books = JSON.parse(fs.readFileSync(path.join(mockDir, 'books.json'), 'utf-8'));
+const book = books[0];
+
+test.describe('Shelf', () => {
+    test.beforeEach(async ({ request }) => {
+        await request.post('http://127.0.0.1:8080/_test/reset', {
+            data: { installed: true }
+        });
+    });
+
+    test('shows empty shelf and listed books', async ({ page, request }) => {
+        await page.goto('/user/shelf');
+        await expect(page.getByText('书架上还没有书，快去加入吧！')).toBeVisible();
+
+        await request.post(`http://127.0.0.1:8080/api/book/${book.id}/case`, {
+            data: { wants: true }
+        });
+
+        await page.goto('/user/shelf');
+        await expect(page.getByText(book.title).first()).toBeVisible();
+        await expect(page.locator(`a[href="/book/${book.id}"]`).first()).toBeVisible();
+    });
+
+    test('toggles shelf state from book detail', async ({ page, request }) => {
+        await page.goto(`/book/${book.id}`);
+
+        const addButton = page.getByRole('button', { name: '加入书架' }).last();
+        await expect(addButton).toBeVisible();
+        const caseResponse = page.waitForResponse(resp => resp.url().includes(`/api/book/${book.id}/case`) && resp.request().method() === 'POST');
+        await addButton.evaluate((el: HTMLElement) => el.click());
+        await caseResponse;
+
+        await expect(page.getByRole('button', { name: '移除书架' }).first()).toBeVisible();
+        const rsp = await request.get('http://127.0.0.1:8080/api/case');
+        const data = await rsp.json();
+        expect(data.books.some((item: { id: number }) => item.id === book.id)).toBe(true);
+    });
+});

@@ -140,6 +140,28 @@ class TestBookWantToRead(TestWithUserLogin):
         self.assertIn("books", d)
         self.assertIn("total", d)
 
+    def test_case_post_and_list(self):
+        self._clear_reading_state(BID_EPUB)
+        try:
+            body = json.dumps({"wants": True})
+            d = self.json("/api/book/%d/case" % BID_EPUB, method="POST", body=body)
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["msg"], "加入书架成功")
+
+            d = self.json("/api/case")
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["title"], "我的书架")
+            self.assertIn("books", d)
+            self.assertIn("total", d)
+            self.assertTrue(any(book["id"] == BID_EPUB for book in d["books"]))
+
+            body = json.dumps({"wants": False})
+            d = self.json("/api/book/%d/case" % BID_EPUB, method="POST", body=body)
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["msg"], "移除书架成功")
+        finally:
+            self._clear_reading_state(BID_EPUB)
+
     def test_wants_nonexistent_book(self):
         body = json.dumps({"wants": True})
         d = self.json("/api/book/99999/wants", method="POST", body=body)

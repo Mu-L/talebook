@@ -21,8 +21,8 @@ test.describe('Shelf', () => {
         await page.goto('/user/shelf');
         await expect(page.getByText('书架上还没有书，快去加入吧！')).toBeVisible();
 
-        await request.post(`http://127.0.0.1:8080/api/book/${book.id}/case`, {
-            data: { wants: true }
+        await request.post(`http://127.0.0.1:8080/api/book/${book.id}/shelf`, {
+            data: { shelf: true }
         });
 
         await page.goto('/user/shelf');
@@ -35,12 +35,12 @@ test.describe('Shelf', () => {
 
         const addButton = page.getByRole('button', { name: '加入书架' }).last();
         await expect(addButton).toBeVisible();
-        const caseResponse = page.waitForResponse(resp => resp.url().includes(`/api/book/${book.id}/case`) && resp.request().method() === 'POST');
+        const shelfResponse = page.waitForResponse(resp => resp.url().includes(`/api/book/${book.id}/shelf`) && resp.request().method() === 'POST');
         await addButton.evaluate((el: HTMLElement) => el.click());
-        await caseResponse;
+        await shelfResponse;
 
         await expect(page.getByRole('button', { name: '移除书架' }).first()).toBeVisible();
-        const rsp = await request.get('http://127.0.0.1:8080/api/case');
+        const rsp = await request.get('http://127.0.0.1:8080/api/shelf');
         const data = await rsp.json();
         expect(data.books.some((item: { id: number }) => item.id === book.id)).toBe(true);
     });

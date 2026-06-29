@@ -1927,7 +1927,7 @@ class BookFavorite(BaseHandler):
         return {"err": "ok", "title": _("我的收藏"), "total": len(favorite_books), "books": favorite_books}
 
 
-class BookWantToRead(BaseHandler):
+class BookShelf(BaseHandler):
     @js
     @auth
     def post(self, id):
@@ -1937,17 +1937,17 @@ class BookWantToRead(BaseHandler):
             return {"err": "params.book.invalid", "msg": _("书籍已不存在")}
         user_id = self.user_id()
         data = tornado.escape.json_decode(self.request.body)
-        wants_status = data.get("wants", False)
+        shelf_status = data.get("shelf", False)
         reading_state = (
             self.session.query(ReadingState).filter(ReadingState.book_id == book_id, ReadingState.reader_id == user_id).first()
         )
         if not reading_state:
             reading_state = ReadingState(book_id, user_id)
             self.session.add(reading_state)
-        reading_state.set_wants(wants_status)
+        reading_state.set_wants(shelf_status)
         self.session.commit()
-        action = "加入书架" if wants_status else "移除书架"
-        return {"err": "ok", "msg": _("%s成功") % action}
+        msg = _("加入书架成功") if shelf_status else _("移除书架成功")
+        return {"err": "ok", "msg": msg}
 
     @js
     @auth
@@ -1962,15 +1962,15 @@ class BookWantToRead(BaseHandler):
         book_ids = [state.book_id for state in reading_states]
         books_dict = {book["id"]: book for book in self.get_books(ids=book_ids)}
         state_dict = {state.book_id: state for state in reading_states}
-        wants_books = []
+        shelf_books = []
         for book_id in book_ids:
             book = books_dict.get(book_id)
             if not book:
                 continue
             book_data = utils.BookFormatter(self, book).format()
             book_data["state"] = utils.ReadingStateFormatter.format_reading_state(state_dict[book_id])
-            wants_books.append(book_data)
-        return {"err": "ok", "title": _("我的书架"), "total": len(wants_books), "books": wants_books}
+            shelf_books.append(book_data)
+        return {"err": "ok", "title": _("我的书架"), "total": len(shelf_books), "books": shelf_books}
 
 
 class BookReading(BaseHandler):
@@ -2184,12 +2184,10 @@ def routes():
         (r"/api/read/txt", TxtRead),
         (r"/api/book/txt/init", BookTxtInit),
         (r"/api/book/([0-9]+)/favorite", BookFavorite),
-        (r"/api/book/([0-9]+)/wants", BookWantToRead),
-        (r"/api/book/([0-9]+)/case", BookWantToRead),
+        (r"/api/book/([0-9]+)/shelf", BookShelf),
         (r"/api/book/([0-9]+)/readstate", BookReadingState),
         (r"/api/favorites", BookFavorite),
-        (r"/api/wants", BookWantToRead),
-        (r"/api/case", BookWantToRead),
+        (r"/api/shelf", BookShelf),
         (r"/api/reading", BookReading),
         (r"/api/read-done", BookReadDone),
         (r"/api/reading/stats", BookReadingStats),

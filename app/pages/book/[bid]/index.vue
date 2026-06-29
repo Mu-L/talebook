@@ -493,12 +493,12 @@
                             variant="elevated"
                             class="mx-2"
                             :loading="readingStateLoading"
-                            @click="toggleWants"
+                            @click="toggleShelf"
                         >
                             <v-icon start>
                                 mdi-bookshelf
                             </v-icon>
-                            {{ isWants ? t('book.removeFromWantToRead') : t('book.wantToRead') }}
+                            {{ isInShelf ? t('book.removeFromWantToRead') : t('book.wantToRead') }}
                         </v-btn>
 
                         <v-btn
@@ -968,21 +968,24 @@
             </v-col>
         </v-row>
 
-        <v-row v-if="book.id > 0 && store.user.is_login" class="mt-4">
+        <v-row
+            v-if="book.id > 0 && store.user.is_login"
+            class="mt-4"
+        >
             <v-col cols="12">
                 <v-card variant="outlined">
                     <v-card-text>
                         <div class="d-flex flex-wrap align-center ga-2">
                             <v-btn
                                 variant="tonal"
-                                :color="isWants ? 'orange' : 'primary'"
+                                :color="isInShelf ? 'orange' : 'primary'"
                                 size="small"
-                                @click="toggleWants"
+                                @click="toggleShelf"
                             >
                                 <v-icon start>
-                                    {{ isWants ? 'mdi-bookshelf' : 'mdi-bookshelf' }}
+                                    mdi-bookshelf
                                 </v-icon>
-                                {{ isWants ? t('book.removeFromWantToRead') : t('book.wantToRead') }}
+                                {{ isInShelf ? t('book.removeFromWantToRead') : t('book.wantToRead') }}
                             </v-btn>
 
                             <v-btn
@@ -1625,7 +1628,7 @@ watch(selectedDeviceOption, (newValue) => {
 
 const READING_STATE = { UNREAD: 0, READING: 1, FINISHED: 2 };
 
-const isWants = ref(false);
+const isInShelf = ref(false);
 const readingState = ref(0);
 const readingStateLoading = ref(false);
 const readDays = ref(0);
@@ -1636,14 +1639,14 @@ const loadReadingState = async () => {
     try {
         const rsp = await $backend(`/book/${book.value.id}/readstate`);
         if (rsp.err === 'ok') {
-            isWants.value = !!rsp.wants;
+            isInShelf.value = !!rsp.wants;
             readingState.value = rsp.read_state || 0;
             readDays.value = rsp.read_days || 0;
             lastReadTime.value = rsp.read_date || '';
         }
         if (book.value.state) {
             if (!rsp || rsp.err !== 'ok') {
-                isWants.value = !!book.value.state.wants;
+                isInShelf.value = !!book.value.state.wants;
                 readingState.value = book.value.state.read_state || 0;
             }
             readDays.value = book.value.state.read_days || 0;
@@ -1654,18 +1657,18 @@ const loadReadingState = async () => {
     }
 };
 
-const toggleWants = async () => {
+const toggleShelf = async () => {
     readingStateLoading.value = true;
     try {
-        const rsp = await $backend(`/book/${book.value.id}/case`, {
+        const rsp = await $backend(`/book/${book.value.id}/shelf`, {
             method: 'POST',
-            body: JSON.stringify({ wants: !isWants.value }),
+            body: JSON.stringify({ shelf: !isInShelf.value }),
         });
         if (rsp.err === 'ok') {
-            isWants.value = !isWants.value;
+            isInShelf.value = !isInShelf.value;
         }
     } catch (e) {
-        console.error('Wants error:', e);
+        console.error('Shelf error:', e);
     } finally {
         readingStateLoading.value = false;
     }
@@ -1688,7 +1691,7 @@ const handleReadingStateChange = async () => {
         if (rsp.err === 'ok') {
             readingState.value = newState;
             if (newState === READING_STATE.READING) {
-                isWants.value = false;
+                isInShelf.value = false;
                 readDays.value = 0;
             }
             if (newState === READING_STATE.FINISHED) {

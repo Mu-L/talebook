@@ -111,7 +111,7 @@ class TestBookFavorite(TestWithUserLogin):
         self.assertEqual(d["err"], "params.book.invalid")
 
 
-class TestBookWantToRead(TestWithUserLogin):
+class TestBookShelf(TestWithUserLogin):
     def _clear_reading_state(self, book_id, reader_id=1):
         from webserver.models import ReadingState
 
@@ -125,46 +125,46 @@ class TestBookWantToRead(TestWithUserLogin):
             session.delete(state)
             session.commit()
 
-    def test_wants_post(self):
+    def test_shelf_post(self):
         self._clear_reading_state(BID_EPUB)
         try:
-            body = json.dumps({"wants": True})
-            d = self.json("/api/book/%d/wants" % BID_EPUB, method="POST", body=body)
+            body = json.dumps({"shelf": True})
+            d = self.json("/api/book/%d/shelf" % BID_EPUB, method="POST", body=body)
             self.assertEqual(d["err"], "ok")
         finally:
             self._clear_reading_state(BID_EPUB)
 
-    def test_wants_list(self):
-        d = self.json("/api/wants")
+    def test_shelf_list(self):
+        d = self.json("/api/shelf")
         self.assertEqual(d["err"], "ok")
         self.assertIn("books", d)
         self.assertIn("total", d)
 
-    def test_case_post_and_list(self):
+    def test_shelf_post_and_list(self):
         self._clear_reading_state(BID_EPUB)
         try:
-            body = json.dumps({"wants": True})
-            d = self.json("/api/book/%d/case" % BID_EPUB, method="POST", body=body)
+            body = json.dumps({"shelf": True})
+            d = self.json("/api/book/%d/shelf" % BID_EPUB, method="POST", body=body)
             self.assertEqual(d["err"], "ok")
             self.assertEqual(d["msg"], "加入书架成功")
 
-            d = self.json("/api/case")
+            d = self.json("/api/shelf")
             self.assertEqual(d["err"], "ok")
             self.assertEqual(d["title"], "我的书架")
             self.assertIn("books", d)
             self.assertIn("total", d)
             self.assertTrue(any(book["id"] == BID_EPUB for book in d["books"]))
 
-            body = json.dumps({"wants": False})
-            d = self.json("/api/book/%d/case" % BID_EPUB, method="POST", body=body)
+            body = json.dumps({"shelf": False})
+            d = self.json("/api/book/%d/shelf" % BID_EPUB, method="POST", body=body)
             self.assertEqual(d["err"], "ok")
             self.assertEqual(d["msg"], "移除书架成功")
         finally:
             self._clear_reading_state(BID_EPUB)
 
-    def test_wants_nonexistent_book(self):
-        body = json.dumps({"wants": True})
-        d = self.json("/api/book/99999/wants", method="POST", body=body)
+    def test_shelf_nonexistent_book(self):
+        body = json.dumps({"shelf": True})
+        d = self.json("/api/book/99999/shelf", method="POST", body=body)
         self.assertEqual(d["err"], "params.book.invalid")
 
 

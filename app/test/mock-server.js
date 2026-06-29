@@ -286,7 +286,7 @@ const getShelfBooks = () => {
     }));
 };
 
-router.get('/api/case', eventHandler(() => {
+router.get('/api/shelf', eventHandler(() => {
   const shelfBooks = getShelfBooks();
   return {
     err: 'ok',
@@ -296,10 +296,10 @@ router.get('/api/case', eventHandler(() => {
   };
 }));
 
-router.post('/api/book/:id/case', eventHandler(async (event) => {
+router.post('/api/book/:id/shelf', eventHandler(async (event) => {
   const id = Number(getRouterParam(event, 'id'));
   const body = await readBody(event);
-  if (body && body.wants) {
+  if (body && body.shelf) {
     shelfBookIds.add(id);
     return { err: 'ok', msg: '加入书架成功' };
   }

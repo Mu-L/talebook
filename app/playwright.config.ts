@@ -15,7 +15,7 @@ export default defineConfig({
     /* Shared settings for all the projects below. See https://playwright.dev/docs/api/class-testoptions. */
     use: {
     /* Base URL to use in actions like `await page.goto('/')`. */
-        baseURL: 'http://localhost:3000',
+        baseURL: process.env.PLAYWRIGHT_BASE_URL || 'http://127.0.0.1:3000',
 
         /* 固定中文环境：用例断言中文文案，避免受宿主/浏览器语言影响（i18n 开启了 detectBrowserLanguage） */
         locale: 'zh-CN',

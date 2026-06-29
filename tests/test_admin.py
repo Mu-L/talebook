@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
+import datetime
 import json
 import os
 import tempfile
@@ -209,9 +210,7 @@ class TestAdminMigrateDB(TestWithAdminUser):
                         d = self.json("/api/admin/migratedb", method="POST", body=body)
                 self.assertEqual(d["err"], "ok")
                 self.assertTrue(d.get("need_restart"))
-                self.assertEqual(
-                    main.CONF["user_database"], "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4"
-                )
+                self.assertEqual(main.CONF["user_database"], "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4")
         finally:
             # restore original db url in CONF
             main.CONF["user_database"] = original_db_url
@@ -363,69 +362,166 @@ class TestAdminSystemLog(TestWithAdminUser):
 class TestAdminUsersBatch(TestWithAdminUser):
     """AdminUsersBatch 批量权限接口测试"""
 
-    def _get_user_ids(self):
-        """获取两个非管理员测试用户的 ID"""
+    def _delete_test_users(self, usernames):
         from webserver import models
 
         session = get_db()
-        users = session.query(models.Reader).filter(models.Reader.admin.is_(False)).limit(2).all()
-        return [u.id for u in users]
+        session.query(models.Reader).filter(models.Reader.username.in_(usernames)).delete(synchronize_session=False)
+        session.commit()
+
+    def _create_test_users(self, count):
+        """创建独立测试用户，避免永久改写共享 fixture 用户权限"""
+        from webserver import models
+
+        usernames = ["batchperm%d" % i for i in range(count)]
+        self._delete_test_users(usernames)
+
+        session = get_db()
+        now = datetime.datetime.now()
+        users = []
+        for username in usernames:
+            user = models.Reader()
+            user.username = username
+            user.name = username
+            user.email = "%s@example.com" % username
+            user.admin = False
+            user.active = True
+            user.create_time = now
+            user.update_time = now
+            user.access_time = now
+            user.extra = {"kindle_email": ""}
+            user.set_secure_password("Passw0rd!")
+            users.append(user)
+            session.add(user)
+        session.commit()
+        return usernames, [u.id for u in users]
 
     def test_batch_permission_update(self):
         """批量更新权限后，所有指定用户的权限应被正确设置，包含和不含的权限都验证"""
         from webserver import models
 
-        ids = self._get_user_ids()
-        self.assertTrue(len(ids) >= 2, "测试数据库中需要至少 2 个非管理员用户")
+        usernames, ids = self._create_test_users(2)
+        try:
+            # lrsp 启用登录/阅读/收藏/推送，UED 显式禁用上传/编辑/删除
+            req = json.dumps({"ids": ids, "permission": "lrspUED"})
+            d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["updated"], len(ids))
 
-        # lrsp 启用登录/阅读/收藏/推送，UED 显式禁用上传/编辑/删除
-        req = json.dumps({"ids": ids, "permission": "lrspUED"})
-        d = self.json("/api/admin/users/batch", method="POST", body=req)
-        self.assertEqual(d["err"], "ok")
-        self.assertEqual(d["updated"], len(ids))
-
-        session = get_db()
-        for uid in ids:
-            user = session.query(models.Reader).filter(models.Reader.id == uid).first()
-            self.assertTrue(user.can_login())
-            self.assertTrue(user.can_read())
-            self.assertTrue(user.can_save())
-            self.assertTrue(user.can_push())
-            # 显式禁用的权限应为 False
-            self.assertFalse(user.can_upload())
-            self.assertFalse(user.can_edit())
-            self.assertFalse(user.can_delete())
+            session = get_db()
+            for uid in ids:
+                user = session.query(models.Reader).filter(models.Reader.id == uid).first()
+                self.assertTrue(user.can_login())
+                self.assertTrue(user.can_read())
+                self.assertTrue(user.can_save())
+                self.assertTrue(user.can_push())
+                # 显式禁用的权限应为 False
+                self.assertFalse(user.can_upload())
+                self.assertFalse(user.can_edit())
+                self.assertFalse(user.can_delete())
+        finally:
+            self._delete_test_users(usernames)
 
     def test_batch_permission_disable(self):
         """批量禁用权限后，指定用户的权限应被正确关闭"""
         from webserver import models
 
-        ids = self._get_user_ids()
-        self.assertTrue(len(ids) >= 1)
+        usernames, ids = self._create_test_users(1)
+        try:
+            req = json.dumps({"ids": ids, "permission": "UED"})
+            d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["updated"], 1)
 
-        req = json.dumps({"ids": ids[:1], "permission": "UED"})
-        d = self.json("/api/admin/users/batch", method="POST", body=req)
-        self.assertEqual(d["err"], "ok")
-        self.assertEqual(d["updated"], 1)
+            session = get_db()
+            user = session.query(models.Reader).filter(models.Reader.id == ids[0]).first()
+            self.assertFalse(user.can_upload())
+            self.assertFalse(user.can_edit())
+            self.assertFalse(user.can_delete())
+        finally:
+            self._delete_test_users(usernames)
 
-        session = get_db()
-        user = session.query(models.Reader).filter(models.Reader.id == ids[0]).first()
-        self.assertFalse(user.can_upload())
-        self.assertFalse(user.can_edit())
-        self.assertFalse(user.can_delete())
+    def test_batch_rejects_current_user(self):
+        """批量权限不能修改当前管理员自身，避免把自己锁出系统"""
+        from webserver import models
+
+        usernames, ids = self._create_test_users(1)
+        try:
+            req = json.dumps({"ids": [1] + ids, "permission": "L"})
+            d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "params.user.invalid")
+
+            session = get_db()
+            current_user = session.query(models.Reader).filter(models.Reader.id == 1).first()
+            other_user = session.query(models.Reader).filter(models.Reader.id == ids[0]).first()
+            self.assertTrue(current_user.can_login())
+            self.assertTrue(other_user.can_login())
+        finally:
+            self._delete_test_users(usernames)
+
+    def test_batch_rolls_back_on_failure(self):
+        """批量更新中途失败时，不应留下部分已提交的权限变更"""
+        from webserver import models
+
+        usernames, ids = self._create_test_users(2)
+        calls = []
+        original_set_permission = models.Reader.set_permission
+
+        def flaky_set_permission(user, permission):
+            calls.append(user.id)
+            if len(calls) == 2:
+                raise RuntimeError("boom")
+            return original_set_permission(user, permission)
+
+        try:
+            with mock.patch.object(models.Reader, "set_permission", flaky_set_permission):
+                req = json.dumps({"ids": ids, "permission": "UED"})
+                d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "exception")
+
+            session = get_db()
+            for uid in ids:
+                user = session.query(models.Reader).filter(models.Reader.id == uid).first()
+                self.assertTrue(user.can_upload())
+                self.assertTrue(user.can_edit())
+                self.assertTrue(user.can_delete())
+        finally:
+            self._delete_test_users(usernames)
+
+    def test_batch_ignores_missing_user_ids(self):
+        """不存在的 id 静默忽略，updated 只统计实际命中的用户"""
+        from webserver import models
+
+        usernames, ids = self._create_test_users(1)
+        try:
+            req = json.dumps({"ids": ids + [999999], "permission": "UED"})
+            d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["updated"], 1)
+
+            session = get_db()
+            user = session.query(models.Reader).filter(models.Reader.id == ids[0]).first()
+            self.assertFalse(user.can_upload())
+            self.assertFalse(user.can_edit())
+            self.assertFalse(user.can_delete())
+        finally:
+            self._delete_test_users(usernames)
+
+    def test_batch_missing_permission(self):
+        """缺少 permission 参数时应返回错误"""
+        usernames, ids = self._create_test_users(1)
+        try:
+            req = json.dumps({"ids": ids})
+            d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "params.permission.invalid")
+        finally:
+            self._delete_test_users(usernames)
 
     def test_batch_missing_ids(self):
         """缺少 ids 参数时应返回错误"""
         req = json.dumps({"permission": "lrsp"})
         d = self.json("/api/admin/users/batch", method="POST", body=req)
         self.assertEqual(d["err"], "params.ids.required")
-
-    def test_batch_missing_permission(self):
-        """缺少 permission 参数时应返回错误"""
-        ids = self._get_user_ids()
-        req = json.dumps({"ids": ids})
-        d = self.json("/api/admin/users/batch", method="POST", body=req)
-        self.assertEqual(d["err"], "params.permission.invalid")
 
     def test_batch_ids_too_many(self):
         """ids 列表超过 500 时应返回错误"""
@@ -475,12 +571,14 @@ class TestAdminDefaultUserPermission(TestWithAdminUser):
         original = main.CONF.get("DEFAULT_USER_PERMISSION", "")
         try:
             main.CONF["DEFAULT_USER_PERMISSION"] = "lrspUED"
-            req = json.dumps({
-                "username": "testdefperm",
-                "password": "Passw0rd!",
-                "name": "Test Default",
-                "email": "testdefperm@example.com",
-            })
+            req = json.dumps(
+                {
+                    "username": "testdefperm",
+                    "password": "Passw0rd!",
+                    "name": "Test Default",
+                    "email": "testdefperm@example.com",
+                }
+            )
             d = self.json("/api/admin/users", method="POST", body=req)
             self.assertEqual(d["err"], "ok")
 

@@ -183,9 +183,7 @@ class AdminUsers(BaseHandler):
             if self.user_id() == user.id:
                 return {"err": "params.user.invalid", "msg": _("不允许删除自己")}
 
-            for sa in user.social_auth.all():
-                self.session.delete(sa)
-            self.session.delete(user)
+            self.session.query(Reader).filter(Reader.id == user.id).delete()
             self.session.commit()
             return {"err": "ok", "msg": _("删除成功")}
 
@@ -215,10 +213,14 @@ class AdminUsersBatch(BaseHandler):
         if not isinstance(permission, str) or not permission:
             return {"err": "params.permission.invalid", "msg": _("权限参数不对")}
 
+        current_user_id = self.user_id()
+        if current_user_id in ids:
+            return {"err": "params.user.invalid", "msg": _("不允许批量修改自己的权限")}
+
         users = self.session.query(Reader).filter(Reader.id.in_(ids)).all()
         for user in users:
             user.set_permission(permission)
-            user.save()
+        self.session.commit()
         updated = len(users)
 
         return {"err": "ok", "updated": updated, "msg": _("已更新 %d 个用户的权限") % updated}

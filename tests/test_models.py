@@ -285,12 +285,12 @@ class TestReadingState(unittest.TestCase):
         s.set_read_state(99)
         self.assertEqual(s.get_read_state(), 1)
 
-    def test_set_read_state_clears_wants(self):
+    def test_set_read_state_preserves_wants(self):
         s = self._make_state()
         s.set_wants(True)
         self.assertEqual(s.wants, 1)
         s.set_read_state(1)
-        self.assertEqual(s.wants, 0)
+        self.assertEqual(s.wants, 1)
 
     def test_set_online_read(self):
         s = self._make_state()

@@ -512,8 +512,6 @@ class ReadingState(Base, SQLAlchemyMixin):
         if read_state in [0, 1, 2]:
             self.read_state = read_state
             self.read_date = datetime.datetime.now()
-        if read_state > READ_STATE_UNREAD:
-            self.wants = 0
 
     def get_read_state(self):
         return self.read_state

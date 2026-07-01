@@ -394,6 +394,7 @@ class AdminSettings(BaseHandler):
             "douban_baseurl",
             "douban_max_count",
             "auto_fill_meta",
+            "auto_fill_keep_cover",
             "META_SELECTED_SOURCES",
             "ai_api_url",
             "ai_api_key",

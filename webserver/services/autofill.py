@@ -106,7 +106,10 @@ class AutoFillService(AsyncService):
             logging.info(_("忽略更新书籍 id=%d : 无法获取信息"), book_id)
             return False
 
-        if refer_mi.cover_data is None:
+        # 若开启了保留封面选项，且书籍已有封面，则不使用抓取到的封面覆盖原封面
+        if CONF.get("auto_fill_keep_cover", False) and mi.has_cover:
+            refer_mi.cover_data = None
+        elif refer_mi.cover_data is None:
             logging.info(_("忽略更新书籍 id=%d : 无法获取封面"), book_id)
             return False
 

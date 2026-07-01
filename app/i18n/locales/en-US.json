@@ -681,6 +681,7 @@
         "name": "Name",
         "link": "Link",
         "autoFillMeta": "Auto fill book info",
+        "autoFillKeepCover": "Keep existing cover when auto filling book info",
         "metaSelectedSource": "Select enabled metadata sources",
         "doubanBaseurl": "Douban API URL",
         "doubanApiKey": "Douban API Key",

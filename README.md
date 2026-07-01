@@ -43,6 +43,17 @@ A better online books library management website built on Calibre + Vue
 * **基础设施**：升级 Tornado 6.5，改用 uv 管理 Python 依赖，新增数据库迁移工具；Docker 基础镜像合并为 `talebook/talebook-base`，构建提速。
 
 
+## 桌面客户端 — Moke
+
+**[Moke](https://github.com/talebook/moke)** 是 Talebook 的桌面客户端，跨平台支持 Windows、macOS 和 Linux。启动后输入你的 Talebook 服务器地址即可浏览、搜索、下载并阅读电子书。
+
+* **专业阅读器**：内嵌 [readest](https://github.com/readest/readest) 阅读器，支持 EPUB、PDF 等多种格式，提供高亮、笔记、书签等进阶阅读功能；
+* **离线下载**：将服务器上的书籍一键下载到本地，断网也能随时打开阅读；
+* **局域网友好**：完美支持自签名证书和纯 HTTP 局域网服务器，NAS 用户开箱即用；
+* **完整认证**：支持访问码、登录、注册等 Talebook 的全部认证方式；
+
+从 [Releases](https://github.com/talebook/moke/releases) 页面下载对应平台的安装包（`.msi` / `.dmg` / `.AppImage`），即刻体验桌面端阅读。
+
 ## Docker ![Docker Pulls](https://img.shields.io/docker/pulls/talebook/talebook.svg)
 
 部署比较简单，建议采用docker，镜像地址：[dockerhub](https://hub.docker.com/r/talebook/talebook)

@@ -38,17 +38,8 @@ done
 
 mkdir -p /root/.npm
 
-# 设置PUID/GUID权限
-permission_file=/data/.permission
-touch $permission_file
-permission=`cat $permission_file`
-if [ "x$permission" != "x$PUID:$PGID" ]; then
-    echo "updating '/data/' permission to $PUID:$PGID"
-    chown -R talebook:talebook /data
-    echo "$PUID:$PGID" > $permission_file
-fi
-
-# 设置系统文件的权限（数量较少）
+# 设置系统文件的权限（数量较少，且 nginx/诊断页在自检完成前就需要可用，必须先于 supervisord 启动前就绪）
+mkdir -p /data/log/nginx /var/www/talebook/status
 chown -R talebook:talebook \
   /data/log/ \
   /var/lib/nginx \
@@ -58,37 +49,15 @@ chown -R talebook:talebook \
   /var/www/talebook/app/dist \
   /var/www/talebook/webserver \
   /var/www/talebook/server.py \
+  /var/www/talebook/status \
   /usr/lib/calibre \
   /usr/share/calibre
 
-# 检测权限
-TEST_WRITE_FILE=/data/books/library/test_writeable.txt
-date > $TEST_WRITE_FILE
-if [ $? -ne 0 ]; then
-    echo "目录权限异常，无法写入";
-    exit 1
-else
-    rm $TEST_WRITE_FILE
-fi
-
-# 启动
+# /data/books 的权限校验、nginx 配置检查、数据库初始化/迁移/配置写入这些"可能失败"的
+# 步骤，交给 supervisor 的 bootstrap program（webserver/self_check.py）在 nginx 启动
+# 之后逐项自检并写入 status.json；任一步失败都不会导致容器整体重启，nginx 与诊断页
+# 始终可访问，用户不需要进入容器查看日志即可知道卡在哪一步、该怎么处理。
 export PYTHONDONTWRITEBYTECODE=1
-echo
-echo "====== Check config ===="
-nginx -t || exit 1
-
-echo
-echo "====== Sync DB Scheme ===="
-gosu talebook:talebook /var/www/talebook/server.py --syncdb
-
-echo
-echo "====== Migrate Database Schema ===="
-echo "Checking for missing columns and adding them..."
-gosu talebook:talebook /var/www/talebook/webserver/migrate_db.py
-
-echo
-echo "====== Update Server Config ===="
-gosu talebook:talebook /var/www/talebook/server.py --update-config
 
 echo
 echo "====== Start Server ===="

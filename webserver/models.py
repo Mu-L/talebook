@@ -512,8 +512,6 @@ class ReadingState(Base, SQLAlchemyMixin):
         if read_state in [0, 1, 2]:
             self.read_state = read_state
             self.read_date = datetime.datetime.now()
-        if read_state > READ_STATE_UNREAD:
-            self.wants = 0
 
     def get_read_state(self):
         return self.read_state
@@ -532,7 +530,9 @@ class BookSourceModel(Base, SQLAlchemyMixin):
 
     id = Column(Integer, primary_key=True)
     name = Column(String(200), nullable=False, index=True)
-    url = Column(String(1000), nullable=False, index=True)  # bookSourceUrl，导入时按此 upsert
+    url = Column(
+        String(767), nullable=False, index=True
+    )  # bookSourceUrl，导入时按此 upsert；767×4=3068 ≤ MySQL utf8mb4 索引上限 3072 字节
     group = Column(String(200), default="", index=True)
     source_type = Column(Integer, default=0)
     enabled = Column(Boolean, default=True, index=True)

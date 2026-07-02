@@ -1,0 +1,96 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<title>Talebook 启动状态</title>
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<style>
+  body { font-family: -apple-system, "Microsoft YaHei", sans-serif; max-width: 640px; margin: 40px auto; padding: 0 16px; color: #222; }
+  h1 { font-size: 20px; }
+  ul { list-style: none; padding: 0; }
+  li { padding: 10px 12px; margin-bottom: 8px; border-radius: 6px; background: #f5f5f5; display: flex; align-items: center; }
+  li .icon { margin-right: 10px; font-size: 16px; }
+  li.ok { background: #eaf7ea; }
+  li.failed { background: #fdecea; }
+  li.pending { background: #f5f5f5; color: #888; }
+  .hint { margin-top: 4px; font-size: 13px; color: #a33; display: block; }
+  #summary { padding: 12px; border-radius: 6px; margin-bottom: 16px; }
+  #summary.ready { background: #eaf7ea; }
+  #summary.failed { background: #fdecea; }
+  #summary.starting { background: #eef3fb; }
+  #error { color: #a33; }
+</style>
+</head>
+<body>
+<h1>Talebook 启动状态</h1>
+<div id="summary">正在加载...</div>
+<ul id="steps"></ul>
+<p id="error" style="display:none">无法读取 /status.json，请稍后刷新，或确认容器是否正常运行（可用 <code>docker logs</code> 查看）。</p>
+
+<script>
+var STEP_NAMES = {
+  permission: '数据目录权限校验',
+  nginx_config: 'Nginx 配置检查',
+  syncdb: '数据库初始化',
+  migrate: '数据库结构迁移',
+  update_config: '服务器配置写入'
+};
+
+var CODE_HINTS = {
+  permission_denied: '检测到 /data 目录写入失败，请检查挂载卷的 PUID/PGID 与目录权限设置。',
+  nginx_config_invalid: 'Nginx 配置校验失败，请检查是否覆盖了自定义证书或配置文件。',
+  syncdb_failed: '数据库初始化失败，请检查 /data/books 目录是否可写、磁盘空间是否充足。',
+  migrate_failed: '数据库结构迁移失败，请检查 /data/books/calibre-webserver.db 是否可正常访问。',
+  update_config_failed: '服务器配置写入失败，请检查 /data/books/settings 目录权限。'
+};
+
+var SUMMARY_TEXT = {
+  starting: '服务器正在启动中，请稍候...',
+  ready: '服务器已就绪。',
+  failed: '服务器启动失败，请根据下方提示处理。'
+};
+
+function render(doc) {
+  var summary = document.getElementById('summary');
+  summary.className = doc.phase;
+  summary.textContent = SUMMARY_TEXT[doc.phase] || doc.phase;
+
+  var list = document.getElementById('steps');
+  list.innerHTML = '';
+  (doc.steps || []).forEach(function (step) {
+    var li = document.createElement('li');
+    li.className = step.status;
+    var icon = step.status === 'ok' ? '✅' : (step.status === 'failed' ? '❌' : '⏳');
+    var name = STEP_NAMES[step.name] || step.name;
+    var html = '<span class="icon">' + icon + '</span><span>' + name + '</span>';
+    li.innerHTML = html;
+    if (step.status === 'failed' && step.code && CODE_HINTS[step.code]) {
+      var hint = document.createElement('span');
+      hint.className = 'hint';
+      hint.textContent = CODE_HINTS[step.code];
+      li.appendChild(hint);
+    }
+    list.appendChild(li);
+  });
+}
+
+function poll() {
+  fetch('/status.json', { cache: 'no-store' })
+    .then(function (rsp) {
+      if (!rsp.ok) { throw new Error('status ' + rsp.status); }
+      return rsp.json();
+    })
+    .then(function (doc) {
+      document.getElementById('error').style.display = 'none';
+      render(doc);
+    })
+    .catch(function () {
+      document.getElementById('error').style.display = 'block';
+    });
+}
+
+poll();
+setInterval(poll, 3000);
+</script>
+</body>
+</html>

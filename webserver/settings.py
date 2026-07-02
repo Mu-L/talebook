@@ -120,6 +120,7 @@ settings = {
     'ALLOW_GUEST_DOWNLOAD' : True,
     'ALLOW_GUEST_UPLOAD' : False,
     'ALLOW_REGISTER' : False,
+    'DEFAULT_USER_PERMISSION' : '',
     'ALLOW_FEEDBACK' : True,
     'OPDS_ENABLED' : True,
     'FEEDBACK_URL' : 'https://github.com/talebook/talebook/issues',

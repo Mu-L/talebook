@@ -16,6 +16,7 @@ let saveStarted = false;
 let saveStatusPolls = 0;
 let booksourceCheckRunning = false;
 let booksourceCheckPolls = 0;
+let shelfBookIds = new Set();
 
 const app = createApp();
 const router = createRouter();
@@ -43,6 +44,7 @@ router.post('/_test/reset', eventHandler(async (event) => {
   saveStatusPolls = 0;
   booksourceCheckRunning = false;
   booksourceCheckPolls = 0;
+  shelfBookIds = new Set();
   return { status: 'ok' };
 }));
 
@@ -264,6 +266,66 @@ router.get('/api/search', eventHandler((event) => {
     books: filtered
   };
 }));
+
+const getShelfBooks = () => {
+  const books = readJson('books.json') || [];
+  return books
+    .filter(book => shelfBookIds.has(Number(book.id)))
+    .map(book => ({
+      ...book,
+      state: {
+        favorite: 0,
+        favorite_date: null,
+        wants: 1,
+        wants_date: '2023-01-01T00:00:00',
+        read_state: 0,
+        read_date: null,
+        online_read: 0,
+        download: 0,
+      },
+    }));
+};
+
+router.get('/api/shelf', eventHandler(() => {
+  const shelfBooks = getShelfBooks();
+  return {
+    err: 'ok',
+    title: '我的书架',
+    total: shelfBooks.length,
+    books: shelfBooks,
+  };
+}));
+
+router.post('/api/book/:id/shelf', eventHandler(async (event) => {
+  const id = Number(getRouterParam(event, 'id'));
+  const body = await readBody(event);
+  if (body && body.shelf) {
+    shelfBookIds.add(id);
+    return { err: 'ok', msg: '加入书架成功' };
+  }
+  shelfBookIds.delete(id);
+  return { err: 'ok', msg: '移除书架成功' };
+}));
+
+router.get('/api/book/:id/readstate', eventHandler((event) => {
+  const id = Number(getRouterParam(event, 'id'));
+  return {
+    err: 'ok',
+    favorite: false,
+    wants: shelfBookIds.has(id),
+    read_state: 0,
+    read_date: null,
+    favorite_date: null,
+    wants_date: shelfBookIds.has(id) ? '2023-01-01T00:00:00' : null,
+    online_read: 0,
+    download: 0,
+  };
+}));
+
+router.post('/api/book/:id/readstate', eventHandler(() => ({
+  err: 'ok',
+  msg: 'Reading state updated',
+})));
 
 // Book Detail
 router.get('/api/book/:id', eventHandler((event) => {

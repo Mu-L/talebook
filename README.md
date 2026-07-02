@@ -43,6 +43,17 @@ A better online books library management website built on Calibre + Vue
 * **基础设施**：升级 Tornado 6.5，改用 uv 管理 Python 依赖，新增数据库迁移工具；Docker 基础镜像合并为 `talebook/talebook-base`，构建提速。
 
 
+## 桌面客户端 — Moke
+
+**[Moke](https://github.com/talebook/moke)** 是 Talebook 的桌面客户端，跨平台支持 Windows、macOS 和 Linux。启动后输入你的 Talebook 服务器地址即可浏览、搜索、下载并阅读电子书。
+
+* **专业阅读器**：内嵌 [readest](https://github.com/readest/readest) 阅读器，支持 EPUB、PDF 等多种格式，提供高亮、笔记、书签等进阶阅读功能；
+* **离线下载**：将服务器上的书籍一键下载到本地，断网也能随时打开阅读；
+* **局域网友好**：完美支持自签名证书和 HTTP/HTTPS 局域网服务器，NAS 用户开箱即用；
+* **完整认证**：支持访问码、登录、注册等 Talebook 的全部认证方式；
+
+从 [Releases](https://github.com/talebook/moke/releases) 页面下载对应平台的安装包（`.msi` / `.dmg` / `.AppImage`），即刻体验桌面端阅读。
+
 ## Docker ![Docker Pulls](https://img.shields.io/docker/pulls/talebook/talebook.svg)
 
 部署比较简单，建议采用docker，镜像地址：[dockerhub](https://hub.docker.com/r/talebook/talebook)
@@ -66,6 +77,14 @@ docker-compose -f docker-compose.yml  up -d
 `docker run -d --name talebook -p 8080:80 -v /tmp/demo:/data talebook/talebook`
 
 
+## Start History
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=talebook/talebook&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=talebook/talebook&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=talebook/talebook&type=date&legend=top-left" />
+ </picture>
+
+
 
 ## 常见问题 
 
@@ -77,7 +96,7 @@ NAS安装指南：请参考网友们的帖子：[帖子1](https://post.smzdm.com
 
 **如果觉得本项目很棒，欢迎前往[爱发电](https://afdian.com/@talebook)，赞助作者，持续优化，为爱充电！**
 
-**再次声明！本项目没有维护任何公开的书库站点，例如 joyeuse, wenyuange 等网站均属于网友搭建的，相关问题请不要咨询我，爱莫能助！**
+**再次声明！本项目没有维护任何公开的书库站点，各类网站均属于网友搭建的，相关问题请不要咨询我，爱莫能助！**
 
 
 ## 贡献者

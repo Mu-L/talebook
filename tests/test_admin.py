@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
+import datetime
 import json
 import os
 import tempfile
+import urllib.parse
 from unittest import mock
 
 from tests.test_main import TestWithAdminUser, TestWithUserLogin, get_db
@@ -92,6 +94,216 @@ class TestAdminSettingsSecurity(TestWithAdminUser):
         self.assertEqual(namespace["settings"][key], "value")
 
 
+class TestAdminTestDB(TestWithAdminUser):
+    """AdminTestDB 接口测试"""
+
+    def test_sqlite_always_ok(self):
+        """SQLite 类型直接返回 ok"""
+        body = urllib.parse.urlencode({"db_type": "sqlite"})
+        d = self.json("/api/admin/testdb", method="POST", body=body)
+        self.assertEqual(d["err"], "ok")
+
+    def test_mysql_missing_params(self):
+        """缺少必填参数时返回 params.invalid"""
+        body = urllib.parse.urlencode({"db_type": "mysql", "db_host": "localhost"})
+        d = self.json("/api/admin/testdb", method="POST", body=body)
+        self.assertEqual(d["err"], "params.invalid")
+
+    def test_mysql_connect_failed(self):
+        """MySQL 连接失败时返回 db.connect_failed"""
+        body = urllib.parse.urlencode(
+            {
+                "db_type": "mysql",
+                "db_host": "127.0.0.1",
+                "db_port": "3306",
+                "db_name": "nonexistent_db",
+                "db_user": "bad_user",
+                "db_pass": "bad_pass",
+            }
+        )
+        d = self.json("/api/admin/testdb", method="POST", body=body)
+        self.assertEqual(d["err"], "db.connect_failed")
+
+    def test_invalid_port_rejected(self):
+        """端口号超出范围时返回 params.invalid"""
+        body = urllib.parse.urlencode(
+            {
+                "db_type": "mysql",
+                "db_host": "localhost",
+                "db_port": "0",
+                "db_name": "testdb",
+                "db_user": "root",
+                "db_pass": "pass",
+            }
+        )
+        d = self.json("/api/admin/testdb", method="POST", body=body)
+        self.assertEqual(d["err"], "params.invalid")
+
+    def test_requires_admin_after_install(self):
+        """安装后非管理员无法访问"""
+        from webserver import models
+
+        session = get_db()
+        user = session.query(models.Reader).filter(models.Reader.id == 1).first()
+        original_admin = user.admin
+        user.admin = False
+        session.commit()
+        try:
+            body = urllib.parse.urlencode({"db_type": "sqlite"})
+            d = self.json("/api/admin/testdb", method="POST", body=body)
+            self.assertEqual(d["err"], "permission")
+        finally:
+            user.admin = original_admin
+            session.commit()
+
+
+class TestAdminMigrateDB(TestWithAdminUser):
+    """AdminMigrateDB 接口测试"""
+
+    def test_sqlite_target_rejected(self):
+        """目标类型为 sqlite 时返回 params.invalid"""
+        body = urllib.parse.urlencode({"db_type": "sqlite"})
+        d = self.json("/api/admin/migratedb", method="POST", body=body)
+        self.assertEqual(d["err"], "params.invalid")
+
+    def test_missing_params_rejected(self):
+        """缺少必填参数时返回 params.invalid"""
+        body = urllib.parse.urlencode({"db_type": "mysql", "db_host": "localhost"})
+        d = self.json("/api/admin/migratedb", method="POST", body=body)
+        self.assertEqual(d["err"], "params.invalid")
+
+    def test_bad_connection_returns_error(self):
+        """无法连接的 MySQL 返回 db.migrate_failed 或 db.connect_failed 类错误"""
+        body = urllib.parse.urlencode(
+            {
+                "db_type": "mysql",
+                "db_host": "127.0.0.1",
+                "db_port": "3306",
+                "db_name": "nonexistent_db",
+                "db_user": "bad_user",
+                "db_pass": "bad_pass",
+            }
+        )
+        d = self.json("/api/admin/migratedb", method="POST", body=body)
+        self.assertIn(d["err"], ("db.migrate_failed",))
+
+    def test_migrate_success_via_mock(self):
+        """使用 mock 测试迁移逻辑: 迁移成功时返回 ok 并写入 user_database 配置"""
+        import tempfile
+
+        from webserver import loader, main
+
+        original_db_url = main.CONF["user_database"]
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+
+                def fake_migrate(source_url, target_url, force=False):
+                    pass
+
+                with mock.patch("webserver.migrate_db.migrate_data", side_effect=fake_migrate):
+                    with mock.patch("webserver.loader.SettingsLoader.set_store_path", return_value=tmpdir):
+                        body = urllib.parse.urlencode(
+                            {
+                                "user_database": "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4",
+                            }
+                        )
+                        d = self.json("/api/admin/migratedb", method="POST", body=body)
+                self.assertEqual(d["err"], "ok")
+                self.assertTrue(d.get("need_restart"))
+                self.assertEqual(main.CONF["user_database"], "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4")
+        finally:
+            # restore original db url in CONF
+            main.CONF["user_database"] = original_db_url
+            loader.get_settings()["user_database"] = original_db_url
+
+    def test_invalid_port_rejected(self):
+        """端口号超出范围时返回 params.invalid"""
+        body = urllib.parse.urlencode(
+            {
+                "db_type": "mysql",
+                "db_host": "localhost",
+                "db_port": "99999",
+                "db_name": "testdb",
+                "db_user": "root",
+                "db_pass": "pass",
+            }
+        )
+        d = self.json("/api/admin/migratedb", method="POST", body=body)
+        self.assertEqual(d["err"], "params.invalid")
+
+    def test_target_has_data_warning(self):
+        """目标库有数据且不带 force 时，返回 db.target_has_data 警告"""
+        import tempfile
+
+        from webserver import loader, main
+        from webserver.migrate_db import TargetNotEmptyError
+
+        original_db_url = main.CONF["user_database"]
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+
+                def fake_migrate_nonempty(source_url, target_url, force=False):
+                    raise TargetNotEmptyError(42)
+
+                with mock.patch("webserver.migrate_db.migrate_data", side_effect=fake_migrate_nonempty):
+                    with mock.patch("webserver.loader.SettingsLoader.set_store_path", return_value=tmpdir):
+                        body = urllib.parse.urlencode(
+                            {
+                                "user_database": "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4",
+                            }
+                        )
+                        d = self.json("/api/admin/migratedb", method="POST", body=body)
+                self.assertEqual(d["err"], "db.target_has_data")
+                self.assertEqual(d["count"], 42)
+        finally:
+            main.CONF["user_database"] = original_db_url
+            loader.get_settings()["user_database"] = original_db_url
+
+    def test_target_has_data_force_succeeds(self):
+        """目标库有数据且带 force=1 时，迁移正常完成"""
+        import tempfile
+
+        from webserver import loader, main
+
+        original_db_url = main.CONF["user_database"]
+        try:
+            with tempfile.TemporaryDirectory() as tmpdir:
+
+                def fake_migrate(source_url, target_url, force=False):
+                    pass
+
+                with mock.patch("webserver.migrate_db.migrate_data", side_effect=fake_migrate):
+                    with mock.patch("webserver.loader.SettingsLoader.set_store_path", return_value=tmpdir):
+                        body = urllib.parse.urlencode(
+                            {
+                                "user_database": "mysql+pymysql://root:pass@localhost:3306/testdb?charset=utf8mb4",
+                                "force": "1",
+                            }
+                        )
+                        d = self.json("/api/admin/migratedb", method="POST", body=body)
+                self.assertEqual(d["err"], "ok")
+        finally:
+            main.CONF["user_database"] = original_db_url
+            loader.get_settings()["user_database"] = original_db_url
+
+    def test_requires_admin(self):
+        """非管理员无法访问"""
+        from webserver import models
+
+        session = get_db()
+        user = session.query(models.Reader).filter(models.Reader.id == 1).first()
+        original_admin = user.admin
+        user.admin = False
+        session.commit()
+        try:
+            body = urllib.parse.urlencode({"db_type": "mysql"})
+            d = self.json("/api/admin/migratedb", method="POST", body=body)
+            self.assertEqual(d["err"], "permission")
+        finally:
+            user.admin = original_admin
+            session.commit()
+
+
 class TestAdminSystemLog(TestWithAdminUser):
     def test_log_returns_ok_when_file_missing(self):
         """日志文件不存在时，接口应返回 ok 且 lines 为空列表"""
@@ -145,3 +357,354 @@ class TestAdminSystemLog(TestWithAdminUser):
         finally:
             user.admin = original_admin
             session.commit()
+
+
+class TestAdminUsersBatch(TestWithAdminUser):
+    """AdminUsersBatch 批量权限接口测试"""
+
+    def _delete_test_users(self, usernames):
+        from webserver import models
+
+        session = get_db()
+        session.query(models.Reader).filter(models.Reader.username.in_(usernames)).delete(synchronize_session=False)
+        session.commit()
+
+    def _create_test_users(self, count):
+        """创建独立测试用户，避免永久改写共享 fixture 用户权限"""
+        from webserver import models
+
+        usernames = ["batchperm%d" % i for i in range(count)]
+        self._delete_test_users(usernames)
+
+        session = get_db()
+        now = datetime.datetime.now()
+        users = []
+        for username in usernames:
+            user = models.Reader()
+            user.username = username
+            user.name = username
+            user.email = "%s@example.com" % username
+            user.admin = False
+            user.active = True
+            user.create_time = now
+            user.update_time = now
+            user.access_time = now
+            user.extra = {"kindle_email": ""}
+            user.set_secure_password("Passw0rd!")
+            users.append(user)
+            session.add(user)
+        session.commit()
+        return usernames, [u.id for u in users]
+
+    def test_batch_permission_update(self):
+        """批量更新权限后，所有指定用户的权限应被正确设置，包含和不含的权限都验证"""
+        from webserver import models
+
+        usernames, ids = self._create_test_users(2)
+        try:
+            # lrsp 启用登录/阅读/收藏/推送，UED 显式禁用上传/编辑/删除
+            req = json.dumps({"ids": ids, "permission": "lrspUED"})
+            d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["updated"], len(ids))
+
+            session = get_db()
+            for uid in ids:
+                user = session.query(models.Reader).filter(models.Reader.id == uid).first()
+                self.assertTrue(user.can_login())
+                self.assertTrue(user.can_read())
+                self.assertTrue(user.can_save())
+                self.assertTrue(user.can_push())
+                # 显式禁用的权限应为 False
+                self.assertFalse(user.can_upload())
+                self.assertFalse(user.can_edit())
+                self.assertFalse(user.can_delete())
+        finally:
+            self._delete_test_users(usernames)
+
+    def test_batch_permission_disable(self):
+        """批量禁用权限后，指定用户的权限应被正确关闭"""
+        from webserver import models
+
+        usernames, ids = self._create_test_users(1)
+        try:
+            req = json.dumps({"ids": ids, "permission": "UED"})
+            d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["updated"], 1)
+
+            session = get_db()
+            user = session.query(models.Reader).filter(models.Reader.id == ids[0]).first()
+            self.assertFalse(user.can_upload())
+            self.assertFalse(user.can_edit())
+            self.assertFalse(user.can_delete())
+        finally:
+            self._delete_test_users(usernames)
+
+    def test_batch_rejects_current_user(self):
+        """批量权限不能修改当前管理员自身，避免把自己锁出系统"""
+        from webserver import models
+
+        usernames, ids = self._create_test_users(1)
+        try:
+            req = json.dumps({"ids": [1] + ids, "permission": "L"})
+            d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "params.user.invalid")
+
+            session = get_db()
+            current_user = session.query(models.Reader).filter(models.Reader.id == 1).first()
+            other_user = session.query(models.Reader).filter(models.Reader.id == ids[0]).first()
+            self.assertTrue(current_user.can_login())
+            self.assertTrue(other_user.can_login())
+        finally:
+            self._delete_test_users(usernames)
+
+    def test_batch_rolls_back_on_failure(self):
+        """批量更新中途失败时，不应留下部分已提交的权限变更"""
+        from webserver import models
+
+        usernames, ids = self._create_test_users(2)
+        calls = []
+        original_set_permission = models.Reader.set_permission
+
+        def flaky_set_permission(user, permission):
+            calls.append(user.id)
+            if len(calls) == 2:
+                raise RuntimeError("boom")
+            return original_set_permission(user, permission)
+
+        try:
+            with mock.patch.object(models.Reader, "set_permission", flaky_set_permission):
+                req = json.dumps({"ids": ids, "permission": "UED"})
+                d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "exception")
+
+            session = get_db()
+            for uid in ids:
+                user = session.query(models.Reader).filter(models.Reader.id == uid).first()
+                self.assertTrue(user.can_upload())
+                self.assertTrue(user.can_edit())
+                self.assertTrue(user.can_delete())
+        finally:
+            self._delete_test_users(usernames)
+
+    def test_batch_ignores_missing_user_ids(self):
+        """不存在的 id 静默忽略，updated 只统计实际命中的用户"""
+        from webserver import models
+
+        usernames, ids = self._create_test_users(1)
+        try:
+            req = json.dumps({"ids": ids + [999999], "permission": "UED"})
+            d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["updated"], 1)
+
+            session = get_db()
+            user = session.query(models.Reader).filter(models.Reader.id == ids[0]).first()
+            self.assertFalse(user.can_upload())
+            self.assertFalse(user.can_edit())
+            self.assertFalse(user.can_delete())
+        finally:
+            self._delete_test_users(usernames)
+
+    def test_batch_missing_permission(self):
+        """缺少 permission 参数时应返回错误"""
+        usernames, ids = self._create_test_users(1)
+        try:
+            req = json.dumps({"ids": ids})
+            d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "params.permission.invalid")
+        finally:
+            self._delete_test_users(usernames)
+
+    def test_batch_missing_ids(self):
+        """缺少 ids 参数时应返回错误"""
+        req = json.dumps({"permission": "lrsp"})
+        d = self.json("/api/admin/users/batch", method="POST", body=req)
+        self.assertEqual(d["err"], "params.ids.required")
+
+    def test_batch_ids_too_many(self):
+        """ids 列表超过 500 时应返回错误"""
+        req = json.dumps({"ids": list(range(1, 502)), "permission": "lrsp"})
+        d = self.json("/api/admin/users/batch", method="POST", body=req)
+        self.assertEqual(d["err"], "params.ids.too_many")
+
+    def test_batch_permission_denied_for_non_admin(self):
+        """非管理员无法批量修改权限"""
+        from webserver import models
+
+        session = get_db()
+        user = session.query(models.Reader).filter(models.Reader.id == 1).first()
+        original_admin = user.admin
+        user.admin = False
+        session.commit()
+        try:
+            req = json.dumps({"ids": [2], "permission": "lrsp"})
+            d = self.json("/api/admin/users/batch", method="POST", body=req)
+            self.assertEqual(d["err"], "permission.not_admin")
+        finally:
+            user.admin = original_admin
+            session.commit()
+
+
+class TestAdminDefaultUserPermission(TestWithAdminUser):
+    """新用户默认权限配置测试"""
+
+    def _delete_user(self, username):
+        from webserver import models
+
+        session = get_db()
+        session.query(models.Reader).filter(models.Reader.username == username).delete(synchronize_session=False)
+        session.commit()
+
+    def test_default_permission_saved_and_returned(self):
+        """保存默认权限后，GET settings 应能取回"""
+        from webserver import main
+
+        original = main.CONF.get("DEFAULT_USER_PERMISSION", "")
+        try:
+            with mock.patch("webserver.loader.SettingsLoader.set_store_path", return_value="/tmp/"):
+                req = json.dumps({"DEFAULT_USER_PERMISSION": "lrsp"})
+                d = self.json("/api/admin/settings", method="POST", body=req)
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["rsp"].get("DEFAULT_USER_PERMISSION"), "lrsp")
+        finally:
+            main.CONF["DEFAULT_USER_PERMISSION"] = original
+
+    def test_default_permission_applied_on_user_create(self):
+        """管理员创建用户时，若未指定权限则应用系统默认权限"""
+        from webserver import main, models
+
+        original = main.CONF.get("DEFAULT_USER_PERMISSION", "")
+        username = "testdefperm"
+        try:
+            self._delete_user(username)
+            main.CONF["DEFAULT_USER_PERMISSION"] = "lrspUED"
+            req = json.dumps(
+                {
+                    "username": username,
+                    "password": "Passw0rd!",
+                    "name": "Test Default",
+                    "email": "testdefperm@example.com",
+                }
+            )
+            d = self.json("/api/admin/users", method="POST", body=req)
+            self.assertEqual(d["err"], "ok")
+
+            session = get_db()
+            user = session.query(models.Reader).filter(models.Reader.username == "testdefperm").first()
+            self.assertIsNotNone(user)
+            self.assertTrue(user.can_login())
+            self.assertTrue(user.can_read())
+            self.assertTrue(user.can_save())
+            self.assertTrue(user.can_push())
+            self.assertFalse(user.can_upload())
+            self.assertFalse(user.can_edit())
+            self.assertFalse(user.can_delete())
+        finally:
+            self._delete_user(username)
+            main.CONF["DEFAULT_USER_PERMISSION"] = original
+
+    @mock.patch("webserver.services.mail.MailService.send_mail")
+    def test_default_permission_applied_on_signup(self, mock_mail):
+        """用户自行注册时，应应用系统默认权限 DEFAULT_USER_PERMISSION"""
+        from webserver import main, models
+
+        original = main.CONF.get("DEFAULT_USER_PERMISSION", "")
+        username = "signuptest"
+        try:
+            self._delete_user(username)
+            main.CONF["DEFAULT_USER_PERMISSION"] = "lrspUED"
+            body = "email=signuptest@example.com&nickname=signuptest&username=%s&password=Passw0rd!" % username
+            d = self.json("/api/user/sign_up", method="POST", body=body)
+            self.assertEqual(d["err"], "ok")
+
+            session = get_db()
+            user = session.query(models.Reader).filter(models.Reader.username == username).first()
+            self.assertIsNotNone(user)
+            self.assertTrue(user.can_login())
+            self.assertTrue(user.can_read())
+            self.assertTrue(user.can_save())
+            self.assertTrue(user.can_push())
+            self.assertFalse(user.can_upload())
+            self.assertFalse(user.can_edit())
+            self.assertFalse(user.can_delete())
+        finally:
+            self._delete_user(username)
+            main.CONF["DEFAULT_USER_PERMISSION"] = original
+
+
+class TestAdminOPDSBrowse(TestWithAdminUser):
+    """AdminOPDSBrowse 接口测试"""
+
+    @mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog")
+    def test_browse_with_full_url(self, mock_fetch):
+        """支持完整 url 字段直接浏览"""
+        mock_fetch.return_value = b"""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test</title>
+</feed>"""
+        body = json.dumps({"url": "http://example.com:8080/opds"})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "ok")
+        self.assertIn("items", d)
+        mock_fetch.assert_called_once()
+        args = mock_fetch.call_args[0]
+        self.assertEqual(args[0], "http://example.com:8080/opds")
+
+    @mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog")
+    def test_browse_with_host_port_path(self, mock_fetch):
+        """向后兼容：支持 host/port/path 三字段形式"""
+        mock_fetch.return_value = b"""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test</title>
+</feed>"""
+        body = json.dumps({"host": "http://example.com", "port": "8080", "path": "/opds"})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "ok")
+        mock_fetch.assert_called_once()
+        args = mock_fetch.call_args[0]
+        # 确认端口不重复拼接：结果应是 http://example.com:8080/opds
+        self.assertIn("8080", args[0])
+        self.assertNotIn("8080:8080", args[0])
+
+    @mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog")
+    def test_browse_host_with_port_not_duplicated(self, mock_fetch):
+        """host 已含端口时，传入 port 字段不应重复拼接"""
+        mock_fetch.return_value = b"""<?xml version="1.0"?>
+<feed xmlns="http://www.w3.org/2005/Atom">
+  <title>Test</title>
+</feed>"""
+        # host 已含 :8080，再传 port=8080 不应变成 :8080:8080
+        body = json.dumps({"host": "http://example.com:8080", "port": "8080", "path": "/opds"})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "ok")
+        args = mock_fetch.call_args[0]
+        self.assertNotIn("8080:8080", args[0])
+
+    def test_browse_missing_params(self):
+        """url 和 host 均为空时返回参数错误"""
+        body = json.dumps({})
+        d = self.json("/api/admin/opds/browse", method="POST", body=body)
+        self.assertEqual(d["err"], "params.error")
+
+    def test_browse_fetch_failure(self):
+        """OPDS 目录获取失败时返回 error"""
+        with mock.patch("webserver.services.opds_import.OPDSImportService.fetch_opds_catalog", return_value=None):
+            body = json.dumps({"url": "http://nonexistent.example.com/opds"})
+            d = self.json("/api/admin/opds/browse", method="POST", body=body)
+            self.assertEqual(d["err"], "error")
+
+
+class TestAdminOPDSImportStatus(TestWithAdminUser):
+    """AdminOPDSImportStatus 接口测试"""
+
+    def test_status_returns_counters(self):
+        """状态接口返回计数器字段"""
+        d = self.json("/api/admin/opds/import/status")
+        self.assertEqual(d["err"], "ok")
+        self.assertIn("status", d)
+        self.assertIn("total", d["status"])
+        self.assertIn("done", d["status"])
+        self.assertIn("skip", d["status"])
+        self.assertIn("fail", d["status"])

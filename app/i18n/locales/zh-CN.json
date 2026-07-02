@@ -141,8 +141,8 @@
     "deleteSuccess": "删除成功",
     "deleteFailed": "删除失败",
     "confirmDelete": "确定要删除这本书吗？",
-    "wantToRead": "待读",
-    "removeFromWantToRead": "取消待读",
+    "wantToRead": "加入书架",
+    "removeFromWantToRead": "移除书架",
     "setAsReading": "设为在读",
     "markAsFinished": "标记读完",
     "currentlyReading": "在读",
@@ -157,7 +157,7 @@
     "setReading": "设为在读",
     "setDone": "标记读完",
     "favoriteHint": "点击收藏或取消收藏",
-    "wantsHint": "点击添加到待读清单或从待读清单移除",
+    "wantsHint": "点击加入或移除书架",
     "readingDays": "已阅读 {days} 天",
     "readingWithinOneDay": "已阅读不足一天",
     "completedReading": "本书已在 {date} 读完"
@@ -201,9 +201,9 @@
     "scopedBooks": "私有书籍",
     "localLibrary": "本地书库",
     "networkLibrary": "网络书库",
-    "bookSources": "书源管理",
     "themes": "主题管理",
-    "systemLogs": "系统日志"
+    "systemLogs": "系统日志",
+    "myShelf": "我的书架"
   },
   "network": {
     "title": "网络书库",
@@ -321,6 +321,10 @@
     "emptyInvalid": "暂无已失效书源",
     "jsSkipped": "该书源依赖 JS，无法解析"
   },
+  "shelf": {
+    "pageTitle": "我的书架",
+    "empty": "书架上还没有书，快去加入吧！"
+  },
   "user": {
     "history": {
       "pageTitle": "阅读记录",
@@ -371,11 +375,9 @@
     "readingRecord": {
       "pageTitle": "阅读记录",
       "currentlyReading": "在读",
-      "wantToRead": "待读",
       "finishedReading": "已读完",
       "readingRecord": "阅读记录",
       "noCurrentlyReading": "暂无在读的书籍",
-      "noWantToRead": "暂无待读的书籍",
       "noFinishedReading": "暂无已读完的书籍"
     }
   },
@@ -674,7 +676,8 @@
         "opdsSettings": "OPDS 设置",
         "captchaSettings": "人机验证设置",
         "trashManagement": "回收站管理",
-        "updateCheck": "检查更新"
+        "updateCheck": "检查更新",
+        "databaseManagement": "数据库管理"
       },
       "button": {
         "saveSettings": "保存配置",
@@ -682,7 +685,10 @@
         "trashClear": "清理回收站",
         "trashClearConfirm": "确认清理",
         "checkUpdate": "检查更新",
-        "viewRelease": "查看发布"
+        "viewRelease": "查看发布",
+        "testDbConnection": "测试连接",
+        "migrateDb": "迁移数据库",
+        "forceMigrateDb": "强制迁移"
       },
       "label": {
         "siteTitle": "网站标题",
@@ -744,11 +750,19 @@
         "defaultPageSize": "书籍列表中分页大小",
         "currentVersion": "当前版本",
         "latestVersion": "最新版本",
-        "lastCheckTime": "上次检查时间"
+        "lastCheckTime": "上次检查时间",
+        "dbType": "数据库类型",
+        "dbHost": "数据库主机",
+        "dbPort": "端口",
+        "dbName": "数据库名",
+        "dbUser": "数据库用户名",
+        "dbPass": "数据库密码"
       },
       "option": {
         "ssl": "SSL",
         "tls": "TLS(多数邮箱为此选项)",
+        "dbSqlite": "SQLite",
+        "dbMysql": "MySQL / MariaDB",
         "pinyinDir": "使用拼音字母目录名 (兼容性高)",
         "chineseDir": "使用中文目录名 (UTF8 编码，更美观)",
         "oldEpubReader": "Epub Reader（旧版）",
@@ -774,7 +788,16 @@
         "trashClearConfirm": "确认清理回收站和上传临时目录？此操作不可逆！",
         "upToDate": "已是最新版本",
         "updateAvailable": "发现新版本 {version}，请及时更新以获取最新功能和安全修复",
-        "checkError": "检查更新失败"
+        "checkError": "检查更新失败",
+        "dbInfo": "Talebook 自身数据（用户、书架、配置等）支持迁移至 MySQL/MariaDB，Calibre 书籍元数据仍保持使用 SQLite。迁移完成后需重启服务器生效。",
+        "dbMigrateWarning": "迁移将把当前数据库所有数据复制到新数据库，完成后需要重启服务器。操作不可逆，请提前备份！",
+        "dbMigrateConfirmTitle": "确认迁移数据库？",
+        "dbMigrateSuccess": "数据迁移成功，请重启服务器以生效",
+        "dbConnectSuccess": "数据库连接成功",
+        "currentDb": "当前数据库",
+        "newDbConfig": "迁移到新数据库",
+        "dbForceTitle": "目标数据库已有数据，确认强制迁移？",
+        "dbForceWarning": "目标数据库中已存在 {count} 条记录，强制迁移将永久清空这些数据后再写入。操作不可逆，请确认已备份！"
       },
       "meta_source": {
         "douban": "豆瓣",
@@ -793,7 +816,10 @@
       "title": "用户管理",
       "button": {
         "addUser": "添加用户",
-        "guestPermission": "访客权限"
+        "guestPermission": "访客权限",
+        "defaultPermission": "新用户默认权限",
+        "batchPermission": "批量设置权限",
+        "cancelSelection": "取消选择"
       },
       "label": {
         "username": "用户名",
@@ -814,6 +840,8 @@
         "allowGuestDownload": "允许任意下载（访客无需注册和登录）",
         "allowGuestPush": "允许任意推送Kindle（访客无需注册和登录）",
         "allowGuestUpload": "允许访客上传书籍（无需注册和登录）",
+        "defaultUserPermission": "新用户默认权限",
+        "defaultUserPermissionHint": "新注册或管理员创建的用户将自动应用此权限配置（留空则默认开放全部权限）",
         "registrationPlatform": "注册平台",
         "registrationTime": "注册时间",
         "loginTime": "登录时间",
@@ -841,7 +869,13 @@
         "invalidUsername": "用户名必须以小写字母开头，只能包含字母、数字和下划线，长度在5-20个字符之间",
         "invalidPassword": "密码长度必须在8-20个字符之间",
         "invalidNickname": "昵称长度至少为2个字符",
-        "guestPermissionSaved": "访客权限设置保存成功！"
+        "guestPermissionSaved": "访客权限设置保存成功！",
+        "defaultPermissionSaved": "新用户默认权限设置保存成功！",
+        "batchPermissionTitle": "批量设置用户权限",
+        "batchPermissionSubtitle": "将对选中的 {count} 个用户应用以下权限设置",
+        "batchPermissionSuccess": "已成功更新 {count} 个用户的权限",
+        "batchPermissionAllDisabledWarning": "当前权限配置将禁用所有权限，这会导致选中用户无法登录和使用任何功能。确定要继续吗？",
+        "selectedUsers": "已选择 {count} 个用户"
       },
       "user": {
         "disabled": "已禁止",
@@ -894,7 +928,19 @@
     "writingConfig": "正在写入配置文件...",
     "configWriteSuccess": "配置写入成功！",
     "checkingServer": "正在检测服务器...",
-    "networkError": "网络错误"
+    "networkError": "网络错误",
+    "dbConfig": "数据库配置",
+    "dbType": "数据库类型",
+    "dbTypeSqlite": "SQLite（默认，适合个人使用）",
+    "dbTypeMysql": "MySQL / MariaDB（适合高并发）",
+    "dbHost": "数据库主机",
+    "dbPort": "端口",
+    "dbName": "数据库名",
+    "dbUser": "数据库用户名",
+    "dbPass": "数据库密码",
+    "testConnection": "测试连接",
+    "dbConnectSuccess": "数据库连接成功",
+    "dbConnectFailed": "数据库连接失败"
   },
   "settings": {
     "deviceMgt": "全局设备管理",

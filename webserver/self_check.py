@@ -19,6 +19,7 @@ import os
 import subprocess
 import sys
 
+
 DATA_DIR = os.environ.get("TALEBOOK_DATA_DIR", "/data")
 SERVER_DIR = os.environ.get("TALEBOOK_SERVER_DIR", "/var/www/talebook")
 STATUS_DIR = os.environ.get("TALEBOOK_STATUS_DIR", "/var/www/talebook/status")
@@ -32,7 +33,7 @@ def _status_path():
 
 
 def _now():
-    return datetime.datetime.utcnow().strftime("%Y-%m-%dT%H:%M:%SZ")
+    return datetime.datetime.now(datetime.timezone.utc).strftime("%Y-%m-%dT%H:%M:%SZ")
 
 
 def write_status(steps, phase):
@@ -115,7 +116,8 @@ CHECKS = [
 
 
 def start_tornado():
-    subprocess.run(["supervisorctl", "start", "tornado"])
+    # tornado 位于 [group:talebook] 中，supervisor 的进程名是 talebook:tornado
+    subprocess.run(["supervisorctl", "start", "talebook:tornado"])
 
 
 def run_bootstrap(checks=CHECKS, start_tornado_fn=start_tornado):

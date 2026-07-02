@@ -157,6 +157,12 @@ class TestRunBootstrap(unittest.TestCase):
         self.assertEqual(doc["steps"][0], {"name": "a", "status": "failed", "code": "permission_denied"})
         self.assertEqual(doc["steps"][1]["status"], "pending")
 
+    @mock.patch("webserver.self_check.subprocess.run")
+    def test_start_tornado_uses_group_process_name(self, m_run):
+        # tornado 在 [group:talebook] 中，supervisorctl 必须用 group:program 形式的进程名
+        self_check.start_tornado()
+        m_run.assert_called_once_with(["supervisorctl", "start", "talebook:tornado"])
+
 
 if __name__ == "__main__":
     unittest.main()

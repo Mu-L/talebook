@@ -16,7 +16,13 @@ describe('BookCards.vue', () => {
     it('renders empty state correctly (User Experience: Empty State)', () => {
         const wrapper = mount(BookCards, {
             global: {
-                plugins: [vuetify]
+                plugins: [vuetify],
+                mocks: {
+                    $t: (key: string) => ({
+                        'messages.noBooks': '本书库暂无藏书',
+                        'messages.addBooksFirst': '请先添加书籍到书库',
+                    }[key] || key),
+                },
             },
             props: {
                 books: []

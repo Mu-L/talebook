@@ -77,12 +77,12 @@ import { useDisplay } from 'vuetify';
 import Loading from '@/components/Loading.vue';
 import AppHeader from '@/components/AppHeader.vue';
 import AppFooter from '@/components/AppFooter.vue';
+import { clearInjectedThemeStyles, resolveThemeModuleUrl } from '@/utils/theme-runtime';
 
 const store = useMainStore();
 const themeStore = useThemeStore();
 const display = useDisplay();
 const router = useRouter();
-const runtimeConfig = useRuntimeConfig();
 
 const dynamicHeader = shallowRef(AppHeader);
 const dynamicFooter = shallowRef(AppFooter);
@@ -94,28 +94,8 @@ useHead({
     titleTemplate: computed(() => store.site_title_template),
 });
 
-function getThemeBaseUrl() {
-    return runtimeConfig.public.api_url;
-}
-
-function withThemeVersion(url, theme) {
-    const version = encodeURIComponent(theme?.version || theme?.installed_at || Date.now());
-    const separator = url.includes('?') ? '&' : '?';
-    return `${url}${separator}v=${version}`;
-}
-
 async function loadThemeModule(url) {
-    const fullUrl = getThemeBaseUrl() + url;
-    const rsp = await fetch(fullUrl, { credentials: 'include' });
-    if (!rsp.ok) throw new Error(`HTTP ${rsp.status}`);
-    const code = await rsp.text();
-    const blob = new Blob([code], { type: 'application/javascript' });
-    const blobUrl = URL.createObjectURL(blob);
-    try {
-        return await import(/* @vite-ignore */ blobUrl);
-    } finally {
-        URL.revokeObjectURL(blobUrl);
-    }
+    return await import(/* @vite-ignore */ url);
 }
 
 async function applyThemeComponents(theme) {
@@ -124,10 +104,14 @@ async function applyThemeComponents(theme) {
     let header = AppHeader;
     let footer = AppFooter;
 
+    if (import.meta.client) {
+        clearInjectedThemeStyles();
+    }
+
     if (theme?.components) {
         if (theme.components.AppHeader) {
             try {
-                const mod = await loadThemeModule(withThemeVersion(theme.components.AppHeader, theme));
+                const mod = await loadThemeModule(resolveThemeModuleUrl(theme.components.AppHeader, theme));
                 header = mod.default || mod;
             } catch (e) {
                 console.warn('主题 Header 加载失败，使用默认', e);
@@ -136,7 +120,7 @@ async function applyThemeComponents(theme) {
 
         if (theme.components.AppFooter) {
             try {
-                const mod = await loadThemeModule(withThemeVersion(theme.components.AppFooter, theme));
+                const mod = await loadThemeModule(resolveThemeModuleUrl(theme.components.AppFooter, theme));
                 footer = mod.default || mod;
             } catch (e) {
                 console.warn('主题 Footer 加载失败，使用默认', e);

@@ -80,7 +80,7 @@ def _assert_public_host(hostname):
         results = socket.getaddrinfo(hostname, None)
     except socket.gaierror as exc:
         raise ValueError(_("无法解析主机名：%s") % str(exc))
-    for _, _, _, _, sockaddr in results:
+    for _family, _type, _proto, _canonname, sockaddr in results:
         raw = sockaddr[0].split("%")[0]  # strip IPv6 zone id (e.g. "fe80::1%eth0")
         try:
             addr = ipaddress.ip_address(raw)
@@ -165,6 +165,11 @@ def normalize_components(theme_name, components):
     if not isinstance(components, dict):
         raise ValueError(_("theme.json 中 components 字段无效"))
     return {key: normalize_component_url(theme_name, value) for key, value in components.items()}
+
+
+def find_theme_manifest_path(names):
+    candidates = [n for n in names if not n.endswith("/") and n.split("/")[-1] == "theme.json" and n.count("/") <= 1]
+    return candidates[0] if candidates else None
 
 
 def download_theme_archive(download_url):
@@ -284,11 +289,10 @@ class ThemeInstallHandler(BaseHandler):
                 return {"err": "params.invalid", "msg": _("ZIP 文件损坏或不兼容：%s") % str(e)}
 
             with zf:
-                theme_json_candidates = [n for n in names if n.endswith("theme.json") and n.count("/") <= 1]
-                if not theme_json_candidates:
+                theme_json_path = find_theme_manifest_path(names)
+                if not theme_json_path:
                     return {"err": "params.invalid", "msg": _("ZIP 包中缺少 theme.json 文件")}
 
-                theme_json_path = theme_json_candidates[0]
                 theme_meta = json.loads(zf.read(theme_json_path).decode("utf-8"))
 
             theme_name = theme_meta.get("name", "").strip()

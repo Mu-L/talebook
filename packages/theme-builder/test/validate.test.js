@@ -1,5 +1,9 @@
 import { describe, it } from 'node:test';
 import assert from 'node:assert/strict';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { dirname, join } from 'node:path';
+import { tmpdir } from 'node:os';
+import { mkdtempSync } from 'node:fs';
 import { validateThemeJson } from '../src/commands/validate.js';
 
 describe('validateThemeJson', () => {
@@ -15,8 +19,18 @@ describe('validateThemeJson', () => {
         },
     };
 
+    function makeThemeDir(files = ['components/AppHeader.js', 'components/AppFooter.js']) {
+        const dir = mkdtempSync(join(tmpdir(), 'talebook-theme-'));
+        for (const file of files) {
+            const path = join(dir, file);
+            mkdirSync(dirname(path), { recursive: true });
+            writeFileSync(path, 'export default {};');
+        }
+        return dir;
+    }
+
     it('accepts a valid theme.json', () => {
-        const { valid, errors } = validateThemeJson(validTheme, '/nonexistent');
+        const { valid, errors } = validateThemeJson(validTheme, makeThemeDir());
         assert.equal(errors.length, 0, `Expected no errors, got: ${errors.join(', ')}`);
         assert.equal(valid, true);
     });
@@ -68,7 +82,7 @@ describe('validateThemeJson', () => {
 
     it('warns about unusual requires format', () => {
         const theme = { ...validTheme, requires: 'latest' };
-        const { valid, warnings } = validateThemeJson(theme, '/nonexistent');
+        const { valid, warnings } = validateThemeJson(theme, makeThemeDir());
         // Still valid (requires is optional), but should have a warning
         assert.equal(valid, true);
         assert.ok(warnings.some(w => w.includes('"requires"')));
@@ -77,21 +91,44 @@ describe('validateThemeJson', () => {
     it('accepts valid requires patterns', () => {
         for (const req of ['>=0.9.0', '0.9.0', '>1.0.0', '<=2.0.0']) {
             const theme = { ...validTheme, requires: req };
-            const { warnings } = validateThemeJson(theme, '/nonexistent');
+            const { warnings } = validateThemeJson(theme, makeThemeDir());
             assert.ok(!warnings.some(w => w.includes('"requires"')), `Unexpected warning for requires="${req}"`);
         }
     });
 
-    it('warns about missing component files', () => {
+    it('rejects missing component files', () => {
         const theme = {
             ...validTheme,
             components: {
                 AppHeader: '/static/themes/dark-elegant/components/AppHeader.js',
             },
         };
-        const { valid, warnings } = validateThemeJson(theme, '/nonexistent/dist');
-        // Valid structure, but files don't exist on disk
-        assert.equal(valid, true);
-        assert.ok(warnings.some(w => w.includes('AppHeader') && w.includes('not found')));
+        const { valid, errors } = validateThemeJson(theme, makeThemeDir([]));
+        assert.equal(valid, false);
+        assert.ok(errors.some(e => e.includes('AppHeader') && e.includes('not found')));
+    });
+
+    it('rejects relative component URLs that the backend installer cannot accept', () => {
+        const theme = {
+            ...validTheme,
+            components: {
+                AppHeader: 'components/AppHeader.js',
+            },
+        };
+        const { valid, errors } = validateThemeJson(theme, makeThemeDir(['components/AppHeader.js']));
+        assert.equal(valid, false);
+        assert.ok(errors.some(e => e.includes('/static/themes/dark-elegant/')));
+    });
+
+    it('rejects component URLs for a different theme name', () => {
+        const theme = {
+            ...validTheme,
+            components: {
+                AppHeader: '/static/themes/other-theme/components/AppHeader.js',
+            },
+        };
+        const { valid, errors } = validateThemeJson(theme, makeThemeDir(['components/AppHeader.js']));
+        assert.equal(valid, false);
+        assert.ok(errors.some(e => e.includes('/static/themes/dark-elegant/')));
     });
 });

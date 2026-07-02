@@ -37,14 +37,21 @@ export function validateThemeJson(themeJson, themeDir = '.') {
     } else if (Object.keys(themeJson.components).length === 0) {
         errors.push('"components" must have at least one entry');
     } else {
+        const expectedPrefix = `/static/themes/${themeJson.name}/`;
         for (const [componentName, componentPath] of Object.entries(themeJson.components)) {
             if (!componentPath || typeof componentPath !== 'string') {
                 errors.push(`Component "${componentName}" has invalid path`);
                 continue;
             }
-            const absolutePath = resolve(themeDir, componentPath.replace(/^\/static\/themes\/[^/]+\//, ''));
+            const pathOnly = componentPath.split(/[?#]/, 1)[0];
+            if (!pathOnly.startsWith(expectedPrefix) || pathOnly.split('/').includes('..')) {
+                errors.push(`Component "${componentName}" path must start with ${expectedPrefix}`);
+                continue;
+            }
+            const relativePath = pathOnly.slice(expectedPrefix.length);
+            const absolutePath = resolve(themeDir, relativePath);
             if (!existsSync(absolutePath)) {
-                warnings.push(`Component "${componentName}" file not found: ${componentPath} (expected at ${absolutePath})`);
+                errors.push(`Component "${componentName}" file not found: ${componentPath} (expected at ${absolutePath})`);
             }
         }
     }

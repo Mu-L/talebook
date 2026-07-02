@@ -174,6 +174,64 @@ class TestThemeAdmin(TestWithAdminUser):
 
     @mock.patch("webserver.handlers.theme._assert_public_host")
     @mock.patch("webserver.handlers.theme.requests.get")
+    def test_install_ignores_suffix_named_fake_manifest(self, mock_get, mock_assert_host):
+        """只允许根目录或一级目录下 basename 精确为 theme.json 的 manifest。"""
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("old-theme.json", json.dumps({
+                "name": "test-theme",
+                "version": "1.0.0",
+                "author": "test",
+                "description": "fake",
+                "components": {"AppHeader": "/static/themes/test-theme/components/AppHeader.js"},
+            }))
+            zf.writestr("components/AppHeader.js", "export default {};")
+
+        mock_response = mock.MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.status_code = 200
+        mock_response.iter_content.return_value = iter([buf.getvalue()])
+        mock_get.return_value = mock_response
+
+        body = json.dumps({"download_url": "https://github.com/talebook/test-theme/archive/main.zip"})
+        d = self.json("/api/themes/install", method="POST", body=body)
+        self.assertEqual(d["err"], "params.invalid")
+
+    @mock.patch("webserver.handlers.theme._assert_public_host")
+    @mock.patch("webserver.handlers.theme.requests.get")
+    def test_install_uses_exact_nested_theme_manifest(self, mock_get, mock_assert_host):
+        """GitHub/Gitee 存档的一层根目录下 theme.json 仍应可安装。"""
+        import tempfile
+
+        buf = io.BytesIO()
+        with zipfile.ZipFile(buf, "w") as zf:
+            zf.writestr("repo-main/old-theme.json", json.dumps({"name": "wrong"}))
+            zf.writestr("repo-main/theme.json", json.dumps({
+                "name": "test-theme",
+                "version": "1.0.0",
+                "author": "test",
+                "description": "ok",
+                "components": {"AppHeader": "/static/themes/test-theme/components/AppHeader.js"},
+            }))
+            zf.writestr("repo-main/components/AppHeader.js", "export default {};")
+
+        mock_response = mock.MagicMock()
+        mock_response.raise_for_status.return_value = None
+        mock_response.status_code = 200
+        mock_response.iter_content.return_value = iter([buf.getvalue()])
+        mock_get.return_value = mock_response
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            with mock.patch("webserver.handlers.theme.get_themes_path", return_value=tmpdir):
+                with mock.patch("webserver.handlers.theme.safe_extract"):
+                    body = json.dumps({"download_url": "https://github.com/talebook/test-theme/archive/main.zip"})
+                    d = self.json("/api/themes/install", method="POST", body=body)
+
+        self.assertEqual(d["err"], "ok")
+        self.assertEqual(d["theme"]["name"], "test-theme")
+
+    @mock.patch("webserver.handlers.theme._assert_public_host")
+    @mock.patch("webserver.handlers.theme.requests.get")
     def test_install_success(self, mock_get, mock_assert_host):
         """正常安装流程：ZIP 包合法，主题应被记录到数据库。"""
         import tempfile

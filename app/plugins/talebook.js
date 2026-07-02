@@ -72,9 +72,18 @@ export default defineNuxtPlugin((nuxtApp) => {
       }
 
       if (rsp.status === 502) {
-        msg = '服务器正在启动中...';
-        showAlert('info', msg);
-        throw msg;
+        let status = null;
+        try {
+          const statusRsp = await fetch(server + '/status.json', { cache: 'no-store' });
+          if (statusRsp.ok) {
+            status = await statusRsp.json();
+          }
+        } catch (e) {
+          status = null;
+        }
+        const alert = resolveStatusAlert(status);
+        showAlert(alert.type, alert.msg);
+        throw alert.msg;
       }
 
       if (rsp.status !== 200) {
@@ -149,6 +158,33 @@ export default defineNuxtPlugin((nuxtApp) => {
     }
   };
 });
+
+// 502 时展示的启动状态提示：由 docker/start.sh + webserver/self_check.py 写入的
+// /status.json 提供 phase 与失败 step 的 code（枚举），文案只从下面这份固定白名单里取，
+// 不拼接 status.json 里的任何自由文本，避免把后端日志/环境变量/路径带到页面上（v-html 渲染）。
+const STATUS_CODE_HINTS = {
+  permission_denied: '检测到 /data 目录写入失败，请检查挂载卷的 PUID/PGID 与目录权限设置。',
+  nginx_config_invalid: 'Nginx 配置校验失败，请检查是否覆盖了自定义证书或配置文件。',
+  syncdb_failed: '数据库初始化失败，请检查 /data/books 目录是否可写、磁盘空间是否充足。',
+  migrate_failed: '数据库结构迁移失败，请检查 /data/books/calibre-webserver.db 是否可正常访问。',
+  update_config_failed: '服务器配置写入失败，请检查 /data/books/settings 目录权限。',
+};
+
+const STATUS_STARTING_MSG = '服务器正在启动中，请稍候...';
+const STATUS_FAILED_FALLBACK_MSG = '服务器启动失败。';
+const STATUS_PAGE_LINK = '<br/><a href="/status_page.html" target="_blank">查看详细启动状态</a>';
+
+// 根据 /status.json 的内容为 502 场景生成提示：拿不到该文件（老镜像/尚未生成）或
+// phase 还在 starting，保留原有的通用"启动中"提示；phase 为 failed 时换成具体建议，
+// 并附上跳转到 /status_page.html 的入口，用户不用进容器看日志。单独导出以便单元测试。
+export function resolveStatusAlert(status) {
+  if (!status || status.phase !== 'failed') {
+    return { type: 'info', msg: STATUS_STARTING_MSG };
+  }
+  const failedStep = (status.steps || []).find((step) => step.status === 'failed');
+  const hint = (failedStep && STATUS_CODE_HINTS[failedStep.code]) || STATUS_FAILED_FALLBACK_MSG;
+  return { type: 'error', msg: hint + STATUS_PAGE_LINK };
+}
 
 // 解析 NDJSON（换行分隔的 JSON）流：逐行 yield 已解析的对象，跳过空行与非法行，
 // 并正确拼接跨 chunk 被截断的行。单独导出以便单元测试。

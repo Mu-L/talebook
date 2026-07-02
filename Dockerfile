@@ -111,6 +111,7 @@ RUN mkdir -p /data/log/nginx/ && \
     mkdir -p /data/books/logo && \
     mkdir -p /data/books/ssl && \
     mkdir -p /var/www/talebook/ && \
+    mkdir -p /var/www/talebook/status && \
     chmod a+w -R /data/log /data/books /var/www
 
 COPY server.py /var/www/talebook/
@@ -119,6 +120,7 @@ COPY webserver/ /var/www/talebook/webserver/
 COPY conf/nginx/ssl.* /data/books/ssl/
 COPY conf/nginx/talebook.conf /etc/nginx/conf.d/
 COPY conf/supervisor/talebook.conf /etc/supervisor/conf.d/
+COPY docker/status_page.html /var/www/talebook/status/status_page.html
 COPY --from=builder /app-static/ /var/www/talebook/app/
 COPY --from=builder /app-static/dist/logo/ /data/books/logo/
 

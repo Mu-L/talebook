@@ -274,7 +274,18 @@ def make_app():
     checker.set_session_maker(SessionMaker)
     checker.start_background_check()
 
-    app = web.Application(social_routes.SOCIAL_AUTH_ROUTES + handlers.routes(), **app_settings)
+    import mimetypes
+
+    mimetypes.add_type("application/javascript", ".js")
+
+    themes_path = CONF.get("themes_path", "/data/books/themes/")
+    os.makedirs(themes_path, exist_ok=True)
+
+    theme_routes = [(r"/static/themes/(.*)", web.StaticFileHandler, {"path": themes_path})]
+    app = web.Application(
+        theme_routes + social_routes.SOCIAL_AUTH_ROUTES + handlers.routes(),
+        **app_settings,
+    )
     app._engine = engine
     _resume_pending_booksource_checks(ScopedSession)
     return app

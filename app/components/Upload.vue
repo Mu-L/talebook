@@ -70,17 +70,19 @@ const dialog = ref(false);
 const ebooks = ref(null);
 
 function do_upload() {
-    loading.value = true;
-    const data = new FormData();
-
     let file = null;
     if (ebooks.value) {
         file = Array.isArray(ebooks.value) ? ebooks.value[0] : ebooks.value;
     }
 
-    if (file) {
-        data.append('ebook', file, encodeURIComponent(file.name || 'upload.bin'));
+    if (!file) {
+        $alert('error', t('messages.selectFileToUpload'));
+        return;
     }
+
+    loading.value = true;
+    const data = new FormData();
+    data.append('ebook', file, encodeURIComponent(file.name || 'upload.bin'));
 
     $backend('/book/upload', {
         method: 'POST',

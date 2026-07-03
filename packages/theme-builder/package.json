@@ -1,0 +1,47 @@
+{
+  "name": "@talebook/theme-builder",
+  "version": "1.0.0",
+  "description": "CLI tool for building Talebook themes with Vuetify support",
+  "type": "module",
+  "bin": {
+    "theme-builder": "./bin/cli.js"
+  },
+  "files": [
+    "bin",
+    "src",
+    "templates"
+  ],
+  "scripts": {
+    "test": "node --test test/validate.test.js"
+  },
+  "dependencies": {
+    "commander": "^12.1.0"
+  },
+  "peerDependencies": {
+    "@vitejs/plugin-vue": "^5.0.0",
+    "vite": "^5.0.0",
+    "vue": "^3.0.0",
+    "vuetify": "^3.0.0"
+  },
+  "peerDependenciesMeta": {
+    "vite": {
+      "optional": false
+    },
+    "@vitejs/plugin-vue": {
+      "optional": false
+    }
+  },
+  "engines": {
+    "node": ">=18.0.0"
+  },
+  "keywords": [
+    "talebook",
+    "theme",
+    "vuetify",
+    "vue"
+  ],
+  "license": "MIT",
+  "publishConfig": {
+    "access": "public"
+  }
+}

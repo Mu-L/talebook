@@ -1134,7 +1134,10 @@ def decode_filename(filename):
 class BookUpload(BaseHandler):
     def get_upload_file(self):
         # for unittest mock
-        p = self.request.files["ebook"][0]
+        files = self.request.files.get("ebook")
+        if not files:
+            return None, None
+        p = files[0]
         filename = decode_filename(p["filename"])
         filename = urllib.parse.unquote(filename)
         return (filename, p["body"])
@@ -1150,6 +1153,8 @@ class BookUpload(BaseHandler):
         elif not self.current_user.can_upload():
             return {"err": "permission", "msg": _("无权操作")}
         name, data = self.get_upload_file()
+        if not name or data is None:
+            return {"err": "params.ebook", "msg": _("请选择要上传的文件")}
         logging.error("upload book name = " + repr(name))
         # strip path components to prevent directory traversal
         name = os.path.basename(name)

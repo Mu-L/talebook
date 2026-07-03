@@ -35,6 +35,7 @@ export const useMainStore = defineStore('main', () => {
     footer_extra_html: '',
     friends: [],
   })
+  const messages = ref<any[]>([])
 
   const site_title = ref("首页")
   const site_title_template = ref("%s | talebook")
@@ -74,6 +75,42 @@ export const useMainStore = defineStore('main', () => {
     site_title_template.value = ' %s | ' + v
   }
 
+  async function loadUserInfo() {
+    const { $backend } = useNuxtApp()
+    const rsp = await $backend('/user/info')
+    login(rsp)
+    if (rsp?.sys?.title) {
+      setTitle(rsp.sys.title)
+    }
+    return rsp
+  }
+
+  async function loadMessages() {
+    const { $backend } = useNuxtApp()
+    const rsp = await $backend('/user/messages')
+    if (rsp.err == 'ok') {
+      messages.value = rsp.messages
+    }
+    return rsp
+  }
+
+  async function bootstrap() {
+    const [userRsp] = await Promise.all([loadUserInfo(), loadMessages()])
+    return userRsp
+  }
+
+  async function hideMessage(idx: number, msgid: unknown) {
+    const { $backend } = useNuxtApp()
+    const rsp = await $backend('/user/messages', {
+      method: 'POST',
+      body: JSON.stringify({ id: msgid }),
+    })
+    if (rsp.err == 'ok') {
+      messages.value.splice(idx, 1)
+    }
+    return rsp
+  }
+
   function setTheme(v: string) {
     theme.value = v
     themeCookie.value = v
@@ -93,6 +130,7 @@ export const useMainStore = defineStore('main', () => {
     user,
     alert,
     sys,
+    messages,
     site_title,
     site_title_template,
     setLoading,
@@ -102,6 +140,10 @@ export const useMainStore = defineStore('main', () => {
     setAlert,
     closeAlert,
     setTitle,
+    loadUserInfo,
+    loadMessages,
+    bootstrap,
+    hideMessage,
     setTheme,
     toggleTheme,
   }

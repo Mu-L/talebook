@@ -14,6 +14,7 @@ export default [
       'coverage/**',
       'public/**',
       'static/**',
+      'preset/**',
       'test/**',
       '**/*.ts'
     ]

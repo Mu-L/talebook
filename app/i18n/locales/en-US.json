@@ -197,6 +197,7 @@
     "localLibrary": "Local Library",
     "networkLibrary": "Network Library",
     "bookSources": "Book Sources",
+    "themes": "Themes",
     "systemLogs": "System Logs",
     "myShelf": "My Shelf"
   },
@@ -999,5 +1000,23 @@
   "error": {
     "otherError": "Other Error",
     "pageNotFound": "Page Not Found"
+  },
+  "theme": {
+    "title": "Theme Management",
+    "description": "Install and manage UI themes. Themes can replace layout components like the header and footer.",
+    "install": "Install Theme",
+    "installUrlLabel": "Theme package URL",
+    "installUrlPlaceholder": "Enter HTTPS URL to a ZIP theme package (GitHub/Gitee/jsDelivr only)",
+    "uploadLabel": "Select local ZIP theme package",
+    "upload": "Upload & Install",
+    "uploadPackageInstall": "Upload theme package",
+    "installed": "Installed Themes",
+    "noThemes": "No themes installed. Upload a local ZIP package to install one.",
+    "active": "Active",
+    "activate": "Activate",
+    "deactivate": "Use Default",
+    "deleteConfirm": "Delete this theme?",
+    "defaultTheme": "Default Theme",
+    "defaultThemeDescription": "TaleBook native UI"
   }
 }

@@ -17,6 +17,81 @@ let saveStatusPolls = 0;
 let booksourceCheckRunning = false;
 let booksourceCheckPolls = 0;
 let shelfBookIds = new Set();
+let activeThemeName = '';
+
+const builtinThemes = [
+  {
+    id: 'builtin-brass',
+    name: 'brass',
+    version: '1.0.0',
+    author: 'Talebook',
+    description: '黄铜风格',
+    installed_at: null,
+    builtin: true,
+    components: {
+      AppHeader: 'builtin:brass/AppHeader',
+      AppFooter: 'builtin:brass/AppFooter',
+    },
+  },
+  {
+    id: 'builtin-graphite',
+    name: 'graphite',
+    version: '1.0.0',
+    author: 'Talebook',
+    description: '石墨风格',
+    installed_at: null,
+    builtin: true,
+    components: {
+      AppHeader: 'builtin:graphite/AppHeader',
+      AppFooter: 'builtin:graphite/AppFooter',
+    },
+  },
+  {
+    id: 'builtin-light-gray',
+    name: 'light-gray',
+    version: '1.0.0',
+    author: 'Talebook',
+    description: '浅灰风格',
+    installed_at: null,
+    builtin: true,
+    components: {
+      AppHeader: 'builtin:light-gray/AppHeader',
+      AppFooter: 'builtin:light-gray/AppFooter',
+    },
+  },
+  {
+    id: 'builtin-warm-red',
+    name: 'warm-red',
+    version: '1.0.0',
+    author: 'Talebook',
+    description: '暖红风格',
+    installed_at: null,
+    builtin: true,
+    components: {
+      AppHeader: 'builtin:warm-red/AppHeader',
+      AppFooter: 'builtin:warm-red/AppFooter',
+    },
+  },
+  {
+    id: 'builtin-minimal',
+    name: 'minimal',
+    version: '1.0.0',
+    author: 'Talebook',
+    description: '极简紧凑风格',
+    installed_at: null,
+    builtin: true,
+    components: {
+      AppHeader: 'builtin:minimal/AppHeader',
+      AppFooter: 'builtin:minimal/AppFooter',
+    },
+  },
+];
+
+const listThemes = () => builtinThemes.map(theme => ({
+  ...theme,
+  components: { ...theme.components },
+  active: activeThemeName === theme.name,
+}));
 
 const app = createApp();
 const router = createRouter();
@@ -45,6 +120,7 @@ router.post('/_test/reset', eventHandler(async (event) => {
   booksourceCheckRunning = false;
   booksourceCheckPolls = 0;
   shelfBookIds = new Set();
+  activeThemeName = '';
   return { status: 'ok' };
 }));
 
@@ -474,6 +550,32 @@ router.get('/api/network/save/status', eventHandler(() => {
     return { err: 'ok', found: true, status: 'running', progress: 40, done: 40, total: 100, book_id: 0, error: '' };
   }
   return { err: 'ok', found: true, status: 'completed', progress: 100, done: 100, total: 100, book_id: 1, error: '' };
+}));
+
+// Theme API — return empty state so layout doesn't open an error dialog
+router.get('/api/themes/active', eventHandler(() => ({
+  err: 'ok',
+  theme: listThemes().find(theme => theme.active) || null,
+})));
+
+router.get('/api/themes', eventHandler(() => ({
+  err: 'ok',
+  themes: listThemes(),
+})));
+
+router.post('/api/themes/activate', eventHandler(async (event) => {
+  const body = await readBody(event);
+  const name = (body?.name || '').trim();
+  if (!name) {
+    activeThemeName = '';
+    return { err: 'ok', msg: '已恢复默认主题' };
+  }
+  const theme = listThemes().find(item => item.name === name);
+  if (!theme) {
+    return { err: 'not_found', msg: '主题不存在' };
+  }
+  activeThemeName = name;
+  return { err: 'ok', msg: `已激活主题：${name}`, theme: { ...theme, active: true } };
 }));
 
 app.use(router.handler);

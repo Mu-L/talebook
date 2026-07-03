@@ -201,6 +201,7 @@
     "scopedBooks": "私有书籍",
     "localLibrary": "本地书库",
     "networkLibrary": "网络书库",
+    "bookSources": "书源管理",
     "themes": "主题管理",
     "systemLogs": "系统日志",
     "myShelf": "我的书架"
@@ -1024,8 +1025,9 @@
     "installUrlPlaceholder": "输入 ZIP 主题包的 HTTPS 下载链接（仅支持 GitHub/Gitee/jsDelivr）",
     "uploadLabel": "选择本地 ZIP 主题包",
     "upload": "上传安装",
+    "uploadPackageInstall": "上传主题包安装",
     "installed": "已安装的主题",
-    "noThemes": "暂无已安装主题，请通过上方链接或本地上传安装。",
+    "noThemes": "暂无已安装主题，请上传本地 ZIP 主题包安装。",
     "active": "已激活",
     "activate": "激活",
     "deactivate": "恢复默认",

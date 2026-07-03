@@ -61,6 +61,10 @@ class TestFilenameDecodeFlow(unittest.TestCase):
         self.assertEqual(self._decode("book.epub"), "book.epub")
 
 class TestUpload(TestWithUserLogin):
+    def test_upload_without_ebook_field_returns_json_error(self):
+        d = self.json("/api/book/upload", method="POST", body="k=1")
+        self.assertEqual(d["err"], "params.ebook")
+
     @mock.patch("webserver.handlers.book.BookUpload.get_upload_file")
     def test_upload_bad_filename(self, m1):
         name = "索恩·德国史"
@@ -348,4 +352,3 @@ class TestProxyImageWhitelist(unittest.TestCase):
 
     def test_empty_host_blocked(self):
         self.assertFalse(self.handler.is_whitelist(""))
-

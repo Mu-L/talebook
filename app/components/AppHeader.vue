@@ -314,6 +314,7 @@
 
         <v-navigation-drawer
             v-model="sidebar"
+            class="app-navigation-drawer"
             :order="1"
             width="240"
         >
@@ -332,6 +333,7 @@
                     <!-- 二级菜单 -->
                     <v-list-group
                         v-else-if="item.groups"
+                        class="app-navigation-group"
                         :value="item.text"
                     >
                         <template #activator="{ props }">
@@ -575,9 +577,9 @@ function toggleTheme() {
 
 <style scoped>
 .search-wrapper {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    flex: 0 1 600px;
+    margin-left: auto;
+    margin-right: 12px;
     width: 40vw;
     max-width: 600px;
     min-width: 250px;
@@ -647,6 +649,14 @@ function toggleTheme() {
 /* 侧边栏图标和文字间距 */
 :deep(.v-navigation-drawer) .v-list-item__spacer {
     width: 8px !important;
+}
+
+/* 默认侧边栏二级菜单：保留层级，但不要使用 Vuetify 默认的大幅缩进 */
+:deep(.app-navigation-drawer) .app-navigation-group .v-list-group__items .v-list-item {
+    padding-inline-start: 24px !important;
+}
+:deep(.app-navigation-drawer) .app-navigation-group .v-list-group__items .v-list-item__prepend {
+    width: auto !important;
 }
 
 /* 导航链接样式 */

@@ -17,6 +17,55 @@ let saveStatusPolls = 0;
 let booksourceCheckRunning = false;
 let booksourceCheckPolls = 0;
 let shelfBookIds = new Set();
+let activeThemeName = '';
+
+const builtinThemes = [
+  {
+    id: 'builtin-cloudflare-radar',
+    name: 'cloudflare-radar',
+    version: '1.0.0',
+    author: 'Talebook',
+    description: '蓝色科技风格',
+    installed_at: null,
+    builtin: true,
+    components: {
+      AppHeader: 'builtin:cloudflare-radar/AppHeader',
+      AppFooter: 'builtin:cloudflare-radar/AppFooter',
+    },
+  },
+  {
+    id: 'builtin-mybooks-midnight',
+    name: 'mybooks-midnight',
+    version: '1.0.0',
+    author: 'Talebook',
+    description: '黑色书库风格',
+    installed_at: null,
+    builtin: true,
+    components: {
+      AppHeader: 'builtin:mybooks-midnight/AppHeader',
+      AppFooter: 'builtin:mybooks-midnight/AppFooter',
+    },
+  },
+  {
+    id: 'builtin-hacker-news-compact',
+    name: 'hacker-news-compact',
+    version: '1.0.0',
+    author: 'Talebook',
+    description: 'Hacker News 式紧凑风格',
+    installed_at: null,
+    builtin: true,
+    components: {
+      AppHeader: 'builtin:hacker-news-compact/AppHeader',
+      AppFooter: 'builtin:hacker-news-compact/AppFooter',
+    },
+  },
+];
+
+const listThemes = () => builtinThemes.map(theme => ({
+  ...theme,
+  components: { ...theme.components },
+  active: activeThemeName === theme.name,
+}));
 
 const app = createApp();
 const router = createRouter();
@@ -45,6 +94,7 @@ router.post('/_test/reset', eventHandler(async (event) => {
   booksourceCheckRunning = false;
   booksourceCheckPolls = 0;
   shelfBookIds = new Set();
+  activeThemeName = '';
   return { status: 'ok' };
 }));
 
@@ -479,13 +529,28 @@ router.get('/api/network/save/status', eventHandler(() => {
 // Theme API — return empty state so layout doesn't open an error dialog
 router.get('/api/themes/active', eventHandler(() => ({
   err: 'ok',
-  theme: null,
+  theme: listThemes().find(theme => theme.active) || null,
 })));
 
 router.get('/api/themes', eventHandler(() => ({
   err: 'ok',
-  themes: [],
+  themes: listThemes(),
 })));
+
+router.post('/api/themes/activate', eventHandler(async (event) => {
+  const body = await readBody(event);
+  const name = (body?.name || '').trim();
+  if (!name) {
+    activeThemeName = '';
+    return { err: 'ok', msg: '已恢复默认主题' };
+  }
+  const theme = listThemes().find(item => item.name === name);
+  if (!theme) {
+    return { err: 'not_found', msg: '主题不存在' };
+  }
+  activeThemeName = name;
+  return { err: 'ok', msg: `已激活主题：${name}`, theme: { ...theme, active: true } };
+}));
 
 app.use(router.handler);
 

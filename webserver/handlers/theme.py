@@ -28,6 +28,51 @@ MAX_UNCOMPRESSED_THEME_SIZE = 100 * 1024 * 1024  # 100MB
 _REDIRECT_CODES = {301, 302, 303, 307, 308}
 _THEME_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
 _RESERVED_THEME_NAMES = {"active", "install", "activate"}
+BUILTIN_THEMES = [
+    {
+        "id": "builtin-cloudflare-radar",
+        "name": "cloudflare-radar",
+        "display_name": _("蓝色科技主题"),
+        "version": "1.0.0",
+        "author": "Talebook",
+        "description": _("蓝色科技主题：蓝白与深蓝双配色，强调清晰导航、细边框、数据看板式的信息密度。"),
+        "installed_at": None,
+        "builtin": True,
+        "components": {
+            "AppHeader": "builtin:cloudflare-radar/AppHeader",
+            "AppFooter": "builtin:cloudflare-radar/AppFooter",
+        },
+    },
+    {
+        "id": "builtin-mybooks-midnight",
+        "name": "mybooks-midnight",
+        "display_name": _("灰色紧凑主题"),
+        "version": "1.0.0",
+        "author": "Talebook",
+        "description": _("灰色紧凑主题：高级灰双配色、低饱和界面与紧凑侧栏，适合长时间管理书库。"),
+        "installed_at": None,
+        "builtin": True,
+        "components": {
+            "AppHeader": "builtin:mybooks-midnight/AppHeader",
+            "AppFooter": "builtin:mybooks-midnight/AppFooter",
+        },
+    },
+    {
+        "id": "builtin-hacker-news-compact",
+        "name": "hacker-news-compact",
+        "display_name": _("极简主题"),
+        "version": "1.0.0",
+        "author": "Talebook",
+        "description": _("极简主题：保留最少装饰、小字号与高信息密度，浅色和深色都以快速浏览为核心。"),
+        "installed_at": None,
+        "builtin": True,
+        "components": {
+            "AppHeader": "builtin:hacker-news-compact/AppHeader",
+            "AppFooter": "builtin:hacker-news-compact/AppFooter",
+        },
+    },
+]
+BUILTIN_THEME_MAP = {theme["name"]: theme for theme in BUILTIN_THEMES}
 
 # Hardcoded canonical hostnames for the download allowlist.
 # Values are string literals — NOT derived from user input — so that
@@ -167,6 +212,25 @@ def normalize_components(theme_name, components):
     return {key: normalize_component_url(theme_name, value) for key, value in components.items()}
 
 
+def get_builtin_theme(name):
+    theme = BUILTIN_THEME_MAP.get(name)
+    if not theme:
+        return None
+    data = dict(theme)
+    data["components"] = dict(theme["components"])
+    data["active"] = CONF.get("ACTIVE_THEME") == name
+    return data
+
+
+def list_builtin_themes():
+    return [get_builtin_theme(theme["name"]) for theme in BUILTIN_THEMES]
+
+
+def save_active_theme(name):
+    CONF["ACTIVE_THEME"] = name
+    CONF.dumpfile()
+
+
 def find_theme_manifest_path(names):
     candidates = [n for n in names if not n.endswith("/") and n.split("/")[-1] == "theme.json" and n.count("/") <= 1]
     return candidates[0] if candidates else None
@@ -228,7 +292,7 @@ class ThemeListHandler(BaseHandler):
     @js
     def get(self):
         themes = self.session.query(InstalledTheme).order_by(InstalledTheme.installed_at.desc()).all()
-        return {"err": "ok", "themes": [t.to_dict() for t in themes]}
+        return {"err": "ok", "themes": list_builtin_themes() + [t.to_dict() for t in themes]}
 
 
 class ThemeInstallHandler(BaseHandler):
@@ -360,21 +424,35 @@ class ThemeActivateHandler(BaseHandler):
         name = body.get("name", "").strip()
 
         if name:
-            theme = self.session.query(InstalledTheme).filter(InstalledTheme.name == name).first()
-            if not theme:
-                return {"err": "not_found", "msg": _("主题不存在")}
+            builtin_theme = get_builtin_theme(name)
+            theme = None
+            if not builtin_theme:
+                theme = self.session.query(InstalledTheme).filter(InstalledTheme.name == name).first()
+                if not theme:
+                    return {"err": "not_found", "msg": _("主题不存在")}
 
         self.session.query(InstalledTheme).update({"active": False})
         if name:
-            theme.active = True
-            self.session.add(theme)
+            if theme:
+                theme.active = True
+                self.session.add(theme)
         self.session.commit()
 
         if name:
-            CONF["ACTIVE_THEME"] = name
-            return {"err": "ok", "msg": _("已激活主题：%s") % name, "theme": theme.to_dict()}
+            try:
+                save_active_theme(name)
+            except Exception as exc:
+                logging.exception("failed to save active theme")
+                return {"err": "file.permission", "msg": _("保存主题配置失败：%s") % str(exc)}
+            activated = builtin_theme if builtin_theme else theme.to_dict()
+            activated["active"] = True
+            return {"err": "ok", "msg": _("已激活主题：%s") % name, "theme": activated}
 
-        CONF["ACTIVE_THEME"] = ""
+        try:
+            save_active_theme("")
+        except Exception as exc:
+            logging.exception("failed to clear active theme")
+            return {"err": "file.permission", "msg": _("保存主题配置失败：%s") % str(exc)}
         return {"err": "ok", "msg": _("已恢复默认主题")}
 
 
@@ -382,12 +460,19 @@ class ThemeDeleteHandler(BaseHandler):
     @js
     @is_admin
     def delete(self, name):
+        if name in BUILTIN_THEME_MAP:
+            return {"err": "params.invalid", "msg": _("内置主题不能删除")}
+
         theme = self.session.query(InstalledTheme).filter(InstalledTheme.name == name).first()
         if not theme:
             return {"err": "not_found", "msg": _("主题不存在")}
 
         if theme.active:
-            CONF["ACTIVE_THEME"] = ""
+            try:
+                save_active_theme("")
+            except Exception as exc:
+                logging.exception("failed to clear deleted active theme")
+                return {"err": "file.permission", "msg": _("保存主题配置失败：%s") % str(exc)}
 
         themes_path = get_themes_path()
         theme_dir = os.path.realpath(os.path.join(themes_path, name))
@@ -407,6 +492,10 @@ class ThemeActiveHandler(BaseHandler):
 
     @js
     def get(self):
+        active_theme_name = CONF.get("ACTIVE_THEME")
+        if active_theme_name in BUILTIN_THEME_MAP:
+            return {"err": "ok", "theme": get_builtin_theme(active_theme_name)}
+
         theme = self.session.query(InstalledTheme).filter(InstalledTheme.active == True).first()  # noqa: E712
         if not theme:
             return {"err": "ok", "theme": None}

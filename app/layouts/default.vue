@@ -1,24 +1,18 @@
 <template>
     <v-app :theme="store.theme">
         <Loading />
-        <template v-if="store.nav">
+        <template v-if="store.nav && themeComponentsReady">
             <ClientOnly>
                 <component :is="dynamicHeader" />
-                <template #fallback>
-                    <AppHeader />
-                </template>
             </ClientOnly>
         </template>
-        <v-main>
+        <v-main v-show="!store.nav || themeComponentsReady">
             <v-container fluid>
                 <AppPress v-if="store.nav" />
                 <slot />
-                <template v-if="store.nav">
+                <template v-if="store.nav && themeComponentsReady">
                     <ClientOnly>
                         <component :is="dynamicFooter" />
-                        <template #fallback>
-                            <AppFooter />
-                        </template>
                     </ClientOnly>
                 </template>
             </v-container>
@@ -69,7 +63,7 @@
 </template>
 
 <script setup>
-import { shallowRef, computed, onMounted, watch } from 'vue';
+import { shallowRef, ref, computed, onMounted, watch } from 'vue';
 import { useRouter, useHead } from 'nuxt/app';
 import { useMainStore } from '@/stores/main';
 import { useThemeStore } from '@/stores/theme';
@@ -77,6 +71,7 @@ import { useDisplay } from 'vuetify';
 import Loading from '@/components/Loading.vue';
 import AppHeader from '@/components/AppHeader.vue';
 import AppFooter from '@/components/AppFooter.vue';
+import { isBuiltinTheme, loadBuiltinThemeComponent } from '@/utils/builtin-themes';
 import { clearInjectedThemeStyles, resolveThemeModuleUrl } from '@/utils/theme-runtime';
 
 const store = useMainStore();
@@ -86,6 +81,7 @@ const router = useRouter();
 
 const dynamicHeader = shallowRef(AppHeader);
 const dynamicFooter = shallowRef(AppFooter);
+const themeComponentsReady = ref(false);
 
 let applyThemeGeneration = 0;
 
@@ -104,11 +100,14 @@ async function applyThemeComponents(theme) {
     let header = AppHeader;
     let footer = AppFooter;
 
-    if (import.meta.client) {
-        clearInjectedThemeStyles();
-    }
-
-    if (theme?.components) {
+    if (isBuiltinTheme(theme)) {
+        const [headerComponent, footerComponent] = await Promise.all([
+            loadBuiltinThemeComponent(theme.name, 'AppHeader'),
+            loadBuiltinThemeComponent(theme.name, 'AppFooter'),
+        ]);
+        header = headerComponent || AppHeader;
+        footer = footerComponent || AppFooter;
+    } else if (theme?.components) {
         if (theme.components.AppHeader) {
             try {
                 const mod = await loadThemeModule(resolveThemeModuleUrl(theme.components.AppHeader, theme));
@@ -131,14 +130,27 @@ async function applyThemeComponents(theme) {
     // Discard if a newer activation started while we were awaiting imports
     if (generation !== applyThemeGeneration) return;
 
+    if (import.meta.client && !isBuiltinTheme(theme)) {
+        clearInjectedThemeStyles();
+    }
+
     dynamicHeader.value = header;
     dynamicFooter.value = footer;
+    themeComponentsReady.value = true;
 }
 
 onMounted(async () => {
     store.setLoading(false);
-    await Promise.all([store.bootstrap(), themeStore.fetchActiveTheme()]);
-    await applyThemeComponents(themeStore.activeTheme);
+    const bootstrapPromise = store.bootstrap();
+
+    if (themeStore.activeTheme) {
+        await applyThemeComponents(themeStore.activeTheme);
+        await Promise.all([bootstrapPromise, themeStore.fetchActiveTheme()]);
+        await applyThemeComponents(themeStore.activeTheme);
+    } else {
+        await Promise.all([bootstrapPromise, themeStore.fetchActiveTheme()]);
+        await applyThemeComponents(themeStore.activeTheme);
+    }
 });
 
 // 管理员激活/停用主题后立即切换组件，无需刷新页面

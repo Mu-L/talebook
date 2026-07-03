@@ -196,6 +196,7 @@
     "scopedBooks": "Private Books",
     "localLibrary": "Local Library",
     "networkLibrary": "Network Library",
+    "bookSources": "Book Sources",
     "themes": "Themes",
     "systemLogs": "System Logs",
     "myShelf": "My Shelf"
@@ -1008,8 +1009,9 @@
     "installUrlPlaceholder": "Enter HTTPS URL to a ZIP theme package (GitHub/Gitee/jsDelivr only)",
     "uploadLabel": "Select local ZIP theme package",
     "upload": "Upload & Install",
+    "uploadPackageInstall": "Upload theme package",
     "installed": "Installed Themes",
-    "noThemes": "No themes installed. Enter a download URL above or upload a local ZIP to install one.",
+    "noThemes": "No themes installed. Upload a local ZIP package to install one.",
     "active": "Active",
     "activate": "Activate",
     "deactivate": "Use Default",

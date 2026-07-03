@@ -10,6 +10,7 @@ from unittest import mock
 from tests import test_main
 from tests.test_main import TestApp, TestWithAdminUser, get_db
 from tests.test_main import setUpModule as init
+from webserver.handlers import theme as theme_module
 from webserver import models
 
 
@@ -17,6 +18,7 @@ def setUpModule():
     init()
     # users.db fixture 中不含 installed_themes 表，需在测试前创建
     models.user_syncdb(test_main._app._engine)
+    theme_module.CONF["ACTIVE_THEME"] = ""
 
 
 def make_theme_zip(theme_name="test-theme", version="1.0.0"):
@@ -71,6 +73,7 @@ class TestThemeAnonymousRestrict(TestApp):
 class TestThemeAdmin(TestWithAdminUser):
     def setUp(self):
         super().setUp()
+        theme_module.CONF["ACTIVE_THEME"] = ""
         # 清理测试残留主题
         session = get_db()
         session.query(models.InstalledTheme).filter(
@@ -79,6 +82,7 @@ class TestThemeAdmin(TestWithAdminUser):
         session.commit()
 
     def tearDown(self):
+        theme_module.CONF["ACTIVE_THEME"] = ""
         session = get_db()
         session.query(models.InstalledTheme).filter(
             models.InstalledTheme.name.in_(["test-theme", "test-theme-v2"])
@@ -99,6 +103,24 @@ class TestThemeAdmin(TestWithAdminUser):
         d = self.json("/api/themes")
         self.assertEqual(d["err"], "ok")
         self.assertIsInstance(d["themes"], list)
+
+    def test_list_includes_builtin_themes(self):
+        d = self.json("/api/themes")
+        self.assertEqual(d["err"], "ok")
+        builtin_names = {theme["name"] for theme in d["themes"] if theme.get("builtin")}
+        builtin_display_names = {theme["name"]: theme["display_name"] for theme in d["themes"] if theme.get("builtin")}
+        self.assertEqual(
+            builtin_names,
+            {"cloudflare-radar", "mybooks-midnight", "hacker-news-compact"},
+        )
+        self.assertEqual(
+            builtin_display_names,
+            {
+                "cloudflare-radar": "蓝色科技主题",
+                "mybooks-midnight": "灰色紧凑主题",
+                "hacker-news-compact": "极简主题",
+            },
+        )
 
     def test_install_blocked_url(self):
         """非白名单 URL 必须被拒绝。"""
@@ -355,23 +377,49 @@ class TestThemeAdmin(TestWithAdminUser):
         d = self.json("/api/themes/activate", method="POST", body=body)
         self.assertEqual(d["err"], "not_found")
 
+    def test_activate_builtin_theme(self):
+        body = json.dumps({"name": "cloudflare-radar"})
+        with mock.patch("webserver.handlers.theme.save_active_theme") as mock_save_active_theme:
+            d = self.json("/api/themes/activate", method="POST", body=body)
+        self.assertEqual(d["err"], "ok")
+        self.assertEqual(d["theme"]["name"], "cloudflare-radar")
+        self.assertTrue(d["theme"]["active"])
+        self.assertTrue(d["theme"]["builtin"])
+        mock_save_active_theme.assert_called_once_with("cloudflare-radar")
+
+        theme_module.CONF["ACTIVE_THEME"] = "cloudflare-radar"
+
+        active = self.json("/api/themes/active")
+        self.assertEqual(active["err"], "ok")
+        self.assertEqual(active["theme"]["name"], "cloudflare-radar")
+        self.assertTrue(active["theme"]["active"])
+        self.assertTrue(active["theme"]["builtin"])
+
     def test_activate_and_deactivate(self):
         self._create_theme("test-theme")
 
         body = json.dumps({"name": "test-theme"})
-        d = self.json("/api/themes/activate", method="POST", body=body)
+        with mock.patch("webserver.handlers.theme.save_active_theme") as mock_save_active_theme:
+            d = self.json("/api/themes/activate", method="POST", body=body)
         self.assertEqual(d["err"], "ok")
         self.assertEqual(d["theme"]["name"], "test-theme")
         self.assertTrue(d["theme"]["active"])
+        mock_save_active_theme.assert_called_once_with("test-theme")
 
         # 再次激活默认（空 name）
         body = json.dumps({"name": ""})
-        d = self.json("/api/themes/activate", method="POST", body=body)
+        with mock.patch("webserver.handlers.theme.save_active_theme") as mock_save_active_theme:
+            d = self.json("/api/themes/activate", method="POST", body=body)
         self.assertEqual(d["err"], "ok")
+        mock_save_active_theme.assert_called_once_with("")
 
     def test_delete_not_found(self):
         d = self.json("/api/themes/nonexistent", method="DELETE")
         self.assertEqual(d["err"], "not_found")
+
+    def test_delete_builtin_theme_rejected(self):
+        d = self.json("/api/themes/cloudflare-radar", method="DELETE")
+        self.assertEqual(d["err"], "params.invalid")
 
     def test_delete_theme(self):
         import tempfile

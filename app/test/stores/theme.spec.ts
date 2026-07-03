@@ -5,17 +5,17 @@ import { useThemeStore } from '~/stores/theme';
 const activeThemeCacheKey = 'talebook.activeTheme';
 
 const cachedTheme = {
-    id: 'builtin-hacker-news-compact',
-    name: 'hacker-news-compact',
+    id: 'builtin-minimal',
+    name: 'minimal',
     version: '1.0.0',
     author: 'Talebook',
-    description: 'Hacker News 式紧凑风格',
+    description: '极简紧凑风格',
     active: true,
     installed_at: null,
     builtin: true,
     components: {
-        AppHeader: 'builtin:hacker-news-compact/AppHeader',
-        AppFooter: 'builtin:hacker-news-compact/AppFooter',
+        AppHeader: 'builtin:minimal/AppHeader',
+        AppFooter: 'builtin:minimal/AppFooter',
     },
 };
 

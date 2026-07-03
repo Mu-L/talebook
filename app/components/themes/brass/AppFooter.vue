@@ -1,5 +1,5 @@
 <template>
-    <BuiltinThemeFooter variant="cloudflare-radar" />
+    <BuiltinThemeFooter variant="brass" />
 </template>
 
 <script setup lang="ts">

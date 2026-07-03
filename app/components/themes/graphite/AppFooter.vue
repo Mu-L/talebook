@@ -1,5 +1,5 @@
 <template>
-    <BuiltinThemeFooter variant="hacker-news-compact" />
+    <BuiltinThemeFooter variant="graphite" />
 </template>
 
 <script setup lang="ts">

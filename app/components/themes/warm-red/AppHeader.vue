@@ -1,5 +1,5 @@
 <template>
-    <BuiltinThemeHeader variant="cloudflare-radar" />
+    <BuiltinThemeHeader variant="warm-red" />
 </template>
 
 <script setup lang="ts">

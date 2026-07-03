@@ -35,7 +35,7 @@ defineProps({
     variant: {
         type: String,
         required: true,
-        validator: (value) => ['cloudflare-radar', 'mybooks-midnight', 'hacker-news-compact'].includes(value),
+        validator: (value) => ['light-gray', 'minimal', 'graphite', 'brass', 'warm-red'].includes(value),
     },
 });
 
@@ -64,19 +64,27 @@ const footerExtraHtml = computed(() => store.sys.footer_extra_html || '');
     text-decoration: none;
 }
 
-.tb-theme-footer-cloudflare-radar {
-    color: #526172;
-}
-
-.tb-theme-footer-mybooks-midnight {
+.tb-theme-footer-light-gray {
     color: #9fb1c8;
 }
 
-.tb-theme-footer-hacker-news-compact {
+.tb-theme-footer-minimal {
     border-top-color: #e6e1c8;
     color: #828282;
     font-family: Verdana, Geneva, sans-serif;
     margin-top: 12px;
     padding: 8px 12px 18px;
+}
+
+.tb-theme-footer-graphite {
+    color: #8a94a0;
+}
+
+.tb-theme-footer-brass {
+    color: #a89f90;
+}
+
+.tb-theme-footer-warm-red {
+    color: #857e70;
 }
 </style>

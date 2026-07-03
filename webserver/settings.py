@@ -169,14 +169,6 @@ settings = {
     'themes_path': '/data/books/themes/',
     'ACTIVE_THEME': '',
     'THEME_STORE_INDEX_URL': 'https://cdn.jsdelivr.net/gh/talebook/store@main/index.json',
-    'THEME_ALLOWED_DOMAINS': [
-        'github.com',
-        'raw.githubusercontent.com',
-        'codeload.github.com',
-        'gitee.com',
-        'cdn.jsdelivr.net',
-        'objects.githubusercontent.com',
-    ],
 
     'FRIENDS': [
         { "text": u"鸠摩搜索", "href": "https://www.jiumodiary.com/" },

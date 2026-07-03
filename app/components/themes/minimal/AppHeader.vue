@@ -1,5 +1,5 @@
 <template>
-    <BuiltinThemeHeader variant="hacker-news-compact" />
+    <BuiltinThemeHeader variant="minimal" />
 </template>
 
 <script setup lang="ts">

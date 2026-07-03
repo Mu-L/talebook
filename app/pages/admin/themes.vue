@@ -3,22 +3,7 @@
         <v-card class="my-2 elevation-4">
             <v-card-title class="theme-page-head">
                 <span>{{ $t('theme.title') }}</span>
-                <v-btn
-                    color="primary"
-                    prepend-icon="mdi-folder-zip"
-                    :loading="uploading"
-                    @click="chooseUploadFile"
-                >
-                    {{ $t('theme.uploadPackageInstall') }}
-                </v-btn>
             </v-card-title>
-            <input
-                ref="uploadInput"
-                accept=".zip"
-                class="theme-upload-input"
-                type="file"
-                @change="uploadTheme"
-            >
             <v-card-text>
                 <v-row class="theme-grid">
                     <v-col
@@ -78,16 +63,6 @@
                                 >
                                     {{ theme.active ? $t('theme.active') : $t('theme.activate') }}
                                 </v-btn>
-                                <v-btn
-                                    v-if="!theme._isDefault && !theme.builtin"
-                                    size="small"
-                                    color="error"
-                                    variant="text"
-                                    :loading="deleting === theme.name"
-                                    @click="deleteTheme(theme.name)"
-                                >
-                                    {{ $t('common.delete') }}
-                                </v-btn>
                             </div>
                         </v-card>
                     </v-col>
@@ -118,10 +93,7 @@ const themeStore = useThemeStore();
 const mainStore = useMainStore();
 
 const themes = ref([]);
-const uploadInput = ref(null);
-const uploading = ref(false);
 const activating = ref('');
-const deleting = ref('');
 
 const displayThemes = computed(() => buildThemeDisplayList(themes.value, t));
 
@@ -138,36 +110,6 @@ async function fetchThemes() {
     }
 }
 
-function chooseUploadFile() {
-    uploadInput.value?.click();
-}
-
-async function uploadTheme(event) {
-    const file = event?.target?.files?.[0];
-    if (!file) return;
-    uploading.value = true;
-    try {
-        const formData = new FormData();
-        formData.append('theme_file', file);
-        const res = await $backend('/themes/install', {
-            method: 'POST',
-            body: formData,
-        });
-        if (res.err === 'ok') {
-            showMsg(res.msg || '安装成功');
-            await fetchThemes();
-            await themeStore.fetchActiveTheme();
-        } else {
-            showMsg(res.msg || '安装失败', 'error');
-        }
-    } finally {
-        if (event?.target) {
-            event.target.value = '';
-        }
-        uploading.value = false;
-    }
-}
-
 async function activateTheme(key) {
     activating.value = key;
     try {
@@ -179,31 +121,17 @@ async function activateTheme(key) {
         }
         if (res.err === 'ok') {
             showMsg(res.msg || '已激活');
-            await fetchThemes();
+            // 激活会写入 auto.py 触发服务器自动重启，此处仅在本地翻转激活标记，
+            // 不再重新拉取列表，避免请求撞上重启窗口而误报“服务器正在重启中”。
+            themes.value = themes.value.map(theme => ({
+                ...theme,
+                active: key !== '__default__' && theme.name === key,
+            }));
         } else {
             showMsg(res.msg || '激活失败', 'error');
         }
     } finally {
         activating.value = '';
-    }
-}
-
-async function deleteTheme(name) {
-    if (!confirm(t('theme.deleteConfirm'))) return;
-    deleting.value = name;
-    try {
-        const res = await $backend(`/themes/${encodeURIComponent(name)}`, { method: 'DELETE' });
-        if (res.err === 'ok') {
-            showMsg(res.msg || '已删除');
-            if (themeStore.activeTheme?.name === name) {
-                themeStore.activeTheme = null;
-            }
-            await fetchThemes();
-        } else {
-            showMsg(res.msg || '删除失败', 'error');
-        }
-    } finally {
-        deleting.value = '';
     }
 }
 
@@ -220,10 +148,6 @@ onMounted(async () => {
     gap: 16px;
     justify-content: space-between;
     padding: 16px;
-}
-
-.theme-upload-input {
-    display: none;
 }
 
 .theme-grid {

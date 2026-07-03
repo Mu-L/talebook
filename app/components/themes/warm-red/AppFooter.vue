@@ -1,5 +1,5 @@
 <template>
-    <BuiltinThemeFooter variant="mybooks-midnight" />
+    <BuiltinThemeFooter variant="warm-red" />
 </template>
 
 <script setup lang="ts">

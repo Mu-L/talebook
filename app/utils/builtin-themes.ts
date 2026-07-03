@@ -1,15 +1,23 @@
 export const builtinThemeLoaders = {
-    'cloudflare-radar': {
-        AppHeader: () => import('@/components/themes/cloudflare-radar/AppHeader.vue'),
-        AppFooter: () => import('@/components/themes/cloudflare-radar/AppFooter.vue'),
+    'light-gray': {
+        AppHeader: () => import('@/components/themes/light-gray/AppHeader.vue'),
+        AppFooter: () => import('@/components/themes/light-gray/AppFooter.vue'),
     },
-    'mybooks-midnight': {
-        AppHeader: () => import('@/components/themes/mybooks-midnight/AppHeader.vue'),
-        AppFooter: () => import('@/components/themes/mybooks-midnight/AppFooter.vue'),
+    'minimal': {
+        AppHeader: () => import('@/components/themes/minimal/AppHeader.vue'),
+        AppFooter: () => import('@/components/themes/minimal/AppFooter.vue'),
     },
-    'hacker-news-compact': {
-        AppHeader: () => import('@/components/themes/hacker-news-compact/AppHeader.vue'),
-        AppFooter: () => import('@/components/themes/hacker-news-compact/AppFooter.vue'),
+    'graphite': {
+        AppHeader: () => import('@/components/themes/graphite/AppHeader.vue'),
+        AppFooter: () => import('@/components/themes/graphite/AppFooter.vue'),
+    },
+    'brass': {
+        AppHeader: () => import('@/components/themes/brass/AppHeader.vue'),
+        AppFooter: () => import('@/components/themes/brass/AppFooter.vue'),
+    },
+    'warm-red': {
+        AppHeader: () => import('@/components/themes/warm-red/AppHeader.vue'),
+        AppFooter: () => import('@/components/themes/warm-red/AppFooter.vue'),
     },
 } as const
 

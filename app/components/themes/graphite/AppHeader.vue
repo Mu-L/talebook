@@ -1,5 +1,5 @@
 <template>
-    <BuiltinThemeHeader variant="mybooks-midnight" />
+    <BuiltinThemeHeader variant="graphite" />
 </template>
 
 <script setup lang="ts">

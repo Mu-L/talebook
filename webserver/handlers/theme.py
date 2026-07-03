@@ -1,215 +1,89 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
-import datetime
-import ipaddress
 import json
 import logging
-import os
-import re
-import shutil
-import socket
-import tempfile
-import zipfile
-from urllib.parse import urljoin, urlparse
-
-import requests
 
 from webserver import loader
 from webserver.handlers.base import BaseHandler, is_admin, js
 from webserver.i18n import _
-from webserver.models import InstalledTheme
 
 
 CONF = loader.get_settings()
 
-MAX_THEME_SIZE = 10 * 1024 * 1024  # 10MB
-MAX_UNCOMPRESSED_THEME_SIZE = 100 * 1024 * 1024  # 100MB
-_REDIRECT_CODES = {301, 302, 303, 307, 308}
-_THEME_NAME_RE = re.compile(r"^[A-Za-z0-9][A-Za-z0-9_.-]{0,63}$")
-_RESERVED_THEME_NAMES = {"active", "install", "activate"}
 BUILTIN_THEMES = [
     {
-        "id": "builtin-cloudflare-radar",
-        "name": "cloudflare-radar",
-        "display_name": _("蓝色科技主题"),
+        "id": "builtin-brass",
+        "name": "brass",
+        "display_name": _("黄铜主题"),
         "version": "1.0.0",
         "author": "Talebook",
-        "description": _("蓝色科技主题：蓝白与深蓝双配色，强调清晰导航、细边框、数据看板式的信息密度。"),
+        "description": _("暖褐炭灰打底，一线黄铜勾勒轮廓，衬线书名沉静内敛——像台灯下摊开的一册旧书，最宜夜里慢读细品。"),
         "installed_at": None,
         "builtin": True,
         "components": {
-            "AppHeader": "builtin:cloudflare-radar/AppHeader",
-            "AppFooter": "builtin:cloudflare-radar/AppFooter",
+            "AppHeader": "builtin:brass/AppHeader",
+            "AppFooter": "builtin:brass/AppFooter",
         },
     },
     {
-        "id": "builtin-mybooks-midnight",
-        "name": "mybooks-midnight",
-        "display_name": _("灰色紧凑主题"),
+        "id": "builtin-graphite",
+        "name": "graphite",
+        "display_name": _("石墨主题"),
         "version": "1.0.0",
         "author": "Talebook",
-        "description": _("灰色紧凑主题：高级灰双配色、低饱和界面与紧凑侧栏，适合长时间管理书库。"),
+        "description": _("冷调蓝灰如石墨般沉着，墨蓝作唯一亮色，选中项亮起一道细边——信息井然有序，久看不觉刺眼。"),
         "installed_at": None,
         "builtin": True,
         "components": {
-            "AppHeader": "builtin:mybooks-midnight/AppHeader",
-            "AppFooter": "builtin:mybooks-midnight/AppFooter",
+            "AppHeader": "builtin:graphite/AppHeader",
+            "AppFooter": "builtin:graphite/AppFooter",
         },
     },
     {
-        "id": "builtin-hacker-news-compact",
-        "name": "hacker-news-compact",
+        "id": "builtin-light-gray",
+        "name": "light-gray",
+        "display_name": _("浅灰主题"),
+        "version": "1.0.0",
+        "author": "Talebook",
+        "description": _("通透的高级浅灰，低饱和配色搭紧凑侧栏，清爽而不喧宾夺主——日常打理书库，久对屏幕也轻松。"),
+        "installed_at": None,
+        "builtin": True,
+        "components": {
+            "AppHeader": "builtin:light-gray/AppHeader",
+            "AppFooter": "builtin:light-gray/AppFooter",
+        },
+    },
+    {
+        "id": "builtin-warm-red",
+        "name": "warm-red",
+        "display_name": _("暖红主题"),
+        "version": "1.0.0",
+        "author": "Talebook",
+        "description": _("微黄纸感的明亮底色，牛血红点题，侧栏以虚线分行如旧时图书馆的索引卡——带着纸页与目录的温度。"),
+        "installed_at": None,
+        "builtin": True,
+        "components": {
+            "AppHeader": "builtin:warm-red/AppHeader",
+            "AppFooter": "builtin:warm-red/AppFooter",
+        },
+    },
+    {
+        "id": "builtin-minimal",
+        "name": "minimal",
         "display_name": _("极简主题"),
         "version": "1.0.0",
         "author": "Talebook",
-        "description": _("极简主题：保留最少装饰、小字号与高信息密度，浅色和深色都以快速浏览为核心。"),
+        "description": _("去尽多余装饰，只留文字与留白，小字号、高密度——明暗两色皆为一目十行的快速浏览而生。"),
         "installed_at": None,
         "builtin": True,
         "components": {
-            "AppHeader": "builtin:hacker-news-compact/AppHeader",
-            "AppFooter": "builtin:hacker-news-compact/AppFooter",
+            "AppHeader": "builtin:minimal/AppHeader",
+            "AppFooter": "builtin:minimal/AppFooter",
         },
     },
 ]
 BUILTIN_THEME_MAP = {theme["name"]: theme for theme in BUILTIN_THEMES}
-
-# Hardcoded canonical hostnames for the download allowlist.
-# Values are string literals — NOT derived from user input — so that
-# CodeQL's taint tracking sees the host in the reconstructed URL as clean,
-# eliminating the py/full-server-side-request-forgery finding.
-# Keep in sync with THEME_ALLOWED_DOMAINS in settings.py.
-_CANONICAL_HOSTS = {
-    "github.com": "github.com",
-    "raw.githubusercontent.com": "raw.githubusercontent.com",
-    "codeload.github.com": "codeload.github.com",
-    "objects.githubusercontent.com": "objects.githubusercontent.com",
-    "gitee.com": "gitee.com",
-    "cdn.jsdelivr.net": "cdn.jsdelivr.net",
-}
-
-# Private / reserved address spaces that must never be reached via a download URL.
-_PRIVATE_NETS = (
-    ipaddress.ip_network("0.0.0.0/8"),
-    ipaddress.ip_network("10.0.0.0/8"),
-    ipaddress.ip_network("100.64.0.0/10"),
-    ipaddress.ip_network("127.0.0.0/8"),
-    ipaddress.ip_network("169.254.0.0/16"),
-    ipaddress.ip_network("172.16.0.0/12"),
-    ipaddress.ip_network("192.0.0.0/24"),
-    ipaddress.ip_network("192.168.0.0/16"),
-    ipaddress.ip_network("198.18.0.0/15"),
-    ipaddress.ip_network("240.0.0.0/4"),
-    ipaddress.ip_network("::1/128"),
-    ipaddress.ip_network("fc00::/7"),
-    ipaddress.ip_network("fe80::/10"),
-)
-
-
-def is_allowed_url(url):
-    parsed = urlparse(url)
-    if parsed.scheme != "https":
-        return False
-    host = parsed.netloc.lower()
-    allowed = CONF.get("THEME_ALLOWED_DOMAINS", [])
-    return any(host == d or host.endswith("." + d) for d in allowed)
-
-
-def _assert_public_host(hostname):
-    """Resolve *hostname* and raise ValueError if any resolved address is private/reserved.
-
-    Guards against DNS-rebinding attacks where an allowed domain later resolves to an
-    internal IP between the allowlist check and the actual TCP connection.
-    """
-    try:
-        results = socket.getaddrinfo(hostname, None)
-    except socket.gaierror as exc:
-        raise ValueError(_("无法解析主机名：%s") % str(exc))
-    for _family, _type, _proto, _canonname, sockaddr in results:
-        raw = sockaddr[0].split("%")[0]  # strip IPv6 zone id (e.g. "fe80::1%eth0")
-        try:
-            addr = ipaddress.ip_address(raw)
-        except ValueError:
-            raise ValueError(_("非法 IP 地址：%s") % raw)
-        if addr.is_loopback or addr.is_private or addr.is_reserved or addr.is_link_local or addr.is_multicast:
-            raise ValueError(_("下载地址解析到内网 IP，已拒绝"))
-        for net in _PRIVATE_NETS:
-            if addr in net:
-                raise ValueError(_("下载地址解析到内网 IP，已拒绝"))
-
-
-def _sanitize_url(url):
-    """Validate *url* and return a freshly constructed string to break the taint chain.
-
-    Performs two checks:
-    1. Domain allowlist — scheme must be https and host must be in _CANONICAL_HOSTS
-       (or THEME_ALLOWED_DOMAINS for runtime-configured extras).
-    2. Public-IP check — resolved addresses must not fall in private/reserved ranges.
-
-    The host in the returned URL is taken from _CANONICAL_HOSTS (a module-level
-    constant with literal string values), NOT from the parsed user input.  This
-    means CodeQL's taint tracking cannot propagate the user-supplied host into the
-    requests.get() call, eliminating the py/full-server-side-request-forgery finding.
-    """
-    parsed = urlparse(url)
-    if parsed.scheme != "https":
-        raise ValueError(_("只允许 HTTPS 下载地址"))
-    hostname = parsed.hostname
-    if not hostname:
-        raise ValueError(_("URL 中缺少主机名"))
-    netloc = (parsed.netloc or "").lower()
-
-    # Look up in the hardcoded dict first — dict value is a literal, not user-tainted.
-    safe_netloc = _CANONICAL_HOSTS.get(netloc)
-    if safe_netloc is None:
-        # Fall back to runtime-configured extra domains (server config, not user input).
-        extra_allowed = CONF.get("THEME_ALLOWED_DOMAINS", [])
-        safe_netloc = next(
-            (d for d in extra_allowed if netloc == d or netloc.endswith("." + d)),
-            None,
-        )
-        if safe_netloc is None:
-            raise ValueError(_("不允许的下载地址，仅支持 GitHub/Gitee/jsDelivr"))
-
-    _assert_public_host(hostname)
-
-    # Reconstruct using safe_netloc from the hardcoded dict (not user input).
-    safe = "https://" + safe_netloc + (parsed.path or "/")
-    if parsed.query:
-        safe += "?" + parsed.query
-    return safe
-
-
-def is_valid_theme_name(name):
-    return bool(_THEME_NAME_RE.match(name)) and name not in {".", ".."}
-
-
-def get_theme_dir(themes_path, theme_name):
-    themes_root = os.path.realpath(themes_path)
-    theme_dir = os.path.realpath(os.path.join(themes_root, theme_name))
-    if theme_dir == themes_root or not theme_dir.startswith(themes_root + os.sep):
-        raise ValueError(_("非法路径"))
-    return theme_dir
-
-
-def normalize_component_url(theme_name, component_url):
-    if not isinstance(component_url, str):
-        raise ValueError(_("主题组件地址无效"))
-    expected_prefix = "/static/themes/%s/" % theme_name
-    parsed = urlparse(component_url)
-    if parsed.scheme or parsed.netloc or not parsed.path.startswith(expected_prefix):
-        raise ValueError(_("主题组件地址必须位于当前主题目录"))
-    if ".." in parsed.path.split("/"):
-        raise ValueError(_("主题组件地址无效"))
-    return parsed.path
-
-
-def normalize_components(theme_name, components):
-    if components is None:
-        return {}
-    if not isinstance(components, dict):
-        raise ValueError(_("theme.json 中 components 字段无效"))
-    return {key: normalize_component_url(theme_name, value) for key, value in components.items()}
 
 
 def get_builtin_theme(name):
@@ -231,185 +105,10 @@ def save_active_theme(name):
     CONF.dumpfile()
 
 
-def find_theme_manifest_path(names):
-    candidates = [n for n in names if not n.endswith("/") and n.split("/")[-1] == "theme.json" and n.count("/") <= 1]
-    return candidates[0] if candidates else None
-
-
-def download_theme_archive(download_url):
-    # _sanitize_url validates the domain allowlist and private-IP blocklist, then
-    # reconstructs the URL from validated parts so that no user-supplied taint
-    # reaches requests.get() — this is the fix for the CodeQL SSRF finding.
-    current_url = _sanitize_url(download_url)
-    for hop in range(6):
-        resp = requests.get(current_url, timeout=30, stream=True, allow_redirects=False)
-        resp.raise_for_status()
-        if resp.status_code not in _REDIRECT_CODES:
-            return resp
-        location = resp.headers.get("Location", "")
-        try:
-            current_url = _sanitize_url(urljoin(current_url, location))
-        except ValueError:
-            raise ValueError(_("重定向目标地址不在允许列表中"))
-    raise ValueError(_("重定向次数过多"))
-
-
-def safe_extract(zip_path, dest_dir, strip_prefix=""):
-    """解压 ZIP 到 dest_dir，支持剥离存档根目录前缀，并防范路径穿越和 ZIP bomb。"""
-    dest_dir = os.path.realpath(dest_dir)
-    total_uncompressed = 0
-    with zipfile.ZipFile(zip_path) as zf:
-        for member in zf.infolist():
-            total_uncompressed += member.file_size
-            if total_uncompressed > MAX_UNCOMPRESSED_THEME_SIZE:
-                raise ValueError(_("主题包解压后超过 100MB 限制"))
-
-            filename = member.filename
-            if strip_prefix and filename.startswith(strip_prefix):
-                filename = filename[len(strip_prefix) :]
-                if not filename:
-                    continue  # 跳过存档根目录本身
-
-            target = os.path.realpath(os.path.join(dest_dir, filename))
-            if target != dest_dir and not target.startswith(dest_dir + os.sep):
-                raise ValueError(_("路径穿越攻击: %s") % member.filename)
-
-            if filename.endswith("/"):
-                os.makedirs(target, exist_ok=True)
-            else:
-                os.makedirs(os.path.dirname(target), exist_ok=True)
-                with zf.open(member) as src, open(target, "wb") as dst:
-                    dst.write(src.read())
-
-
-def get_themes_path():
-    path = CONF.get("themes_path", "/data/books/themes/")
-    os.makedirs(path, exist_ok=True)
-    return path
-
-
 class ThemeListHandler(BaseHandler):
     @js
     def get(self):
-        themes = self.session.query(InstalledTheme).order_by(InstalledTheme.installed_at.desc()).all()
-        return {"err": "ok", "themes": list_builtin_themes() + [t.to_dict() for t in themes]}
-
-
-class ThemeInstallHandler(BaseHandler):
-    @js
-    @is_admin
-    def post(self):
-        content = None
-
-        if self.request.files and "theme_file" in self.request.files:
-            file_info = self.request.files["theme_file"][0]
-            content = file_info["body"]
-            filename = file_info.get("filename", "")
-            if not filename.lower().endswith(".zip"):
-                return {"err": "params.invalid", "msg": _("只支持上传 ZIP 格式的主题包")}
-            if len(content) > MAX_THEME_SIZE:
-                return {"err": "params.invalid", "msg": _("主题包超过 10MB 限制")}
-        else:
-            try:
-                body = json.loads(self.request.body)
-            except (json.JSONDecodeError, TypeError):
-                return {"err": "params.invalid", "msg": _("请求参数格式错误")}
-
-            download_url = body.get("download_url", "").strip()
-            if not download_url:
-                return {"err": "params.invalid", "msg": _("缺少 download_url 参数")}
-
-            try:
-                download_url = _sanitize_url(download_url)
-            except ValueError as e:
-                return {"err": "params.invalid", "msg": str(e)}
-
-            try:
-                resp = download_theme_archive(download_url)
-            except ValueError as e:
-                return {"err": "params.invalid", "msg": str(e)}
-            except Exception as e:
-                logging.warning("主题下载失败: %s", e)
-                return {"err": "network.error", "msg": _("下载失败：%s") % str(e)}
-
-            content = b""
-            for chunk in resp.iter_content(chunk_size=8192):
-                content += chunk
-                if len(content) > MAX_THEME_SIZE:
-                    return {"err": "params.invalid", "msg": _("主题包超过 10MB 限制")}
-
-        with tempfile.NamedTemporaryFile(suffix=".zip", delete=False) as tmp:
-            tmp.write(content)
-            tmp_path = tmp.name
-
-        try:
-            if not zipfile.is_zipfile(tmp_path):
-                return {"err": "params.invalid", "msg": _("文件不是有效的 ZIP 格式")}
-
-            try:
-                zf = zipfile.ZipFile(tmp_path)
-                names = zf.namelist()
-            except zipfile.BadZipFile as e:
-                return {"err": "params.invalid", "msg": _("ZIP 文件损坏或不兼容：%s") % str(e)}
-
-            with zf:
-                theme_json_path = find_theme_manifest_path(names)
-                if not theme_json_path:
-                    return {"err": "params.invalid", "msg": _("ZIP 包中缺少 theme.json 文件")}
-
-                theme_meta = json.loads(zf.read(theme_json_path).decode("utf-8"))
-
-            theme_name = theme_meta.get("name", "").strip()
-            if not is_valid_theme_name(theme_name) or theme_name in _RESERVED_THEME_NAMES:
-                return {"err": "params.invalid", "msg": _("theme.json 中 name 字段无效")}
-
-            components = normalize_components(theme_name, theme_meta.get("components", {}))
-            themes_path = get_themes_path()
-            dest_dir = get_theme_dir(themes_path, theme_name)
-            parent_dir = os.path.dirname(dest_dir)
-            temp_dest = tempfile.mkdtemp(prefix=theme_name + ".", suffix=".tmp", dir=parent_dir)
-            try:
-                # 剥离 GitHub/Gitee 存档的根目录前缀（如 "repo-branch/"）
-                strip_prefix = ""
-                if "/" in theme_json_path:
-                    strip_prefix = theme_json_path.rsplit("/", 1)[0] + "/"
-                safe_extract(tmp_path, temp_dest, strip_prefix=strip_prefix)
-                if os.path.isdir(dest_dir):
-                    shutil.rmtree(dest_dir)
-                os.replace(temp_dest, dest_dir)
-            except Exception:
-                if os.path.isdir(temp_dest):
-                    shutil.rmtree(temp_dest)
-                raise
-
-        except ValueError as e:
-            return {"err": "security.error", "msg": str(e)}
-        except Exception as e:
-            logging.error("主题安装失败: %s", e)
-            return {"err": "install.error", "msg": _("安装失败：%s") % str(e)}
-        finally:
-            os.unlink(tmp_path)
-
-        existing = self.session.query(InstalledTheme).filter(InstalledTheme.name == theme_name).first()
-        if existing:
-            existing.version = theme_meta.get("version", "")
-            existing.author = theme_meta.get("author", "")
-            existing.description = theme_meta.get("description", "")
-            existing.data = {"components": components}
-            existing.installed_at = datetime.datetime.now()
-            existing.save()
-            theme = existing
-        else:
-            theme = InstalledTheme(
-                name=theme_name,
-                version=theme_meta.get("version", ""),
-                author=theme_meta.get("author", ""),
-                description=theme_meta.get("description", ""),
-            )
-            theme.data = {"components": components}
-            theme.save()
-
-        return {"err": "ok", "msg": _("主题安装成功"), "theme": theme.to_dict()}
+        return {"err": "ok", "themes": list_builtin_themes()}
 
 
 class ThemeActivateHandler(BaseHandler):
@@ -423,68 +122,26 @@ class ThemeActivateHandler(BaseHandler):
 
         name = body.get("name", "").strip()
 
-        if name:
-            builtin_theme = get_builtin_theme(name)
-            theme = None
-            if not builtin_theme:
-                theme = self.session.query(InstalledTheme).filter(InstalledTheme.name == name).first()
-                if not theme:
-                    return {"err": "not_found", "msg": _("主题不存在")}
-
-        self.session.query(InstalledTheme).update({"active": False})
-        if name:
-            if theme:
-                theme.active = True
-                self.session.add(theme)
-        self.session.commit()
-
-        if name:
-            try:
-                save_active_theme(name)
-            except Exception as exc:
-                logging.exception("failed to save active theme")
-                return {"err": "file.permission", "msg": _("保存主题配置失败：%s") % str(exc)}
-            activated = builtin_theme if builtin_theme else theme.to_dict()
-            activated["active"] = True
-            return {"err": "ok", "msg": _("已激活主题：%s") % name, "theme": activated}
-
-        try:
-            save_active_theme("")
-        except Exception as exc:
-            logging.exception("failed to clear active theme")
-            return {"err": "file.permission", "msg": _("保存主题配置失败：%s") % str(exc)}
-        return {"err": "ok", "msg": _("已恢复默认主题")}
-
-
-class ThemeDeleteHandler(BaseHandler):
-    @js
-    @is_admin
-    def delete(self, name):
-        if name in BUILTIN_THEME_MAP:
-            return {"err": "params.invalid", "msg": _("内置主题不能删除")}
-
-        theme = self.session.query(InstalledTheme).filter(InstalledTheme.name == name).first()
-        if not theme:
-            return {"err": "not_found", "msg": _("主题不存在")}
-
-        if theme.active:
+        if not name:
             try:
                 save_active_theme("")
             except Exception as exc:
-                logging.exception("failed to clear deleted active theme")
+                logging.exception("failed to clear active theme")
                 return {"err": "file.permission", "msg": _("保存主题配置失败：%s") % str(exc)}
+            return {"err": "ok", "msg": _("已恢复默认主题")}
 
-        themes_path = get_themes_path()
-        theme_dir = os.path.realpath(os.path.join(themes_path, name))
-        if not theme_dir.startswith(os.path.realpath(themes_path) + os.sep):
-            return {"err": "security.error", "msg": _("非法路径")}
+        theme = get_builtin_theme(name)
+        if not theme:
+            return {"err": "not_found", "msg": _("主题不存在")}
 
-        if os.path.isdir(theme_dir):
-            shutil.rmtree(theme_dir)
+        try:
+            save_active_theme(name)
+        except Exception as exc:
+            logging.exception("failed to save active theme")
+            return {"err": "file.permission", "msg": _("保存主题配置失败：%s") % str(exc)}
 
-        self.session.delete(theme)
-        self.session.commit()
-        return {"err": "ok", "msg": _("主题已删除")}
+        theme["active"] = True
+        return {"err": "ok", "msg": _("已激活主题：%s") % name, "theme": theme}
 
 
 class ThemeActiveHandler(BaseHandler):
@@ -495,18 +152,12 @@ class ThemeActiveHandler(BaseHandler):
         active_theme_name = CONF.get("ACTIVE_THEME")
         if active_theme_name in BUILTIN_THEME_MAP:
             return {"err": "ok", "theme": get_builtin_theme(active_theme_name)}
-
-        theme = self.session.query(InstalledTheme).filter(InstalledTheme.active == True).first()  # noqa: E712
-        if not theme:
-            return {"err": "ok", "theme": None}
-        return {"err": "ok", "theme": theme.to_dict()}
+        return {"err": "ok", "theme": None}
 
 
 def routes():
     return [
         (r"/api/themes", ThemeListHandler),
-        (r"/api/themes/install", ThemeInstallHandler),
         (r"/api/themes/activate", ThemeActivateHandler),
         (r"/api/themes/active", ThemeActiveHandler),
-        (r"/api/themes/([^/]+)", ThemeDeleteHandler),
     ]

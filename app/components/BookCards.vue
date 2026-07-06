@@ -59,7 +59,7 @@
         
         <!-- 空状态提示 -->
         <v-row
-            v-if="render_books.length === 0"
+            v-if="showEmptyState && render_books.length === 0"
             class="empty-state"
         >
             <v-col cols="12">
@@ -90,14 +90,18 @@ const props = defineProps({
         type: Array,
         default: () => [],
     },
+    showEmptyState: {
+        type: Boolean,
+        default: false,
+    },
 });
 
 const render_books = computed(() => {
     return props.books.map( b => {
-        if ( b['href'] == undefined ) {
-            b['href'] = '/book/' + b.id;
-        }
-        return b;
+        return {
+            ...b,
+            href: b.href ?? '/book/' + b.id,
+        };
     });
 });
 </script>

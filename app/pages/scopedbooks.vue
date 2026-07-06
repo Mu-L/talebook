@@ -13,7 +13,10 @@
                     color="primary"
                     class="mb-3"
                 />
-                <BookCards :books="books" />
+                <BookCards
+                    :books="books"
+                    :show-empty-state="inited && !loading && books.length === 0"
+                />
             </v-col>
 
             <v-col cols="12">

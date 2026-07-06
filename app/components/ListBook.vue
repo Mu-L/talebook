@@ -10,7 +10,10 @@
             </v-col>
 
             <v-col cols="12">
-                <BookCards :books="books" />
+                <BookCards
+                    :books="books"
+                    :show-empty-state="loaded && books.length === 0"
+                />
             </v-col>
 
             <v-col cols="12">
@@ -45,6 +48,7 @@ const books = ref([]);
 const total = ref(0);
 const page_size = 60;
 const page_cnt = ref(0);
+const loaded = ref(false);
 
 // Initialize page from query
 if (route.query.start != undefined) {
@@ -53,6 +57,7 @@ if (route.query.start != undefined) {
 
 // Fetch data function
 const fetchData = async () => {
+    loaded.value = false;
     try {
         const data = await $backend(route.fullPath);
         if (data.err != 'ok') {
@@ -63,6 +68,7 @@ const fetchData = async () => {
         books.value = data.books;
         total.value = data.total;
         page_cnt.value = total.value > 0 ? Math.max(1, Math.ceil(total.value / page_size)) : 0;
+        loaded.value = true;
     } catch (e) {
         console.error(e);
     }
@@ -81,6 +87,7 @@ watch(data, (newData) => {
         books.value = newData.books;
         total.value = newData.total;
         page_cnt.value = total.value > 0 ? Math.max(1, Math.ceil(total.value / page_size)) : 0;
+        loaded.value = true;
     } else if (newData && newData.err !== 'ok' && $alert) {
         $alert('error', newData.msg);
     }
@@ -88,6 +95,7 @@ watch(data, (newData) => {
 
 // Watch for route changes (e.g. search query change or pagination)
 watch(() => route.fullPath, async () => {
+    loaded.value = false;
     await refresh();  // 刷新 useAsyncData
     // fetchData()  // 或者直接调用 fetchData
 });

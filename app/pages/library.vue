@@ -298,7 +298,10 @@
                     color="primary"
                     class="mb-3"
                 />
-                <BookCards :books="books">
+                <BookCards
+                    :books="books"
+                    :show-empty-state="inited && !loading && books.length === 0"
+                >
                     <template #introduce="{ book }">
                         <SerializeStatusBadge
                             v-if="book.serialize_status"

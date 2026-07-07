@@ -2,8 +2,10 @@
 # -*- coding: UTF-8 -*-
 
 import datetime
+import itertools
 import json
 import logging
+import re
 import ssl
 import threading
 import time
@@ -26,19 +28,45 @@ _UNVERIFIED_CONTEXT.check_hostname = False
 _UNVERIFIED_CONTEXT.verify_mode = ssl.CERT_NONE
 
 
+def _normalize_version(version):
+    """Normalize release tags for comparison and storage."""
+    return str(version or "").strip().lstrip("vV")
+
+
+def _version_parts(version):
+    return [int(part) for part in re.findall(r"\d+", _normalize_version(version))]
+
+
 def _compare_versions(v1, v2):
-    """Compare two version strings, return True if v2 > v1"""
-    try:
-        parts1 = [int(x) for x in v1.split(".")]
-        parts2 = [int(x) for x in v2.split(".")]
-        for p1, p2 in zip(parts1, parts2, strict=True):
-            if p2 > p1:
-                return True
-            if p2 < p1:
-                return False
-        return len(parts2) > len(parts1)
-    except Exception:
-        return v2 != v1
+    """Compare two version strings, return True if v2 > v1."""
+    normalized_v1 = _normalize_version(v1)
+    normalized_v2 = _normalize_version(v2)
+    if normalized_v1 == normalized_v2:
+        return False
+
+    parts1 = _version_parts(normalized_v1)
+    parts2 = _version_parts(normalized_v2)
+    if not parts1 or not parts2:
+        return normalized_v2 != normalized_v1
+
+    for p1, p2 in itertools.zip_longest(parts1, parts2, fillvalue=0):
+        if p2 > p1:
+            return True
+        if p2 < p1:
+            return False
+    return False
+
+
+def _has_newer_version(current_version, latest_version):
+    return bool(_normalize_version(latest_version)) and _compare_versions(current_version, latest_version)
+
+
+def _same_version(v1, v2):
+    return _normalize_version(v1) == _normalize_version(v2)
+
+
+def _release_version(tag_name):
+    return _normalize_version(tag_name)
 
 
 class UpdateChecker:
@@ -96,13 +124,13 @@ class UpdateChecker:
                 logging.error("Update check failed: %s", self.check_error)
                 return
 
-            self.latest_version = data.get("tag_name", "").lstrip("v")
+            self.latest_version = _release_version(data.get("tag_name", ""))
             self.latest_release_url = data.get("html_url", "")
             self.latest_release_name = data.get("name", "")
             self.latest_release_body = data.get("body", "")
             self.last_check_time = time.time()
 
-            if self.latest_version and self.latest_version != self.current_version:
+            if _has_newer_version(self.current_version, self.latest_version):
                 self.has_update = True
                 logging.info(
                     "Update available: current=%s, latest=%s",
@@ -151,7 +179,7 @@ class UpdateChecker:
 
                 if existing:
                     existing_version = existing.data.get(UPDATE_NOTIFY_VERSION_KEY, "")
-                    if existing_version == self.latest_version:
+                    if _same_version(existing_version, self.latest_version):
                         continue
                     if _compare_versions(existing_version, self.latest_version):
                         existing.data[UPDATE_NOTIFY_VERSION_KEY] = self.latest_version

@@ -46,7 +46,7 @@
         
         <!-- 空状态提示 -->
         <v-row
-            v-if="meta_items.length === 0"
+            v-if="loaded && meta_items.length === 0"
             class="empty-state"
         >
             <v-col cols="12">
@@ -93,13 +93,16 @@ const show_all = ref(false);
 const items = ref([]);
 const total = ref(0);
 const page_size = ref(20);
+const loaded = ref(false);
 
 const loadData = async () => {
     const path = '/' + meta.value + (show_all.value ? '?show=all' : '');
+    loaded.value = false;
     try {
         const rsp = await $backend(path);
         items.value = rsp.items || [];
         total.value = rsp.total || 0;
+        loaded.value = true;
     } catch (e) {
         console.error(e);
     }
@@ -109,10 +112,12 @@ const loadData = async () => {
 // 使用 useAsyncData 替代直接调用
 const { data, refresh } = useAsyncData(`meta-${meta.value}`, async () => {
     const path = '/' + meta.value + (show_all.value ? '?show=all' : '');
+    loaded.value = false;
     try {
         const rsp = await $backend(path);
         items.value = rsp.items || [];
         total.value = rsp.total || 0;
+        loaded.value = true;
         return rsp;
     } catch (e) {
         console.error(e);

@@ -8,7 +8,10 @@
             </v-col>
 
             <v-col cols="12">
-                <BookCards :books="books" />
+                <BookCards
+                    :books="books"
+                    :show-empty-state="loaded && books.length === 0"
+                />
             </v-col>
 
             <v-col cols="12">
@@ -44,15 +47,18 @@ const books = ref([]);
 const total = ref(0);
 const page_size = ref(60);
 const page = ref(1);
+const loaded = ref(false);
 
 const loadData = async () => {
     const fullPath = route.fullPath;
+    loaded.value = false;
     try {
         const rsp = await $backend(fullPath);
         if (rsp.err === 'ok') {
             title.value = rsp.title;
             books.value = rsp.books || [];
             total.value = rsp.total || 0;
+            loaded.value = true;
         }
     } catch (e) {
         console.error(e);

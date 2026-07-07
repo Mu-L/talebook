@@ -29,7 +29,7 @@
             </v-col>
             <!-- 空状态提示 -->
             <v-col
-                v-if="get_random_books.length === 0"
+                v-if="!indexPending && get_random_books.length === 0"
                 cols="12"
             >
                 <v-card class="ma-1 pa-6 text-center">
@@ -119,7 +119,7 @@ onMounted(() => {
 });
 
 // 修复: 直接使用 useAsyncData 不添加 await
-const { data: indexData } = useAsyncData('index', () => 
+const { data: indexData, pending: indexPending } = useAsyncData('index', () =>
     $backend('/index')
 );
 

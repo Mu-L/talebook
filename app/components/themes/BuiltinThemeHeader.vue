@@ -278,6 +278,7 @@
 import { computed, onMounted, onUnmounted, ref, watch } from 'vue';
 import { useDisplay } from 'vuetify';
 import { useMainStore } from '@/stores/main';
+import { buildBuiltinThemeOverlayCss } from '@/utils/builtin-theme-overlay';
 import { useI18n } from '#i18n';
 
 const props = defineProps({
@@ -413,7 +414,7 @@ function injectThemeStyles() {
     injectedStyle?.remove();
     const style = document.createElement('style');
     style.setAttribute('data-talebook-theme', props.variant);
-    style.textContent = themeCss[props.variant];
+    style.textContent = `${themeCss[props.variant]}\n${buildBuiltinThemeOverlayCss(props.variant)}`;
     document.head.appendChild(style);
     injectedStyle = style;
 }

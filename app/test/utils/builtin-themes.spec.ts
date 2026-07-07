@@ -1,4 +1,5 @@
 import { describe, expect, it } from 'vitest';
+import { buildBuiltinThemeOverlayCss, builtinThemeNames } from '~/utils/builtin-theme-overlay';
 import { builtinThemeLoaders, isBuiltinTheme, loadBuiltinThemeComponent } from '~/utils/builtin-themes';
 
 describe('builtin-themes', () => {
@@ -20,5 +21,25 @@ describe('builtin-themes', () => {
             expect(builtinThemeLoaders[themeName].AppFooter).toEqual(expect.any(Function));
         }
         expect(await loadBuiltinThemeComponent('custom-theme', 'AppHeader')).toBeNull();
+    });
+
+    it('generates overlay styles for teleported dialogs and menus', () => {
+        for (const themeName of builtinThemeNames) {
+            const css = buildBuiltinThemeOverlayCss(themeName);
+
+            expect(css).toContain(`body.tb-current-builtin-theme-${themeName}.tb-current-builtin-theme-mode-light .v-overlay-container`);
+            expect(css).toContain(`body.tb-current-builtin-theme-${themeName}.tb-current-builtin-theme-mode-dark .v-overlay-container`);
+            expect(css).toContain('.v-overlay__content .v-toolbar.bg-primary');
+            expect(css).toContain('.v-overlay__content .v-card');
+        }
+    });
+
+    it('uses the minimal theme primary color for overlay toolbars', () => {
+        const css = buildBuiltinThemeOverlayCss('minimal');
+
+        expect(css).toContain('body.tb-current-builtin-theme-minimal.tb-current-builtin-theme-mode-light .v-overlay-container');
+        expect(css).toContain('background: #ff6600 !important;');
+        expect(css).toContain('body.tb-current-builtin-theme-minimal.tb-current-builtin-theme-mode-dark .v-overlay-container');
+        expect(css).toContain('background: #d35400 !important;');
     });
 });

@@ -38,6 +38,26 @@ make dev     # 挂载 webserver/ 进容器，用于后端开发调试
 - 后端改动在 `tests/` 中添加用例，前端改动在 `app/test/` 中添加用例。
 - 具体写法见各子目录的 CLAUDE.md。
 
+### 前端验收
+
+- 修改前端交互、样式、主题、页面布局或弹窗时，除单元/组件测试外，必须使用 Chrome DevTools MCP 在浏览器中做实际渲染验证，并在回复中说明验证过的页面、主题或关键状态。
+- 前端改动完成后，如果需要 dev server 才能体验，必须启动本地 dev server，并在最终回复中提供可访问地址（例如 `http://127.0.0.1:3000/`）。
+- 前端本地体验默认启动方式：
+  ```bash
+  cd app
+  npx nuxt dev --port 3000 --host 127.0.0.1
+  ```
+- 如需使用本仓库 mock API，可用两个终端启动 mock 与 Nuxt：
+  ```bash
+  # 终端 1
+  cd app
+  PORT=18180 node test/mock-server.js
+
+  # 终端 2
+  cd app
+  API_URL=http://127.0.0.1:18180 npx nuxt dev --port 3000 --host 127.0.0.1
+  ```
+
 ### 提交前检查
 
 ```bash

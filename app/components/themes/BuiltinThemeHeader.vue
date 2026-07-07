@@ -2,7 +2,9 @@
     <div :class="['tb-theme-header', `tb-theme-${variant}`, modeClass, { 'tb-theme-rail': miniVariant }]">
         <v-app-bar
             class="tb-theme-appbar"
-            density="compact"
+            :density="isMinimal ? 'default' : 'compact'"
+            :order="0"
+            :height="isMinimal ? 28 : undefined"
             :elevation="isMinimal ? 0 : 1"
         >
             <v-btn
@@ -205,6 +207,7 @@
         <v-navigation-drawer
             v-model="sidebar"
             class="tb-theme-drawer"
+            :order="2"
             :rail="isLightGray && miniVariant"
             :rail-width="64"
             :width="drawerWidth"

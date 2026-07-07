@@ -4,11 +4,11 @@
         <template v-if="store.nav && themeComponentsReady">
             <ClientOnly>
                 <component :is="dynamicHeader" />
+                <AppPress />
             </ClientOnly>
         </template>
         <v-main v-show="!store.nav || themeComponentsReady">
             <v-container fluid>
-                <AppPress v-if="store.nav" />
                 <slot />
                 <template v-if="store.nav && themeComponentsReady">
                     <ClientOnly>

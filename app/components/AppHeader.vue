@@ -315,7 +315,7 @@
         <v-navigation-drawer
             v-model="sidebar"
             class="app-navigation-drawer"
-            :order="1"
+            :order="2"
             width="240"
         >
             <v-list

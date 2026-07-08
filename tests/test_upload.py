@@ -287,6 +287,47 @@ class TestUploadChunk(TestWithUserLogin):
         d = self._complete_upload(upload_id, "flow_new.epub", len(chunks))
         self.assertEqual(d["err"], "ok")
 
+    def test_complete_total_chunks_exceeds_max_rejected(self):
+        """total_chunks 超出 MAX_CHUNK_COUNT 时必须在拼接分片路径前被拒绝"""
+        d = self._complete_upload("too-many-parts", "book.epub", 999999)
+        self.assertEqual(d["err"], "params.chunk")
+
+    def test_chunk_honors_configured_chunk_size_above_default_cap(self):
+        """当管理员把 UPLOAD_CHUNK_SIZE 调大后，分片校验应放行相应大小的分片"""
+        from webserver.handlers.book import CONF
+        with mock.patch.dict(CONF, {"MAX_CHUNK_SIZE": "1MB", "UPLOAD_CHUNK_SIZE": "2MB"}):
+            data = b"x" * int(1.5 * 1024 * 1024)
+            d = self._upload_chunk("size-honor-ok", 0, 1, data)
+            self.assertEqual(d["err"], "ok")
+
+    def test_chunk_still_rejects_oversized_chunk(self):
+        """即使调大了UPLOAD_CHUNK_SIZE，超出该值的分片仍应被拒绝"""
+        from webserver.handlers.book import CONF
+        with mock.patch.dict(CONF, {"MAX_CHUNK_SIZE": "1MB", "UPLOAD_CHUNK_SIZE": "2MB"}):
+            data = b"x" * int(2.5 * 1024 * 1024)
+            d = self._upload_chunk("size-honor-reject", 0, 1, data)
+            self.assertEqual(d["err"], "params.chunk")
+
+    def test_stale_chunk_dir_cleaned_up(self):
+        """超过TTL未完成的分片目录，应在后续分片请求时被自动清理"""
+        import os
+        import time
+        from webserver.handlers.book import CONF
+
+        d = self._upload_chunk("stale-upload", 0, 2, b"AAAA")
+        self.assertEqual(d["err"], "ok")
+        stale_dir = os.path.join(CONF["upload_path"], "chunks", "1", "stale-upload")
+        self.assertTrue(os.path.isdir(stale_dir))
+
+        old_time = time.time() - 3600
+        os.utime(stale_dir, (old_time, old_time))
+
+        with mock.patch.dict(CONF, {"UPLOAD_CHUNK_TTL_SECONDS": 1}):
+            d = self._upload_chunk("another-upload", 0, 1, b"BBBB")
+            self.assertEqual(d["err"], "ok")
+
+        self.assertFalse(os.path.exists(stale_dir))
+
 
 class TestUploadChunkToggle(TestWithUserLogin):
     """分片上传功能开关（UPLOAD_CHUNK_ENABLED）测试"""

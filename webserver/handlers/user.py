@@ -440,8 +440,8 @@ class UserInfo(BaseHandler):
             },
             "upload": {
                 "chunk_enabled": CONF.get("UPLOAD_CHUNK_ENABLED", True),
-                "chunk_threshold": utils.parse_size(CONF.get("UPLOAD_CHUNK_THRESHOLD", "8MB")),
-                "chunk_size": utils.parse_size(CONF.get("UPLOAD_CHUNK_SIZE", "4MB")),
+                "chunk_threshold": utils.parse_size_safe(CONF.get("UPLOAD_CHUNK_THRESHOLD", "8MB"), "8MB"),
+                "chunk_size": utils.parse_size_safe(CONF.get("UPLOAD_CHUNK_SIZE", "4MB"), "4MB"),
             },
         }
 

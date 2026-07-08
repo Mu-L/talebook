@@ -359,6 +359,15 @@ class AdminSettings(BaseHandler):
         if invite_mode and not invite_code:
             return {"err": "params.invite_code_required", "msg": _("访问码不能为空")}
 
+        # 验证：分片上传的阈值/分片大小必须是合法的大小字符串（如 4MB），
+        # 否则会导致 /api/user/info 在解析配置时抛异常，影响所有访客
+        for size_key in ("UPLOAD_CHUNK_THRESHOLD", "UPLOAD_CHUNK_SIZE"):
+            if size_key in data:
+                try:
+                    utils.parse_size(data[size_key])
+                except (TypeError, ValueError):
+                    return {"err": "params.%s" % size_key.lower(), "msg": _("分片大小配置格式不合法，例如 4MB")}
+
         KEYS = [
             "ALLOW_GUEST_DOWNLOAD",
             "ALLOW_GUEST_PUSH",

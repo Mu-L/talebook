@@ -1162,8 +1162,38 @@ class BookUploadBase(BaseHandler):
     def get_chunk_dir(self, upload_id):
         if not upload_id or not UPLOAD_ID_RE.match(upload_id):
             return None
+        chunks_root = os.path.realpath(os.path.join(CONF["upload_path"], "chunks"))
         owner = str(self.user_id() or "guest")
-        return os.path.join(os.path.realpath(CONF["upload_path"]), "chunks", owner, upload_id)
+        chunk_dir = os.path.realpath(os.path.join(chunks_root, owner, upload_id))
+        # 再次校验拼接后的路径仍在chunks根目录之内，防御路径穿越
+        if not chunk_dir.startswith(chunks_root + os.sep):
+            return None
+        return chunk_dir
+
+    def get_chunk_part_path(self, chunk_dir, chunk_index):
+        # chunk_index 已在调用方校验为 [0, total_chunks) 范围内的整数，
+        # 这里再做一次路径包含性校验，确保拼接结果始终落在chunk_dir之内
+        chunk_path = os.path.realpath(os.path.join(chunk_dir, "%d.part" % chunk_index))
+        if not chunk_path.startswith(chunk_dir + os.sep):
+            return None
+        return chunk_path
+
+    def cleanup_stale_chunk_dirs(self):
+        """清理当前用户超过TTL仍未完成的分片目录，避免异常中断上传后残留垃圾文件"""
+        chunks_root = os.path.realpath(os.path.join(CONF["upload_path"], "chunks"))
+        owner = str(self.user_id() or "guest")
+        owner_dir = os.path.realpath(os.path.join(chunks_root, owner))
+        if not owner_dir.startswith(chunks_root + os.sep) or not os.path.isdir(owner_dir):
+            return
+        ttl = CONF.get("UPLOAD_CHUNK_TTL_SECONDS", 24 * 3600)
+        now = time.time()
+        for entry in os.listdir(owner_dir):
+            d = os.path.join(owner_dir, entry)
+            try:
+                if os.path.isdir(d) and now - os.path.getmtime(d) > ttl:
+                    shutil.rmtree(d, ignore_errors=True)
+            except OSError:
+                continue
 
     def import_uploaded_book(self, fpath, fmt):
         from calibre.ebooks.metadata.meta import get_metadata
@@ -1291,6 +1321,8 @@ class BookUploadChunk(BookUploadBase):
         if err:
             return err
 
+        self.cleanup_stale_chunk_dirs()
+
         upload_id = self.get_argument("upload_id", "")
         try:
             chunk_index = int(self.get_argument("chunk_index", ""))
@@ -1311,13 +1343,17 @@ class BookUploadChunk(BookUploadBase):
             return {"err": "params.chunk", "msg": _("缺少分片数据")}
         data = files[0]["body"]
 
-        max_chunk_size = utils.parse_size(CONF.get("MAX_CHUNK_SIZE", "20MB"))
+        # 分片大小上限取服务端硬上限与管理员配置的分片大小两者较大值，
+        # 避免管理员把UPLOAD_CHUNK_SIZE调大后，合法分片被隐藏的MAX_CHUNK_SIZE拒绝
+        hard_limit = utils.parse_size_safe(CONF.get("MAX_CHUNK_SIZE", "20MB"), "20MB")
+        configured_size = utils.parse_size_safe(CONF.get("UPLOAD_CHUNK_SIZE", "4MB"), "4MB")
+        max_chunk_size = max(hard_limit, configured_size)
         if len(data) > max_chunk_size:
             return {"err": "params.chunk", "msg": _("分片过大")}
 
         os.makedirs(chunk_dir, exist_ok=True)
 
-        max_total_size = utils.parse_size(CONF.get("MAX_CHUNK_UPLOAD_SIZE", "1024MB"))
+        max_total_size = utils.parse_size_safe(CONF.get("MAX_CHUNK_UPLOAD_SIZE", "1024MB"), "1024MB")
         existing_size = sum(
             os.path.getsize(os.path.join(chunk_dir, f)) for f in os.listdir(chunk_dir) if f.endswith(".part")
         )
@@ -1325,7 +1361,9 @@ class BookUploadChunk(BookUploadBase):
             shutil.rmtree(chunk_dir, ignore_errors=True)
             return {"err": "params.chunk", "msg": _("文件总大小超出限制")}
 
-        chunk_path = os.path.join(chunk_dir, "%d.part" % chunk_index)
+        chunk_path = self.get_chunk_part_path(chunk_dir, chunk_index)
+        if not chunk_path:
+            return {"err": "params.chunk", "msg": _("分片参数不合法")}
         with open(chunk_path, "wb") as f:
             f.write(data)
 
@@ -1350,7 +1388,8 @@ class BookUploadComplete(BookUploadBase):
             total_chunks = int(self.get_argument("total_chunks", ""))
         except ValueError:
             return {"err": "params.chunk", "msg": _("分片参数不合法")}
-        if total_chunks <= 0:
+        max_chunks = CONF.get("MAX_CHUNK_COUNT", 4096)
+        if total_chunks <= 0 or total_chunks > max_chunks:
             return {"err": "params.chunk", "msg": _("分片参数不合法")}
 
         name = urllib.parse.unquote(decode_filename(name))
@@ -1370,9 +1409,9 @@ class BookUploadComplete(BookUploadBase):
         if not chunk_dir or not os.path.isdir(chunk_dir):
             return {"err": "params.upload_id", "msg": _("找不到上传分片，请重新上传")}
 
-        chunk_paths = [os.path.join(chunk_dir, "%d.part" % i) for i in range(total_chunks)]
+        chunk_paths = [self.get_chunk_part_path(chunk_dir, i) for i in range(total_chunks)]
         for p in chunk_paths:
-            if not os.path.isfile(p):
+            if not p or not os.path.isfile(p):
                 return {"err": "params.chunk", "msg": _("分片缺失，请重新上传")}
 
         fpath = self.resolve_upload_path(name)

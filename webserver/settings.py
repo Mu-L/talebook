@@ -63,6 +63,8 @@ settings = {
     "MAX_CHUNK_SIZE": "20MB",
     "MAX_CHUNK_UPLOAD_SIZE": "1024MB",
     "MAX_CHUNK_COUNT": 4096,
+    # 分片目录过期时间（秒），超过该时间未完成的分片上传会在后续请求中被自动清理
+    "UPLOAD_CHUNK_TTL_SECONDS": 24 * 3600,
 
     # 分片上传功能开关，及前端触发分片的文件大小阈值、单个分片大小（均可在管理后台调整）
     "UPLOAD_CHUNK_ENABLED": True,

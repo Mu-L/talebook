@@ -5,7 +5,13 @@
 import datetime
 import unittest
 
-from webserver.utils import ReadingStateFormatter, compare_books_by_rating_or_id, parse_size, remove_zlibrary_suffix
+from webserver.utils import (
+    ReadingStateFormatter,
+    compare_books_by_rating_or_id,
+    parse_size,
+    parse_size_safe,
+    remove_zlibrary_suffix,
+)
 
 
 class TestUtils(unittest.TestCase):
@@ -131,3 +137,14 @@ class TestParseSize(unittest.TestCase):
     def test_invalid_string_raises(self):
         with self.assertRaises(ValueError):
             parse_size("not-a-size")
+
+
+class TestParseSizeSafe(unittest.TestCase):
+    def test_valid_value_parsed(self):
+        self.assertEqual(parse_size_safe("16MB", "8MB"), 16 * 1024 * 1024)
+
+    def test_invalid_value_falls_back_to_default(self):
+        self.assertEqual(parse_size_safe("4MiB", "8MB"), 8 * 1024 * 1024)
+
+    def test_invalid_value_falls_back_to_numeric_default(self):
+        self.assertEqual(parse_size_safe("abc", 1024), 1024)

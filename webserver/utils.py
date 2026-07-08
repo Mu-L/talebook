@@ -34,6 +34,15 @@ def parse_size(size):
     return int(float(m.group(1)) * _SIZE_UNITS[m.group(2)])
 
 
+def parse_size_safe(size, default):
+    """与parse_size相同，但配置值不合法时返回default而不是抛异常"""
+    try:
+        return parse_size(size)
+    except (TypeError, ValueError):
+        logging.warning("invalid size config %r, fallback to %r", size, default)
+        return parse_size(default)
+
+
 def get_title_sort(title):
     """获取标题的排序字符串"""
     if not title:

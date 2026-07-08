@@ -1462,13 +1462,16 @@ class BookUploadComplete(BookUploadBase):
                             raise ValueError("format mismatch")
                         out.write(chunk_data)
         except ValueError:
-            # fpath 已通过 resolve_upload_path 限制在上传目录内，此处删除本函数刚写入的文件。
-            # name 虽源自 get_argument，但经 basename + 目录拼接 + commonpath 校验，属受控路径；
-            # 普通上传同款 os.remove(upload_path) 未被标记，确认此为新版 CodeQL 对 get_argument 污点的误报。
-            try:
-                os.remove(fpath)  # codeql[py/path-injection]
-            except OSError:
-                pass
+            # name 源自 get_argument，但此处仅用 os.path.basename 提取纯文件名后，
+            # 拼接到受信任的上传目录（realpath 后的常量前缀），因此路径受控、不会越界；
+            # 删除的正是本函数刚写入的文件。basename 是 CodeQL 认可的净化器，可消除污点。
+            upload_dir = os.path.realpath(CONF["upload_path"])
+            cleanup_path = os.path.join(upload_dir, os.path.basename(name))
+            if os.path.realpath(cleanup_path).startswith(upload_dir + os.sep):
+                try:
+                    os.remove(cleanup_path)
+                except OSError:
+                    pass
             shutil.rmtree(chunk_dir, ignore_errors=True)
             return {"err": "params.format", "msg": _("文件内容与格式不匹配")}
 

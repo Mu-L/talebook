@@ -1458,8 +1458,17 @@ class BookUploadComplete(BookUploadBase):
         except ValueError:
             # fpath 源于用户文件名，移除前再次确认仍落在上传目录内，防御路径穿越
             upload_dir = os.path.realpath(CONF["upload_path"])
-            if fpath and os.path.exists(fpath) and os.path.realpath(fpath).startswith(upload_dir + os.sep):
-                os.remove(fpath)
+            target_real = os.path.realpath(fpath) if fpath else None
+            try:
+                in_upload_dir = bool(
+                    target_real
+                    and os.path.exists(target_real)
+                    and os.path.commonpath([upload_dir, target_real]) == upload_dir
+                )
+            except ValueError:
+                in_upload_dir = False
+            if in_upload_dir:
+                os.remove(target_real)
             shutil.rmtree(chunk_dir, ignore_errors=True)
             return {"err": "params.format", "msg": _("文件内容与格式不匹配")}
 

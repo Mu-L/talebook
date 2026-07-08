@@ -2,8 +2,10 @@
 # -*- coding: UTF-8 -*-
 
 import datetime
+import itertools
 import json
 import logging
+import re
 import ssl
 import threading
 import time
@@ -26,19 +28,45 @@ _UNVERIFIED_CONTEXT.check_hostname = False
 _UNVERIFIED_CONTEXT.verify_mode = ssl.CERT_NONE
 
 
+def _normalize_version(version):
+    """Normalize release tags for comparison and storage."""
+    return str(version or "").strip().lstrip("vV")
+
+
+def _version_parts(version):
+    return [int(part) for part in re.findall(r"\d+", _normalize_version(version))]
+
+
 def _compare_versions(v1, v2):
-    """Compare two version strings, return True if v2 > v1"""
-    try:
-        parts1 = [int(x) for x in v1.split(".")]
-        parts2 = [int(x) for x in v2.split(".")]
-        for p1, p2 in zip(parts1, parts2, strict=True):
-            if p2 > p1:
-                return True
-            if p2 < p1:
-                return False
-        return len(parts2) > len(parts1)
-    except Exception:
-        return v2 != v1
+    """Compare two version strings, return True if v2 > v1."""
+    normalized_v1 = _normalize_version(v1)
+    normalized_v2 = _normalize_version(v2)
+    if normalized_v1 == normalized_v2:
+        return False
+
+    parts1 = _version_parts(normalized_v1)
+    parts2 = _version_parts(normalized_v2)
+    if not parts1 or not parts2:
+        return normalized_v2 != normalized_v1
+
+    for p1, p2 in itertools.zip_longest(parts1, parts2, fillvalue=0):
+        if p2 > p1:
+            return True
+        if p2 < p1:
+            return False
+    return False
+
+
+def _has_newer_version(current_version, latest_version):
+    return bool(_normalize_version(latest_version)) and _compare_versions(current_version, latest_version)
+
+
+def _same_version(v1, v2):
+    return _normalize_version(v1) == _normalize_version(v2)
+
+
+def _release_version(tag_name):
+    return _normalize_version(tag_name)
 
 
 class UpdateChecker:
@@ -62,13 +90,13 @@ class UpdateChecker:
             self.has_update = False
             self.check_error = None
             self.last_check_time = None
-            self._scoped_session = None
+            self._session_maker = None
             self._check_thread = None
             self._stop_event = threading.Event()
             self._initialized = True
 
-    def set_scoped_session(self, scoped_session):
-        self._scoped_session = scoped_session
+    def set_session_maker(self, session_maker):
+        self._session_maker = session_maker
 
     def check_for_updates(self):
         """Check GitHub for the latest release"""
@@ -96,13 +124,13 @@ class UpdateChecker:
                 logging.error("Update check failed: %s", self.check_error)
                 return
 
-            self.latest_version = data.get("tag_name", "").lstrip("v")
+            self.latest_version = _release_version(data.get("tag_name", ""))
             self.latest_release_url = data.get("html_url", "")
             self.latest_release_name = data.get("name", "")
             self.latest_release_body = data.get("body", "")
             self.last_check_time = time.time()
 
-            if self.latest_version and self.latest_version != self.current_version:
+            if _has_newer_version(self.current_version, self.latest_version):
                 self.has_update = True
                 logging.info(
                     "Update available: current=%s, latest=%s",
@@ -130,11 +158,11 @@ class UpdateChecker:
 
     def _notify_admins(self):
         """Send update notifications to all admin users (only called in background loop)"""
-        if not self._scoped_session or not self.has_update:
+        if not self._session_maker or not self.has_update:
             return
 
+        session = self._session_maker()
         try:
-            session = self._scoped_session()
             from webserver.models import Message, Reader
 
             admins = session.query(Reader).filter(Reader.admin == True).all()  # noqa: E712
@@ -151,7 +179,7 @@ class UpdateChecker:
 
                 if existing:
                     existing_version = existing.data.get(UPDATE_NOTIFY_VERSION_KEY, "")
-                    if existing_version == self.latest_version:
+                    if _same_version(existing_version, self.latest_version):
                         continue
                     if _compare_versions(existing_version, self.latest_version):
                         existing.data[UPDATE_NOTIFY_VERSION_KEY] = self.latest_version
@@ -178,8 +206,7 @@ class UpdateChecker:
         except Exception as e:
             logging.error("Failed to send update notifications: %s", e)
         finally:
-            if self._scoped_session:
-                self._scoped_session.remove()
+            session.close()
 
     def start_background_check(self):
         """Start periodic background update checking"""

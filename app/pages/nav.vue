@@ -26,7 +26,7 @@
 
         <!-- 空状态提示 -->
         <v-row
-            v-if="!hasAnyBooks"
+            v-if="loaded && !hasAnyBooks"
             class="empty-state"
         >
             <v-col cols="12">
@@ -60,6 +60,7 @@ const { $backend } = useNuxtApp();
 const { t } = useI18n();
 
 const navs = ref([]);
+const loaded = ref(false);
 
 // 修复1: 移除 await，正确使用 useAsyncData
 const { data: navData } = useAsyncData('nav', async () => {
@@ -76,6 +77,7 @@ const { data: navData } = useAsyncData('nav', async () => {
 watch(navData, (newData) => {
     if (newData) {
         navs.value = newData.navs || [];
+        loaded.value = true;
     }
 }, { immediate: true });
 

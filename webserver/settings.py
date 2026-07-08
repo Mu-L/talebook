@@ -120,6 +120,7 @@ settings = {
     'ALLOW_GUEST_DOWNLOAD' : True,
     'ALLOW_GUEST_UPLOAD' : False,
     'ALLOW_REGISTER' : False,
+    'DEFAULT_USER_PERMISSION' : '',
     'ALLOW_FEEDBACK' : True,
     'OPDS_ENABLED' : True,
     'FEEDBACK_URL' : 'https://github.com/talebook/talebook/issues',
@@ -134,6 +135,27 @@ settings = {
     'MAIN_PAGE_RECENT_COUNT': 12,
     'DEFAULT_PAGE_SIZE': 60,
 
+    # 网络书库 / 书源配置
+    'BOOKSOURCE_CLEAN_ENABLED': True,        # 保存正文时是否去广告
+    'BOOKSOURCE_HTTP_TIMEOUT': 20,           # 单次请求超时(秒)
+    'BOOKSOURCE_MAX_TOC_PAGES': 1000,        # 目录翻页上限（select 分页站点每页仅 20 章，长篇书目录分页可达数百页）
+    'BOOKSOURCE_MAX_CONTENT_PAGES': 20,      # 单章正文翻页上限
+    'BOOKSOURCE_MAX_WORKERS': 6,             # 多书源搜索并发数
+    'BOOKSOURCE_SEARCH_TIMEOUT': 15,         # 单书源搜索超时(秒)
+    'BOOKSOURCE_MAX_SAVE_CHAPTERS': 5000,    # 保存到本地时的最大章节数
+    'BOOKSOURCE_RESUME_PENDING_CHECK_ON_START': True,  # 启动时重排"已启用但上次体检未通过"的书源，让失效源被禁用
+    'BOOKSOURCE_AD_PATTERNS': [              # 全局去广告黑名单(正则，命中整行删除)
+        r'(?i)请记住本站',
+        r'(?i)请记住域名',
+        r'(?i)最快更新',
+        r'(?i)手机(版)?阅读',
+        r'(?i)笔趣阁',
+        r'(?i)天才一秒记住',
+        r'(?i)章节错误.*举报',
+        r'(?i)\(本章未完',
+        r'(?i)https?://[\w./-]+',
+    ],
+
     # 人机验证配置
     'CAPTCHA_PROVIDER': '',  # 验证提供商，可选值: 'geetest' 或空字符串表示不启用
     'CAPTCHA_ENABLE_FOR_REGISTER': False,  # 注册界面启用认证
@@ -142,6 +164,11 @@ settings = {
     'CAPTCHA_ENABLE_FOR_RESET': False,     # 重置密码页面启用认证
     'GEETEST_CAPTCHA_ID': '',              # 极验 Captcha ID (公钥)
     'GEETEST_CAPTCHA_KEY': '',             # 极验 Captcha Key (私钥)
+
+    # 主题系统配置
+    'themes_path': '/data/books/themes/',
+    'ACTIVE_THEME': '',
+    'THEME_STORE_INDEX_URL': 'https://cdn.jsdelivr.net/gh/talebook/store@main/index.json',
 
     'FRIENDS': [
         { "text": u"鸠摩搜索", "href": "https://www.jiumodiary.com/" },

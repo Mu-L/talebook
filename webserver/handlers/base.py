@@ -2,6 +2,7 @@
 # -*- coding: UTF-8 -*-
 
 
+import asyncio
 import base64
 import datetime
 import logging
@@ -47,18 +48,25 @@ def website_format(value):
 
 
 def js(func):
-    def do(self, *args, **kwargs):
+    async def do(self, *args, **kwargs):
         try:
             rsp = func(self, *args, **kwargs)
-            rsp["msg"] = rsp.get("msg", "")
-        except Exception as e:
+            if asyncio.iscoroutine(rsp):
+                rsp = await rsp
+            if rsp is None:
+                return
+            if isinstance(rsp, dict):
+                rsp["msg"] = rsp.get("msg", "")
+        except web.Finish:
+            return
+        except Exception:
             import traceback
 
             logging.error(traceback.format_exc())
             msg = 'Exception:<br><pre style="white-space:pre-wrap;word-break:keep-all">%s</pre>' % traceback.format_exc()
             rsp = {"err": "exception", "msg": msg}
-            if isinstance(e, web.Finish):
-                rsp = ""
+        if self._finished:
+            return
         origin = self.request.headers.get("origin", "*")
         self.set_header("Access-Control-Allow-Origin", origin)
         self.set_header("Access-Control-Allow-Credentials", "true")
@@ -207,8 +215,7 @@ class BaseHandler(web.RequestHandler):
             set_language(lang)
 
     def initialize(self):
-        ScopedSession = self.settings["ScopedSession"]
-        self.session = ScopedSession()  # new sql session
+        self.session = self.settings["SessionMaker"]()  # 每个请求独立的 sql session
         self.db = self.settings["legacy"]
         self.cache = self.db.new_api
         self.build_time = self.settings["build_time"]
@@ -217,9 +224,7 @@ class BaseHandler(web.RequestHandler):
         self.cookies_cache = {}
 
     def on_finish(self):
-        ScopedSession = self.settings["ScopedSession"]
         self.session.close()
-        ScopedSession.remove()
 
     def static_url(self, path, **kwargs):
         if path.endswith("/"):
@@ -269,7 +274,8 @@ class BaseHandler(web.RequestHandler):
     def add_msg(self, status, msg):
         m = Message(self.user_id(), status, msg)
         if m.reader_id:
-            m.save()
+            self.session.add(m)
+            self.session.commit()
 
     def pop_messages(self):
         if not self.current_user:
@@ -641,6 +647,49 @@ class ListHandler(BaseHandler):
             "total": count,
             "books": [self.fmt(b) for b in books],
         }
+
+    async def stream_book_list(self, all_books, ids=None, title=None, sort_by_id=False):
+        import json
+
+        start = self.get_argument_start()
+        delta = 60
+
+        private_book_ids = self._get_private_book_ids()
+        if ids:
+            ids = [book_id for book_id in ids if book_id not in private_book_ids]
+            count = len(ids)
+            books = self.get_books(ids=ids[start : start + delta])
+            if sort_by_id:
+                self.do_sort(books, "id", False)
+        else:
+            all_books = [b for b in all_books if b["id"] not in private_book_ids]
+            count = len(all_books)
+            books = all_books[start : start + delta]
+
+        origin = self.request.headers.get("origin", "*")
+        self.set_header("Access-Control-Allow-Origin", origin)
+        self.set_header("Access-Control-Allow-Credentials", "true")
+        self.set_header("Cache-Control", "max-age=0")
+        self.set_header("Content-Type", "application/x-ndjson")
+        self.set_header("X-Accel-Buffering", "no")
+
+        meta = {
+            "err": "ok",
+            "title": title,
+            "total": count,
+        }
+        self.write(json.dumps(meta, ensure_ascii=False) + "\n")
+        await self.flush()
+        logging.info("[STREAM] 书单元信息已发送 (total=%d)", count)
+
+        for b in books:
+            title_val = b.get("title", "?")
+            book_json = json.dumps(self.fmt(b), ensure_ascii=False)
+            self.write(book_json + "\n")
+            await self.flush()
+            logging.info("[STREAM] 已发送: %s", title_val)
+
+        self.finish()
 
     def fmt(self, b):
         return utils.BookFormatter(self, b).format()

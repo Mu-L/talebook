@@ -314,7 +314,8 @@
 
         <v-navigation-drawer
             v-model="sidebar"
-            :order="1"
+            class="app-navigation-drawer"
+            :order="2"
             width="240"
         >
             <v-list
@@ -332,6 +333,7 @@
                     <!-- 二级菜单 -->
                     <v-list-group
                         v-else-if="item.groups"
+                        class="app-navigation-group"
                         :value="item.text"
                     >
                         <template #activator="{ props }">
@@ -440,7 +442,6 @@ import { useMainStore } from '@/stores/main';
 import { useI18n } from '#i18n';
 
 const store = useMainStore();
-const { $backend } = useNuxtApp();
 const display = useDisplay();
 const router = useRouter();
 const route = useRoute();
@@ -451,7 +452,7 @@ const visit_admin_pages = ref(false);
 const sidebar = ref(null);
 const btn_search = ref(false);
 const search = ref('');
-const messages = ref([]);
+const messages = computed(() => store.messages);
 
 const mobile_search = ref(null);
 const search_input = ref(null);
@@ -471,9 +472,12 @@ const items = computed(() => {
         { icon: 'mdi-home', href: '/', text: $t('navigation.home') },
     ];
     var library_links = [
-        // home
-        { icon: 'mdi-book', href: '/library', text: $t('navigation.library') },
+        { icon: 'mdi-book', href: '/library', text: $t('navigation.localLibrary') },
+        { icon: 'mdi-cloud-search', href: '/network', text: $t('navigation.networkLibrary') },
     ];
+    var shelf_links = store.user.is_login
+        ? [{ icon: 'mdi-bookshelf', href: '/user/shelf', text: $t('navigation.myShelf') }]
+        : [];
     var admin_links = [
         {
             icon: 'mdi-cog',
@@ -484,6 +488,9 @@ const items = computed(() => {
                 { icon: 'mdi-human-greeting', href: '/admin/users', text: $t('navigation.users') },
                 { icon: 'mdi-library-shelves', href: '/admin/books', text: $t('navigation.books') },
                 { icon: 'mdi-import', href: '/admin/imports', text: $t('navigation.import') },
+                { icon: 'mdi-book-cog', href: '/admin/booksources', text: $t('navigation.bookSources') },
+                { icon: 'mdi-palette', href: '/admin/themes', text: $t('navigation.themes') },
+                { icon: 'mdi-text-box-outline', href: '/admin/logs', text: $t('navigation.systemLogs') },
             ],
         },
     ];
@@ -518,6 +525,7 @@ const items = computed(() => {
 
     return home_links
         .concat(library_links)
+        .concat(shelf_links)
         .concat(store.user.is_admin ? admin_links : [])
         .concat(nav_links)
         .concat(store.sys.friends.length > 0 ? friend_links : [])
@@ -527,15 +535,8 @@ const items = computed(() => {
 onMounted(() => {
     visit_admin_pages.value = route.path.indexOf('/admin/') == 0;
     sidebar.value = display.lgAndUp.value;
-    $backend('/user/info').then((rsp) => {
+    store.bootstrap().then((rsp) => {
         err.value = rsp.err;
-        store.login(rsp);
-        store.setTitle(rsp.sys.title);
-    });
-    $backend('/user/messages').then((rsp) => {
-        if (rsp.err == 'ok') {
-            messages.value = rsp.messages;
-        }
     });
 });
 
@@ -566,14 +567,7 @@ function do_search() {
 }
 
 function hidemsg(idx, msgid) {
-    $backend('/user/messages', {
-        method: 'POST',
-        body: JSON.stringify({ id: msgid }),
-    }).then((rsp) => {
-        if (rsp.err == 'ok') {
-            messages.value.splice(idx, 1);
-        }
-    });
+    store.hideMessage(idx, msgid);
 }
 
 function toggleTheme() {
@@ -583,9 +577,9 @@ function toggleTheme() {
 
 <style scoped>
 .search-wrapper {
-    position: absolute;
-    left: 50%;
-    transform: translateX(-50%);
+    flex: 0 1 600px;
+    margin-left: auto;
+    margin-right: 12px;
     width: 40vw;
     max-width: 600px;
     min-width: 250px;
@@ -655,6 +649,14 @@ function toggleTheme() {
 /* 侧边栏图标和文字间距 */
 :deep(.v-navigation-drawer) .v-list-item__spacer {
     width: 8px !important;
+}
+
+/* 默认侧边栏二级菜单：保留层级，但不要使用 Vuetify 默认的大幅缩进 */
+:deep(.app-navigation-drawer) .app-navigation-group .v-list-group__items .v-list-item {
+    padding-inline-start: 24px !important;
+}
+:deep(.app-navigation-drawer) .app-navigation-group .v-list-group__items .v-list-item__prepend {
+    width: auto !important;
 }
 
 /* 导航链接样式 */

@@ -266,10 +266,49 @@
                         </div>
                     </template>
                 </div>
+
+                <!-- 连载状态筛选（网络书） -->
+                <div class="mb-3">
+                    <div class="d-flex align-center">
+                        <span class="mr-3">{{ $t('network.status.label') }}{{ $t('messages.colon') }}</span>
+                        <v-chip-group
+                            :column="false"
+                            class="flex-grow-1"
+                        >
+                            <v-chip
+                                v-for="opt in statusOptions"
+                                :key="opt.value"
+                                :class="statusFilter === opt.value ? 'filter-chip-active' : 'filter-chip-inactive'"
+                                density="compact"
+                                label
+                                small
+                                @click="updateStatus(opt.value)"
+                            >
+                                {{ opt.text }}
+                            </v-chip>
+                        </v-chip-group>
+                    </div>
+                </div>
             </v-col>
 
             <v-col>
-                <BookCards :books="books" />
+                <v-progress-linear
+                    v-if="loading"
+                    indeterminate
+                    color="primary"
+                    class="mb-3"
+                />
+                <BookCards
+                    :books="books"
+                    :show-empty-state="inited && !loading && books.length === 0"
+                >
+                    <template #introduce="{ book }">
+                        <SerializeStatusBadge
+                            v-if="book.serialize_status"
+                            :status="book.serialize_status"
+                        />
+                    </template>
+                </BookCards>
             </v-col>
 
             <v-col cols="12">
@@ -290,12 +329,13 @@
 
 <script setup>
 import BookCards from '~/components/BookCards.vue';
+import SerializeStatusBadge from '~/components/SerializeStatusBadge.vue';
 import { useMainStore } from '@/stores/main';
 import { useI18n } from 'vue-i18n';
 
 const store = useMainStore();
 const { t } = useI18n();
-const { $backend, $alert } = useNuxtApp();
+const { $backend, $backend_stream, $alert } = useNuxtApp();
 const route = useRoute();
 
 store.setNavbar(true);
@@ -307,6 +347,7 @@ const total = ref(0);
 const page_size = 60;
 const page_cnt = ref(1);
 const inited = ref(false);
+const loading = ref(false);
 
 const filters = ref({
     publisher: t('messages.all'),
@@ -329,46 +370,96 @@ const expanded = ref({
     format: false
 });
 
+const statusFilter = ref('all');
+const statusOptions = computed(() => [
+    { value: 'all', text: t('network.status.all') },
+    { value: 'serial', text: t('network.status.serial') },
+    { value: 'finished', text: t('network.status.finished') }
+]);
+
+const updateStatus = (value) => {
+    statusFilter.value = value;
+    fetchBooks(1);
+};
+
 // 监听total变化，动态更新page_cnt
 watch(total, (newTotal) => {
     page_cnt.value = newTotal > 0 ? Math.max(1, Math.ceil(newTotal / page_size)) : 0;
 });
 
+// 每次发起请求自增，旧的流式循环据此识别自身是否已过期，避免向已重置的 books 追加陈旧数据
+let fetchSeq = 0;
+
 // 获取书籍数据
 const fetchBooks = async (p = 1) => {
-    // 构建查询参数
+    const myReq = ++fetchSeq;
+    loading.value = true;
+    books.value = [];
+
     const query = {
         start: (p - 1) * page_size,
         size: page_size
     };
-  
-    // 添加筛选条件
+
     Object.keys(filters.value).forEach(key => {
         if (filters.value[key] !== t('messages.all')) {
             query[key] = filters.value[key];
         }
     });
-  
+
+    // 连载状态筛选走网络书专用接口（普通 JSON），其余走流式 /library 接口
+    const online = statusFilter.value !== 'all';
+    if (online) {
+        query.status = statusFilter.value;
+    } else {
+        query.stream = 1;
+    }
+
     // 构建查询字符串
     const queryString = Object.keys(query)
         .map(key => `${encodeURIComponent(key)}=${encodeURIComponent(query[key])}`)
         .join('&');
-  
+
     try {
-        const rsp = await $backend(`/library?${queryString}`);
-        if (rsp.err === 'exception' || rsp.err === 'network_error') {
-            if ($alert) $alert('error', rsp.msg || t('errors.networkError'));
+        if (online) {
+            // /library/online 使用 @js 返回普通 JSON，一次性拿到全部书籍
+            const data = await $backend(`/library/online?${queryString}`);
+            if (myReq !== fetchSeq) return;
+            if (data.err && data.err !== 'ok') {
+                if ($alert) $alert('error', data.msg || t('errors.networkError'));
+                return;
+            }
+            total.value = data.total || 0;
+            page_cnt.value = total.value > 0 ? Math.max(1, Math.ceil(total.value / page_size)) : 0;
+            page.value = p;
+            title.value = data.title || t('library.title');
+            books.value = data.books || [];
             return;
         }
-    
-        books.value = rsp.books || [];
-        total.value = rsp.total || 0;
-        page_cnt.value = total.value > 0 ? Math.max(1, Math.ceil(total.value / page_size)) : 0;
-        page.value = p;
-        title.value = rsp.title || t('library.title');
+
+        let firstLine = true;
+        for await (const data of $backend_stream(`/library?${queryString}`)) {
+            // 用户已切换筛选/翻页，当前循环已过期，停止向新列表追加陈旧数据
+            if (myReq !== fetchSeq) return;
+            if (firstLine) {
+                firstLine = false;
+                if (data.err === 'exception') {
+                    if ($alert) $alert('error', data.msg || t('errors.networkError'));
+                    return;
+                }
+                total.value = data.total || 0;
+                page_cnt.value = total.value > 0 ? Math.max(1, Math.ceil(total.value / page_size)) : 0;
+                page.value = p;
+                title.value = data.title || t('library.title');
+            } else {
+                books.value.push(data);
+            }
+        }
     } catch (error) {
         console.error('Failed to fetch books:', error);
-        if ($alert) $alert('error', t('library.message.fetchBooksFailed'));
+        if (myReq === fetchSeq && $alert) $alert('error', t('library.message.fetchBooksFailed'));
+    } finally {
+        if (myReq === fetchSeq) loading.value = false;
     }
 };
 

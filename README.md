@@ -16,19 +16,43 @@ A better online books library management website built on Calibre + Vue
 **友情提醒：中国境内网站，个人是不允许进行在线出版的，维护公开的书籍网站是违法违规的行为！建议仅作为个人使用！**
 
 这是一个基于Calibre的简单的个人图书管理系统，支持**在线阅读**。主要特点是：
-* 美观的界面：由于Calibre自带的网页太丑太难用，于是基于Vue，独立编写了新的界面，支持PC访问和手机浏览；
-* 支持多用户：为了网友们更方便使用，开发了多用户功能，支持~~豆瓣~~（已废弃）、QQ、微博、Github等社交网站的登录；
-* 支持在线阅读：借助[epub.js](https://github.com/intity/epubreader-js) 库，支持了网页在线阅读电子书（章评功能开发中）；
-* 支持批量扫描导入书籍；
-* 支持邮件推送：可方便推送到Kindle；
-* 支持OPDS：可使用[KyBooks](http://kybook-reader.com/)等APP方便地读书；
-* 支持一键安装，网页版初始化配置，轻松启动网站；
+* 美观的界面：基于 Nuxt 4 + Vue 3 + Vuetify 全新编写的现代化界面，支持PC访问和手机浏览，支持中英文多语言、白天/夜间主题切换；
+* 支持多用户：为了网友们更方便使用，开发了多用户功能，支持~~豆瓣~~（已废弃）、QQ、微博、Github等社交网站的登录；完善的用户管理、访客权限控制，密码采用 bcrypt 加密存储，支持图形验证码与极验人机验证；
+* 支持在线阅读：内置 [candle-reader](https://github.com/talebook/candle-reader) 阅读器，网页在线阅读电子书，非EPUB格式自动转换；
+* 支持网络书库：可导入 [Legado（开源阅读）](https://github.com/gedoor/legado)风格的书源，在线搜索、阅读网络小说，并可一键保存为 txt/epub 入库；提供书源管理界面，支持批量导入、启停、有效性体检；
+* 支持批量扫描导入书籍，自动填充元数据，并提供回收站、批量删除等管理功能；
+* 支持邮件推送：可管理多个 Kindle 等接收设备，一键推送，自动批量转换格式；
+* 支持OPDS：可使用[KyBooks](http://kybook-reader.com/)等APP方便地读书；也支持从其它OPDS书库浏览并导入书籍；
+* 支持一键安装，网页版初始化配置，轻松启动网站，并可在线检查版本更新；
 * 优化大书库时文件存放路径，可以按字母分类、或者文件名保持中文；
-* 支持快捷更新书籍信息：支持从百度百科、豆瓣搜索并导入书籍基础信息；
-* 支持私人模式：需要输入访问码，才能进入网站，便于小圈子分享网站；
+* 支持快捷更新书籍信息：支持从百度百科、豆瓣、新华书店、番茄小说等多信息源并行搜索导入，还可接入 AI 大模型自动识别书籍信息；
+* 支持私人模式：需要输入访问码，才能进入网站，便于小圈子分享网站；支持将单本书设为私藏，仅自己可见；
 
 本项目曾用名：calibre-webserver
 
+## 近一年更新亮点
+
+* **网络书库与书源**：新增 Legado 风格书源解析引擎，可在线搜索、阅读网络小说并保存为 txt/epub 入库；配套书源管理界面（批量启停/删除、有效性体检、分页搜索）。
+* **前端全面重写**：从 Nuxt 2 升级至 Nuxt 4 + Vue 3 + Vuetify 3，全站多语言国际化（中/英），新增白天/夜间主题切换，重做登录注册、书籍编辑等页面。
+* **AI 与多源元数据**：新增 AI 大模型识别书籍信息接口；元数据信息源扩展至豆瓣、百度百科、新华书店、番茄小说、Calibre，多源并行查询。
+* **在线阅读体验**：默认 EPUB 阅读器切换为自研 [candle-reader](https://github.com/talebook/candle-reader)；非 EPUB 书籍在线阅读时自动转换。
+* **推送与转换**：新增用户设备管理，支持多设备推送；后台批量转换 Kindle 专有格式为 EPUB。
+* **OPDS 导入**：支持添加外部 OPDS 源，浏览、批量导入书籍，含失败重试与进度查询。
+* **安全加固**：用户密码从 SHA256 自动迁移至 bcrypt；登录/注册/找回密码支持图形验证码与极验 GeeTest；修复多处安全告警（ReDoS、代码注入等）。
+* **管理后台增强**：新增用户管理界面、访客上传权限控制、回收站、批量删除图书、检查更新、用户反馈入口。
+* **基础设施**：升级 Tornado 6.5，改用 uv 管理 Python 依赖，新增数据库迁移工具；Docker 基础镜像合并为 `talebook/talebook-base`，构建提速。
+
+
+## 桌面客户端 — Moke
+
+**[Moke](https://github.com/talebook/moke)** 是 Talebook 的桌面客户端，跨平台支持 Windows、macOS 和 Linux。启动后输入你的 Talebook 服务器地址即可浏览、搜索、下载并阅读电子书。
+
+* **专业阅读器**：内嵌 [readest](https://github.com/readest/readest) 阅读器，支持 EPUB、PDF 等多种格式，提供高亮、笔记、书签等进阶阅读功能；
+* **离线下载**：将服务器上的书籍一键下载到本地，断网也能随时打开阅读；
+* **局域网友好**：完美支持自签名证书和 HTTP/HTTPS 局域网服务器，NAS 用户开箱即用；
+* **完整认证**：支持访问码、登录、注册等 Talebook 的全部认证方式；
+
+从 [Releases](https://github.com/talebook/moke/releases) 页面下载对应平台的安装包（`.msi` / `.dmg` / `.AppImage`），即刻体验桌面端阅读。
 
 ## Docker ![Docker Pulls](https://img.shields.io/docker/pulls/talebook/talebook.svg)
 
@@ -53,6 +77,14 @@ docker-compose -f docker-compose.yml  up -d
 `docker run -d --name talebook -p 8080:80 -v /tmp/demo:/data talebook/talebook`
 
 
+## Start History
+ <picture>
+   <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=talebook/talebook&type=date&theme=dark&legend=top-left" />
+   <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=talebook/talebook&type=date&legend=top-left" />
+   <img alt="Star History Chart" src="https://api.star-history.com/chart?repos=talebook/talebook&type=date&legend=top-left" />
+ </picture>
+
+
 
 ## 常见问题 
 
@@ -64,7 +96,7 @@ NAS安装指南：请参考网友们的帖子：[帖子1](https://post.smzdm.com
 
 **如果觉得本项目很棒，欢迎前往[爱发电](https://afdian.com/@talebook)，赞助作者，持续优化，为爱充电！**
 
-**再次声明！本项目没有维护任何公开的书库站点，例如 joyeuse, wenyuange 等网站均属于网友搭建的，相关问题请不要咨询我，爱莫能助！**
+**再次声明！本项目没有维护任何公开的书库站点，各类网站均属于网友搭建的，相关问题请不要咨询我，爱莫能助！**
 
 
 ## 贡献者

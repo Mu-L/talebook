@@ -13,13 +13,40 @@ const vuetify = createVuetify({
 global.ResizeObserver = require('resize-observer-polyfill');
 
 describe('BookCards.vue', () => {
-    it('renders empty state correctly (User Experience: Empty State)', () => {
+    it('does not render empty state by default', () => {
         const wrapper = mount(BookCards, {
             global: {
-                plugins: [vuetify]
+                plugins: [vuetify],
+                mocks: {
+                    $t: (key: string) => ({
+                        'messages.noBooks': '本书库暂无藏书',
+                        'messages.addBooksFirst': '请先添加书籍到书库',
+                    }[key] || key),
+                },
             },
             props: {
                 books: []
+            }
+        });
+
+        expect(wrapper.text()).not.toContain('本书库暂无藏书');
+        expect(wrapper.find('.mdi-book-open-variant').exists()).toBe(false);
+    });
+
+    it('renders empty state when explicitly enabled (User Experience: Empty State)', () => {
+        const wrapper = mount(BookCards, {
+            global: {
+                plugins: [vuetify],
+                mocks: {
+                    $t: (key: string) => ({
+                        'messages.noBooks': '本书库暂无藏书',
+                        'messages.addBooksFirst': '请先添加书籍到书库',
+                    }[key] || key),
+                },
+            },
+            props: {
+                books: [],
+                showEmptyState: true,
             }
         });
     

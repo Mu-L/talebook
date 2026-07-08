@@ -226,6 +226,9 @@ class SignUp(BaseHandler):
         user.active = False
         user.extra = {"kindle_email": ""}
         user.set_secure_password(password)
+        default_perm = CONF.get("DEFAULT_USER_PERMISSION", "")
+        if default_perm:
+            user.set_permission(default_perm)
         try:
             user.save()
         except:
@@ -384,7 +387,7 @@ class UserMessages(BaseHandler):
 
         msg.unread = False
         msg.update_time = datetime.datetime.now()
-        self.session.commit()
+        msg.save()
         return {"err": "ok"}
 
 

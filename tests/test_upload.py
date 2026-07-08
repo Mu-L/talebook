@@ -5,7 +5,7 @@ import json
 import unittest
 import warnings
 from unittest import mock
-from tests.test_main import TestWithUserLogin, setUpModule as init, testdir, get_db
+from tests.test_main import TestApp, TestWithUserLogin, setUpModule as init, testdir, get_db
 
 
 def setUpModule():
@@ -61,6 +61,10 @@ class TestFilenameDecodeFlow(unittest.TestCase):
         self.assertEqual(self._decode("book.epub"), "book.epub")
 
 class TestUpload(TestWithUserLogin):
+    def test_upload_without_ebook_field_returns_json_error(self):
+        d = self.json("/api/book/upload", method="POST", body="k=1")
+        self.assertEqual(d["err"], "params.ebook")
+
     @mock.patch("webserver.handlers.book.BookUpload.get_upload_file")
     def test_upload_bad_filename(self, m1):
         name = "索恩·德国史"
@@ -257,6 +261,69 @@ class TestCoverUploadSecurity(TestWithUserLogin):
         self.assertNotEqual(d["err"], "params.cover.type")
 
 
+class TestProxyImageHandlerSSRF(TestApp):
+    """ProxyImageHandler SSRF 防护集成测试"""
+
+    @mock.patch("requests.get")
+    def test_valid_url_proxied_with_safe_options(self, mock_get):
+        """合法白名单 URL 应以 allow_redirects=False 和 timeout=10 调用 requests.get"""
+        fake_response = mock.MagicMock()
+        fake_response.headers = {"Content-Type": "image/jpeg"}
+        fake_response.content = b"FAKEIMG"
+        mock_get.return_value = fake_response
+
+        rsp = self.fetch("/get/pcover?url=http://img1.bcebos.com/test.jpg")
+        self.assertEqual(rsp.code, 200)
+        self.assertEqual(rsp.body, b"FAKEIMG")
+        mock_get.assert_called_once()
+        _, kwargs = mock_get.call_args
+        self.assertFalse(kwargs.get("allow_redirects", True))
+        self.assertEqual(kwargs.get("timeout"), 10)
+
+    def test_file_scheme_rejected(self):
+        """file:// scheme 必须被拒绝，返回 yoho"""
+        rsp = self.fetch("/get/pcover?url=file:///etc/passwd")
+        self.assertEqual(rsp.code, 200)
+        self.assertEqual(rsp.body, b"yoho")
+
+    def test_ftp_scheme_rejected(self):
+        """ftp:// scheme 必须被拒绝，返回 yoho"""
+        rsp = self.fetch("/get/pcover?url=ftp://bcebos.com/file.jpg")
+        self.assertEqual(rsp.code, 200)
+        self.assertEqual(rsp.body, b"yoho")
+
+    def test_credentials_in_url_rejected(self):
+        """包含用户名的 URL（user@host 混淆攻击）必须被拒绝，返回 yoho"""
+        rsp = self.fetch("/get/pcover?url=http://evil.com@img1.bcebos.com/img.jpg")
+        self.assertEqual(rsp.code, 200)
+        self.assertEqual(rsp.body, b"yoho")
+
+    def test_non_standard_port_rejected(self):
+        """非标准端口（不是 80/443）必须被拒绝，返回 yoho"""
+        rsp = self.fetch("/get/pcover?url=http://img1.bcebos.com:8080/img.jpg")
+        self.assertEqual(rsp.code, 200)
+        self.assertEqual(rsp.body, b"yoho")
+
+    def test_non_whitelist_domain_rejected(self):
+        """非白名单域名必须被拒绝，返回 yoho"""
+        rsp = self.fetch("/get/pcover?url=http://evil.com/img.jpg")
+        self.assertEqual(rsp.code, 200)
+        self.assertEqual(rsp.body, b"yoho")
+
+    @mock.patch("requests.get")
+    def test_safe_url_rebuilt_without_fragment(self, mock_get):
+        """传给 requests.get 的 URL 不应包含 fragment"""
+        fake_response = mock.MagicMock()
+        fake_response.headers = {}
+        fake_response.content = b""
+        mock_get.return_value = fake_response
+
+        self.fetch("/get/pcover?url=http://img1.bcebos.com/img.jpg%23evil")
+        mock_get.assert_called_once()
+        called_url = mock_get.call_args[0][0]
+        self.assertNotIn("#", called_url)
+
+
 class TestProxyImageWhitelist(unittest.TestCase):
     """ProxyImageHandler.is_whitelist 修复验证（直接测试 files.py 中的实现）"""
 
@@ -285,4 +352,3 @@ class TestProxyImageWhitelist(unittest.TestCase):
 
     def test_empty_host_blocked(self):
         self.assertFalse(self.handler.is_whitelist(""))
-

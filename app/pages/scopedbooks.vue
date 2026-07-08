@@ -7,7 +7,16 @@
             </v-col>
 
             <v-col>
-                <BookCards :books="books" />
+                <v-progress-linear
+                    v-if="loading"
+                    indeterminate
+                    color="primary"
+                    class="mb-3"
+                />
+                <BookCards
+                    :books="books"
+                    :show-empty-state="inited && !loading && books.length === 0"
+                />
             </v-col>
 
             <v-col cols="12">
@@ -33,7 +42,7 @@ import { useI18n } from 'vue-i18n';
 
 const store = useMainStore();
 const { t } = useI18n();
-const { $backend, $alert } = useNuxtApp();
+const { $backend, $backend_stream, $alert } = useNuxtApp();
 const route = useRoute();
 
 store.setNavbar(true);
@@ -45,27 +54,40 @@ const total = ref(0);
 const page_size = 60;
 const page_cnt = ref(1);
 const inited = ref(false);
+const loading = ref(false);
 
 watch(total, (newTotal) => {
     page_cnt.value = newTotal > 0 ? Math.max(1, Math.ceil(newTotal / page_size)) : 0;
 });
 
 const fetchBooks = async (p = 1) => {
+    loading.value = true;
+    books.value = [];
+
+    const url = `/scopedbooks?start=${(p - 1) * page_size}&size=${page_size}&stream=1`;
+
+    let firstLine = true;
     try {
-        const rsp = await $backend(`/scopedbooks?start=${(p - 1) * page_size}&size=${page_size}`);
-        if (rsp.err === 'exception' || rsp.err === 'network_error') {
-            if ($alert) $alert('error', rsp.msg || t('errors.networkError'));
-            return;
+        for await (const data of $backend_stream(url)) {
+            if (firstLine) {
+                firstLine = false;
+                if (data.err === 'exception') {
+                    if ($alert) $alert('error', data.msg || t('errors.networkError'));
+                    return;
+                }
+                total.value = data.total || 0;
+                page_cnt.value = total.value > 0 ? Math.max(1, Math.ceil(total.value / page_size)) : 0;
+                page.value = p;
+                title.value = data.title || t('navigation.scopedBooks');
+            } else {
+                books.value.push(data);
+            }
         }
-    
-        books.value = rsp.books || [];
-        total.value = rsp.total || 0;
-        page_cnt.value = total.value > 0 ? Math.max(1, Math.ceil(total.value / page_size)) : 0;
-        page.value = p;
-        title.value = rsp.title || t('navigation.scopedBooks');
     } catch (error) {
         console.error('Failed to fetch scoped books:', error);
         if ($alert) $alert('error', t('library.message.fetchBooksFailed'));
+    } finally {
+        loading.value = false;
     }
 };
 

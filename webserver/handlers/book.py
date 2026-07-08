@@ -1,5 +1,6 @@
 # -*- coding: UTF-8 -*-
 
+import asyncio
 import concurrent.futures
 import datetime
 import json
@@ -8,6 +9,7 @@ import os
 import random
 import re
 import shutil
+import time
 import urllib
 
 import tornado.escape
@@ -20,15 +22,20 @@ from webserver.constants import (
     META_SOURCE_AI,
     META_SOURCE_AMAZON,
     META_SOURCE_BAIDU,
+    META_SOURCE_BIQUGE,
     META_SOURCE_DOUBAN,
+    META_SOURCE_DOUBAN_V2,
     META_SOURCE_GOOGLE,
+    META_SOURCE_NEODB,
+    META_SOURCE_QIMAO,
+    META_SOURCE_TOMATO,
     META_SOURCE_XHSD,
     SUPPORTED_EBOOK_FORMATS,
 )
 from webserver.handlers.base import BaseHandler, ListHandler, auth, js
 from webserver.i18n import _
 from webserver.models import Item, ReadingState
-from webserver.plugins.meta import baike, calibre, douban, tomato, xhsd, youshu
+from webserver.plugins.meta import baike, biquge, calibre, douban, douban_v2, neodb, qimao, tomato, xhsd, youshu
 from webserver.plugins.meta.ai.api import KEY as AI_KEY
 from webserver.plugins.meta.ai.api import AIBookApi
 from webserver.plugins.parser.txt import get_content_encoding
@@ -223,15 +230,74 @@ class BookRefer(BaseHandler):
     REFER_TIMEOUT = 30  # 并行查询总超时秒数（需大于 AI HTTP timeout）
 
     def plugin_search_books(self, mi):
+        tasks = self._build_search_tasks(mi)
+        if not tasks:
+            return []
+
+        logging.info("并行查询 %d 个信息源，超时 %ds", len(tasks), self.REFER_TIMEOUT)
+        books = []
+        with concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks)) as executor:
+            future_map = {executor.submit(fn): name for name, fn in tasks.items()}
+            done, not_done = concurrent.futures.wait(future_map, timeout=self.REFER_TIMEOUT)
+            for f in not_done:
+                logging.warning("查询 %s 超时，已跳过", future_map[f])
+            for f in done:
+                name = future_map[f]
+                try:
+                    result = f.result()
+                    books.extend(result)
+                    logging.info("%s 查询完成：%d 条", name, len(result))
+                except Exception as e:
+                    logging.error("%s 查询失败：%s", name, e)
+
+        logging.info("所有信息源查询完成，共找到 %d 条结果", len(books))
+        return books
+
+    async def plugin_search_books_stream(self, mi):
+        tasks = self._build_search_tasks(mi)
+        if not tasks:
+            return
+
+        logging.info("并行查询(流式) %d 个信息源，超时 %ds", len(tasks), self.REFER_TIMEOUT)
+        loop = asyncio.get_event_loop()
+        executor = concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks))
+        try:
+            pending_map = {loop.run_in_executor(executor, fn): name for name, fn in tasks.items()}
+            deadline = time.time() + self.REFER_TIMEOUT
+
+            while pending_map:
+                remaining = deadline - time.time()
+                if remaining <= 0:
+                    for fut in pending_map:
+                        logging.warning("查询 %s 超时，已跳过", pending_map[fut])
+                    break
+
+                done_set, _ = await asyncio.wait(
+                    pending_map.keys(),
+                    timeout=remaining,
+                    return_when=asyncio.FIRST_COMPLETED,
+                )
+
+                for fut in done_set:
+                    name = pending_map.pop(fut)
+                    try:
+                        result = fut.result()
+                        logging.info("%s 查询完成：%d 条", name, len(result))
+                        for b in result:
+                            yield b
+                    except Exception as e:
+                        logging.error("%s 查询失败：%s", name, e)
+        finally:
+            executor.shutdown(wait=False)
+
+    def _build_search_tasks(self, mi):
         sources = CONF.get(META_SELECTED_SOURCES, ["douban", "baidu"])
         logging.info("META_SELECTED_SOURCES 配置：%s", sources)
         if not sources:
-            return []
+            return {}
 
         title = re.sub("[(（].*", "", mi.title)
-
-        # 将每个数据源封装为独立 callable，返回 list
-        tasks = {}  # name -> callable
+        tasks = {}
 
         if META_SOURCE_DOUBAN in sources:
 
@@ -256,6 +322,18 @@ class BookRefer(BaseHandler):
 
             tasks["douban"] = _douban
 
+        if META_SOURCE_DOUBAN_V2 in sources:
+
+            def _douban_v2():
+                plugin = douban_v2.DoubanV2MetaPlugin()
+                try:
+                    return plugin.search(title=title, isbn=mi.isbn, publisher=mi.publisher)
+                except Exception:
+                    logging.error("DoubanV2 query %s failed" % title)
+                    return []
+
+            tasks["douban_v2"] = _douban_v2
+
         if META_SOURCE_BAIDU in sources:
 
             def _baidu():
@@ -274,8 +352,6 @@ class BookRefer(BaseHandler):
                     results = calibre.CalibreMetadataApi.get_book_by_title(title, authors=mi.authors, sources=calibre_sources)
                 for r in results or []:
                     r.cover_data = calibre.CalibreMetadataApi.get_cover(r.cover_url) if getattr(r, "cover_url", None) else None
-                    # calibre 插件内部按子数据源设置 provider_key（"google"/"amazon"），
-                    # 但 plugin_get_book_meta 只识别 calibre.KEY，统一覆盖
                     r.provider_key = calibre.KEY
                 return list(results) if results else []
 
@@ -299,7 +375,7 @@ class BookRefer(BaseHandler):
 
             tasks["youshu"] = _youshu
 
-        if hasattr(tomato, "TomatoNovelApi"):
+        if META_SOURCE_TOMATO in sources:
 
             def _tomato():
                 api = tomato.TomatoNovelApi(copy_image=False)
@@ -307,6 +383,36 @@ class BookRefer(BaseHandler):
                 return [book] if book else []
 
             tasks["tomato"] = _tomato
+
+        if META_SOURCE_QIMAO in sources:
+
+            def _qimao():
+                api = qimao.QimaoNovelApi(copy_image=False)
+                book = api.get_book(title)
+                return [book] if book else []
+
+            tasks["qimao"] = _qimao
+
+        if META_SOURCE_NEODB in sources:
+
+            def _neodb():
+                plugin = neodb.NeodbMetaPlugin()
+                try:
+                    return plugin.search(title=title, isbn=mi.isbn, publisher=mi.publisher)
+                except Exception:
+                    logging.error("NeoDB query %s failed" % title)
+                    return []
+
+            tasks["neodb"] = _neodb
+
+        if META_SOURCE_BIQUGE in sources:
+
+            def _biquge():
+                api = biquge.BiqugeApi(copy_image=False)
+                book = api.get_book(title)
+                return [book] if book else []
+
+            tasks["biquge"] = _biquge
 
         if META_SOURCE_AI in sources:
 
@@ -325,24 +431,7 @@ class BookRefer(BaseHandler):
 
             tasks["ai"] = _ai
 
-        logging.info("并行查询 %d 个信息源，超时 %ds", len(tasks), self.REFER_TIMEOUT)
-        books = []
-        with concurrent.futures.ThreadPoolExecutor(max_workers=len(tasks)) as executor:
-            future_map = {executor.submit(fn): name for name, fn in tasks.items()}
-            done, not_done = concurrent.futures.wait(future_map, timeout=self.REFER_TIMEOUT)
-            for f in not_done:
-                logging.warning("查询 %s 超时，已跳过", future_map[f])
-            for f in done:
-                name = future_map[f]
-                try:
-                    result = f.result()
-                    books.extend(result)
-                    logging.info("%s 查询完成：%d 条", name, len(result))
-                except Exception as e:
-                    logging.error("%s 查询失败：%s", name, e)
-
-        logging.info("所有信息源查询完成，共找到 %d 条结果", len(books))
-        return books
+        return tasks
 
     def plugin_get_book_meta(self, provider_key, provider_value, mi):
         refer_mi = None
@@ -395,6 +484,36 @@ class BookRefer(BaseHandler):
             except Exception as e:
                 logging.error("获取番茄小说书籍信息失败：%s", e)
                 raise RuntimeError({"err": "httprequest.tomato.failed", "msg": _("番茄小说查询失败")})
+        elif provider_key == qimao.KEY:
+            title = re.sub("[(（].*", "", mi.title)
+            api = qimao.QimaoNovelApi(copy_image=True)
+            try:
+                refer_mi = api.get_book_by_id(provider_value) or api.get_book(title)
+            except Exception as e:
+                logging.error("获取七猫小说书籍信息失败：%s", e)
+                raise RuntimeError({"err": "httprequest.qimao.failed", "msg": _("七猫小说查询失败")})
+        elif provider_key == douban_v2.KEY:
+            plugin = douban_v2.DoubanV2MetaPlugin()
+            try:
+                refer_mi = plugin.get_metadata_by_provider(provider_value, mi)
+            except Exception as e:
+                logging.error("DoubanV2 query failed: %s", e)
+                raise RuntimeError({"err": "httprequest.douban_v2.failed", "msg": _("豆瓣V2查询失败")})
+        elif provider_key == neodb.KEY:
+            plugin = neodb.NeodbMetaPlugin()
+            try:
+                refer_mi = plugin.get_metadata_by_provider(provider_value, mi)
+            except Exception as e:
+                logging.error("NeoDB query failed: %s", e)
+                raise RuntimeError({"err": "httprequest.neodb.failed", "msg": _("NeoDB查询失败")})
+        elif provider_key == biquge.KEY:
+            title = re.sub("[(（].*", "", mi.title)
+            api = biquge.BiqugeApi(copy_image=True)
+            try:
+                refer_mi = api.get_book(title)
+            except Exception as e:
+                logging.error("获取笔趣阁书籍信息失败：%s", e)
+                raise RuntimeError({"err": "httprequest.biquge.failed", "msg": _("笔趣阁查询失败")})
         elif provider_key == calibre.KEY:
             if mi.isbn:
                 try:
@@ -457,14 +576,51 @@ class BookRefer(BaseHandler):
 
     @js
     @auth
-    def get(self, id):
+    async def get(self, id):
         book_id = int(id)
         item = self.session.query(Item).filter(Item.book_id == book_id).first()
         if item and item.scope == "private":
             if item.collector_id != self.user_id():
                 return {"err": "book.not_found", "msg": _("书籍不存在")}
         mi = self.db.get_metadata(book_id, index_is_id=True)
+
+        stream = self.get_argument("stream", None)
+        if stream == "1":
+            import json
+
+            origin = self.request.headers.get("origin", "*")
+            self.set_header("Access-Control-Allow-Origin", origin)
+            self.set_header("Access-Control-Allow-Credentials", "true")
+            self.set_header("Cache-Control", "max-age=0")
+            self.set_header("Content-Type", "application/x-ndjson")
+            self.set_header("X-Accel-Buffering", "no")
+
+            self.write(json.dumps({"err": "ok"}, ensure_ascii=False) + "\n")
+            await self.flush()
+            logging.info("[STREAM] 元信息已发送")
+
+            async for b in self.plugin_search_books_stream(mi):
+                d = self._fmt_refer_book(b)
+                if d:
+                    self.write(json.dumps(d, ensure_ascii=False) + "\n")
+                    await self.flush()
+                    logging.info("[STREAM] 已发送: %s (source=%s)", d.get("title", "?"), d.get("source", "?"))
+
+            self.finish()
+            return None
+
         books = self.plugin_search_books(mi)
+        logging.info("开始处理 %d 个书籍信息源", len(books))
+        rsp = []
+        for b in books:
+            d = self._fmt_refer_book(b)
+            if d:
+                rsp.append(d)
+
+        logging.info("成功处理 %d/%d 个书籍信息", len(rsp), len(books))
+        return {"err": "ok", "books": rsp}
+
+    def _fmt_refer_book(self, b):
         keys = [
             "cover_url",
             "source",
@@ -478,76 +634,41 @@ class BookRefer(BaseHandler):
             "provider_key",
             "provider_value",
         ]
-        rsp = []
-        logging.info("开始处理 %d 个书籍信息源", len(books))
+        if hasattr(b, "title") and hasattr(b, "authors"):
+            b = {
+                "title": b.title,
+                "authors": b.authors,
+                "author": b.author if hasattr(b, "author") else b.authors[0] if b.authors else "",
+                "author_sort": b.author_sort if hasattr(b, "author_sort") else "",
+                "publisher": b.publisher if hasattr(b, "publisher") else "",
+                "isbn": b.isbn if hasattr(b, "isbn") else "",
+                "comments": b.comments if hasattr(b, "comments") else "",
+                "cover_url": b.cover_url if hasattr(b, "cover_url") else "",
+                "source": b.source if hasattr(b, "source") else "",
+                "website": b.website if hasattr(b, "website") else "",
+                "provider_key": b.provider_key if hasattr(b, "provider_key") else "",
+                "provider_value": b.provider_value if hasattr(b, "provider_value") else "",
+                "pubdate": b.pubdate if hasattr(b, "pubdate") else None,
+            }
+        elif not isinstance(b, dict):
+            return None
 
-        for i, b in enumerate(books):
-            # 处理 Metadata 对象
-            if hasattr(b, "title") and hasattr(b, "authors"):
-                # 将 Metadata 对象转换为字典
-                b_dict = {
-                    "title": b.title,
-                    "authors": b.authors,
-                    "author": b.author if hasattr(b, "author") else b.authors[0] if b.authors else "",
-                    "author_sort": b.author_sort if hasattr(b, "author_sort") else "",
-                    "publisher": b.publisher if hasattr(b, "publisher") else "",
-                    "isbn": b.isbn if hasattr(b, "isbn") else "",
-                    "comments": b.comments if hasattr(b, "comments") else "",
-                    "cover_url": b.cover_url if hasattr(b, "cover_url") else "",
-                    "source": b.source if hasattr(b, "source") else "",
-                    "website": b.website if hasattr(b, "website") else "",
-                    "provider_key": b.provider_key if hasattr(b, "provider_key") else "",
-                    "provider_value": b.provider_value if hasattr(b, "provider_value") else "",
-                    "pubdate": b.pubdate if hasattr(b, "pubdate") else None,
-                }
-                b = b_dict
-            # 确保 b 是字典对象
-            elif not isinstance(b, dict):
-                logging.warning(
-                    "跳过第 %d 个书籍信息：类型不符 [type=%s, value=%r]",
-                    i,
-                    type(b).__name__,
-                    b,
-                )
-                continue
+        if "title" not in b or not b["title"]:
+            return None
 
-            # 检查必要的字段
-            if "title" not in b or not b["title"]:
-                logging.warning("跳过第 %d 个书籍信息：缺少必要字段 title", i)
-                continue
+        try:
+            d = dict((k, b.get(k, "")) for k in keys)
+            pubdate = b.get("pubdate")
+            d["pubyear"] = pubdate.strftime("%Y") if pubdate else ""
 
-            try:
-                d = dict((k, b.get(k, "")) for k in keys)
-                pubdate = b.get("pubdate")
-                d["pubyear"] = pubdate.strftime("%Y") if pubdate else ""
+            if d["title"].startswith("百度百科"):
+                return None
 
-                # 过滤掉百度百科的无详细介绍结果
-                if d["title"].startswith("百度百科"):
-                    logging.info("跳过百度百科无详细介绍的书籍：%s", d["title"])
-                    continue
-
-                if not d["comments"]:
-                    d["comments"] = _("无详细介绍")
-
-                # 记录成功处理的书籍信息
-                logging.debug(
-                    "成功处理书籍 [%s] by %s (provider=%s)",
-                    d["title"],
-                    d["author"],
-                    d.get("provider_key", "unknown"),
-                )
-                rsp.append(d)
-            except Exception as e:
-                logging.error(
-                    "处理第 %d 个书籍信息时出错 [title=%s, error=%s]",
-                    i,
-                    b.get("title", "unknown"),
-                    e,
-                )
-                continue
-
-        logging.info("成功处理 %d/%d 个书籍信息", len(rsp), len(books))
-        return {"err": "ok", "books": rsp}
+            if not d["comments"]:
+                d["comments"] = _("无详细介绍")
+            return d
+        except Exception:
+            return None
 
     @js
     @auth
@@ -912,38 +1033,35 @@ class RecentBook(ListHandler):
 
 class LibraryBook(ListHandler):
     @js
-    def get(self):
+    async def get(self):
         title = _("书库")
 
-        # 获取筛选参数
         publisher = self.get_argument("publisher", None)
         author = self.get_argument("author", None)
         tag = self.get_argument("tag", None)
         book_format = self.get_argument("format", None)
+        stream = self.get_argument("stream", None)
 
-        # 初始获取所有书籍ID
         ids = self.books_by_id()
 
-        # 应用筛选条件
         if publisher and publisher != "全部":
-            # 按出版社筛选
             publisher_books = self.db.search_getting_ids(f"publisher:'{publisher}'", "")
             ids = list(set(ids) & set(publisher_books))
 
         if author and author != "全部":
-            # 按作者筛选
             author_books = self.db.search_getting_ids(f"author:'{author}'", "")
             ids = list(set(ids) & set(author_books))
 
         if tag and tag != "全部":
-            # 按标签筛选
             tag_books = self.db.search_getting_ids(f"tag:'{tag}'", "")
             ids = list(set(ids) & set(tag_books))
 
         if book_format and book_format != "全部":
-            # 按文件格式筛选
             books = self.get_books(ids=ids)
             ids = [book["id"] for book in books if f"fmt_{book_format.lower()}" in book]
+
+        if stream == "1":
+            return await self.stream_book_list([], ids=ids, title=title, sort_by_id=True)
 
         return self.render_book_list([], ids=ids, title=title, sort_by_id=True)
 
@@ -1016,7 +1134,10 @@ def decode_filename(filename):
 class BookUpload(BaseHandler):
     def get_upload_file(self):
         # for unittest mock
-        p = self.request.files["ebook"][0]
+        files = self.request.files.get("ebook")
+        if not files:
+            return None, None
+        p = files[0]
         filename = decode_filename(p["filename"])
         filename = urllib.parse.unquote(filename)
         return (filename, p["body"])
@@ -1032,6 +1153,8 @@ class BookUpload(BaseHandler):
         elif not self.current_user.can_upload():
             return {"err": "permission", "msg": _("无权操作")}
         name, data = self.get_upload_file()
+        if not name or data is None:
+            return {"err": "params.ebook", "msg": _("请选择要上传的文件")}
         logging.error("upload book name = " + repr(name))
         # strip path components to prevent directory traversal
         name = os.path.basename(name)
@@ -1700,12 +1823,13 @@ class BookSaveMeta(BaseHandler):
 class BookScoped(BaseHandler):
     @js
     @auth
-    def get(self):
-        """获取当前用户设为 scope=private 的所有图书信息"""
+    async def get(self):
+        import json
+
         user_id = self.user_id()
         title = _("私有书籍")
+        stream = self.get_argument("stream", None)
 
-        # 查询当前用户设为 scope=private 的所有图书，按书籍 ID 倒序排列
         db_items = (
             self.session.query(Item)
             .filter(Item.collector_id == user_id, Item.scope == "private")
@@ -1720,11 +1844,33 @@ class BookScoped(BaseHandler):
             total_items = 0
 
             if len(ids) > 0:
-                # 获取总数用于分页
                 total_items = self.session.query(Item).filter(Item.collector_id == user_id, Item.scope == "private").count()
 
             books = self.get_books(ids=ids)
             books.sort(key=lambda x: x["id"], reverse=True)
+
+            if stream == "1":
+                origin = self.request.headers.get("origin", "*")
+                self.set_header("Access-Control-Allow-Origin", origin)
+                self.set_header("Access-Control-Allow-Credentials", "true")
+                self.set_header("Cache-Control", "max-age=0")
+                self.set_header("Content-Type", "application/x-ndjson")
+                self.set_header("X-Accel-Buffering", "no")
+
+                meta = {"err": "ok", "title": title, "total": total_items}
+                self.write(json.dumps(meta, ensure_ascii=False) + "\n")
+                await self.flush()
+                logging.info("[STREAM] scopedbooks 元信息已发送 (total=%d)", total_items)
+
+                for book in books:
+                    title_val = book.get("title", "?")
+                    book_data = utils.BookFormatter(self, book).format()
+                    self.write(json.dumps(book_data, ensure_ascii=False) + "\n")
+                    await self.flush()
+                    logging.info("[STREAM] scopedbooks 已发送: %s", title_val)
+
+                self.finish()
+                return None
 
             books_result = []
             for book in books:
@@ -1786,7 +1932,7 @@ class BookFavorite(BaseHandler):
         return {"err": "ok", "title": _("我的收藏"), "total": len(favorite_books), "books": favorite_books}
 
 
-class BookWantToRead(BaseHandler):
+class BookShelf(BaseHandler):
     @js
     @auth
     def post(self, id):
@@ -1796,17 +1942,17 @@ class BookWantToRead(BaseHandler):
             return {"err": "params.book.invalid", "msg": _("书籍已不存在")}
         user_id = self.user_id()
         data = tornado.escape.json_decode(self.request.body)
-        wants_status = data.get("wants", False)
+        shelf_status = data.get("shelf", False)
         reading_state = (
             self.session.query(ReadingState).filter(ReadingState.book_id == book_id, ReadingState.reader_id == user_id).first()
         )
         if not reading_state:
             reading_state = ReadingState(book_id, user_id)
             self.session.add(reading_state)
-        reading_state.set_wants(wants_status)
+        reading_state.set_wants(shelf_status)
         self.session.commit()
-        action = "标记为待读" if wants_status else "取消待读"
-        return {"err": "ok", "msg": _("%s成功") % action}
+        msg = _("加入书架成功") if shelf_status else _("移除书架成功")
+        return {"err": "ok", "msg": msg}
 
     @js
     @auth
@@ -1821,15 +1967,15 @@ class BookWantToRead(BaseHandler):
         book_ids = [state.book_id for state in reading_states]
         books_dict = {book["id"]: book for book in self.get_books(ids=book_ids)}
         state_dict = {state.book_id: state for state in reading_states}
-        wants_books = []
+        shelf_books = []
         for book_id in book_ids:
             book = books_dict.get(book_id)
             if not book:
                 continue
             book_data = utils.BookFormatter(self, book).format()
             book_data["state"] = utils.ReadingStateFormatter.format_reading_state(state_dict[book_id])
-            wants_books.append(book_data)
-        return {"err": "ok", "title": _("待读书籍"), "total": len(wants_books), "books": wants_books}
+            shelf_books.append(book_data)
+        return {"err": "ok", "title": _("我的书架"), "total": len(shelf_books), "books": shelf_books}
 
 
 class BookReading(BaseHandler):
@@ -2043,10 +2189,10 @@ def routes():
         (r"/api/read/txt", TxtRead),
         (r"/api/book/txt/init", BookTxtInit),
         (r"/api/book/([0-9]+)/favorite", BookFavorite),
-        (r"/api/book/([0-9]+)/wants", BookWantToRead),
+        (r"/api/book/([0-9]+)/shelf", BookShelf),
         (r"/api/book/([0-9]+)/readstate", BookReadingState),
         (r"/api/favorites", BookFavorite),
-        (r"/api/wants", BookWantToRead),
+        (r"/api/shelf", BookShelf),
         (r"/api/reading", BookReading),
         (r"/api/read-done", BookReadDone),
         (r"/api/reading/stats", BookReadingStats),

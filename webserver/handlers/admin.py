@@ -1,9 +1,11 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
+import collections
 import datetime
 import hashlib
 import logging
+import os
 import re
 import ssl
 import subprocess
@@ -12,6 +14,7 @@ import traceback
 import uuid
 
 import tornado
+from tornado.options import options as tornado_options
 
 from webserver import loader, utils
 from webserver.base.trash_manager import TrashManager
@@ -29,7 +32,7 @@ from webserver.services.update_checker import UpdateChecker
 CONF = loader.get_settings()
 
 # 元数据源配置
-META_ALL_SOURCES = ["douban", "baidu", "google", "amazon", "xinhua", "ai"]
+META_ALL_SOURCES = ["douban", "douban_v2", "baidu", "google", "amazon", "xinhua", "tomato", "qimao", "ai", "neodb", "biquge"]
 DEFAULT_META_SOURCES = ["douban", "baidu", "xinhua"]
 SOCIAL_AUTH_SETTING_RE = re.compile(r"^SOCIAL_AUTH_[A-Z0-9_]+_(KEY|SECRET)$")
 
@@ -141,9 +144,13 @@ class AdminUsers(BaseHandler):
             user.extra = {"kindle_email": ""}
             user.set_secure_password(password)
 
-            # 设置权限
+            # 设置权限：若未显式指定，则应用系统默认权限
             p = data.get("permission", "")
-            if isinstance(p, str) and p:
+            if not isinstance(p, str):
+                p = ""
+            if not p:
+                p = CONF.get("DEFAULT_USER_PERMISSION", "")
+            if p:
                 user.set_permission(p)
 
             try:
@@ -187,6 +194,36 @@ class AdminUsers(BaseHandler):
             user.set_permission(p)
         user.save()
         return {"err": "ok"}
+
+
+class AdminUsersBatch(BaseHandler):
+    @js
+    @auth
+    def post(self):
+        if not self.admin_user:
+            return {"err": "permission.not_admin", "msg": _("当前用户非管理员")}
+        data = tornado.escape.json_decode(self.request.body)
+        ids = data.get("ids", [])
+        permission = data.get("permission", "")
+
+        if not ids or not isinstance(ids, list):
+            return {"err": "params.ids.required", "msg": _("用户ID列表不能为空")}
+        if len(ids) > 500:
+            return {"err": "params.ids.too_many", "msg": _("单次最多批量操作 500 个用户")}
+        if not isinstance(permission, str) or not permission:
+            return {"err": "params.permission.invalid", "msg": _("权限参数不对")}
+
+        current_user_id = self.user_id()
+        if current_user_id in ids:
+            return {"err": "params.user.invalid", "msg": _("不允许批量修改自己的权限")}
+
+        users = self.session.query(Reader).filter(Reader.id.in_(ids)).all()
+        for user in users:
+            user.set_permission(permission)
+        self.session.commit()
+        updated = len(users)
+
+        return {"err": "ok", "updated": updated, "msg": _("已更新 %d 个用户的权限") % updated}
 
 
 class AdminTestMail(BaseHandler):
@@ -328,6 +365,7 @@ class AdminSettings(BaseHandler):
             "ALLOW_GUEST_READ",
             "ALLOW_GUEST_UPLOAD",
             "ALLOW_REGISTER",
+            "DEFAULT_USER_PERMISSION",
             "ALLOW_FEEDBACK",
             "FEEDBACK_URL",
             "BOOK_NAMES_FORMAT",
@@ -401,6 +439,150 @@ class AdminSettings(BaseHandler):
         return logic.save_extra_settings(args)
 
 
+def _build_mysql_url(db_host, db_port, db_name, db_user, db_pass):
+    """Construct a MySQL+pymysql connection URL from individual parameters."""
+    import urllib.parse
+
+    safe_pass = urllib.parse.quote(db_pass, safe="")
+    safe_user = urllib.parse.quote(db_user, safe="")
+    return f"mysql+pymysql://{safe_user}:{safe_pass}@{db_host}:{db_port}/{db_name}?charset=utf8mb4"
+
+
+def _get_database_url(handler, allow_sqlite=True):
+    """Read and validate the user_database SQLAlchemy URL submitted by the UI.
+
+    The persisted configuration remains the existing single user_database field;
+    the Vue form may expose host/port/user inputs but must submit the composed URL.
+    Legacy split parameters are accepted as a compatibility fallback only.
+    """
+    from sqlalchemy.engine import make_url
+
+    db_url = handler.get_argument("user_database", "").strip() or handler.get_argument("db_url", "").strip()
+    if not db_url:
+        db_type = handler.get_argument("db_type", "sqlite" if allow_sqlite else "").strip()
+        if allow_sqlite and db_type == "sqlite":
+            return (
+                CONF["user_database"]
+                if CONF["user_database"].startswith("sqlite")
+                else "sqlite:////data/books/calibre-webserver.db"
+            )
+        if db_type in ("mysql", "mariadb"):
+            db_host = handler.get_argument("db_host", "localhost").strip()
+            db_port = handler.get_argument("db_port", "3306").strip()
+            db_name = handler.get_argument("db_name", "").strip()
+            db_user = handler.get_argument("db_user", "").strip()
+            db_pass = handler.get_argument("db_pass", "").strip()
+            if not db_name or not db_user:
+                raise ValueError(_("数据库连接参数不完整"))
+            db_url = _build_mysql_url(db_host, db_port, db_name, db_user, db_pass)
+        else:
+            raise ValueError(_("请选择有效的目标数据库类型"))
+
+    try:
+        parsed = make_url(db_url)
+    except Exception as e:
+        raise ValueError(_("数据库连接地址无效: %s") % str(e))
+
+    driver = parsed.drivername.split("+")[0]
+    if driver == "sqlite":
+        if allow_sqlite:
+            return db_url
+        raise ValueError(_("请选择有效的目标数据库类型"))
+    if driver not in ("mysql", "mariadb"):
+        raise ValueError(_("仅支持 SQLite 或 MySQL/MariaDB 数据库"))
+    if not parsed.database or not parsed.username:
+        raise ValueError(_("数据库连接参数不完整"))
+    if parsed.port is not None and not (1 <= parsed.port <= 65535):
+        raise ValueError(_("端口号范围无效，应在 1-65535 之间"))
+    return db_url
+
+
+class AdminTestDB(BaseHandler):
+    """Test whether a database connection is reachable.
+
+    Accessible before install (for the install wizard) and by admins after install.
+    """
+
+    def should_be_installed(self):
+        pass
+
+    @js
+    def post(self):
+        # Before install: allow without auth (install wizard use case)
+        # After install: require admin
+        if CONF.get("installed", True):
+            if not self.current_user:
+                return {"err": "user.need_login", "msg": _("请先登录")}
+            if not self.admin_user:
+                return {"err": "permission", "msg": _("无权访问此接口")}
+
+        try:
+            db_url = _get_database_url(self)
+        except ValueError as e:
+            return {"err": "params.invalid", "msg": str(e)}
+        if db_url.startswith("sqlite"):
+            return {"err": "ok", "msg": _("SQLite 无需测试连接")}
+        try:
+            from sqlalchemy import create_engine, text
+
+            engine = create_engine(db_url, pool_pre_ping=True, pool_size=1, max_overflow=0)
+            with engine.connect() as conn:
+                conn.execute(text("SELECT 1"))
+            engine.dispose()
+            return {"err": "ok", "msg": _("数据库连接成功")}
+        except Exception as e:
+            logging.error(traceback.format_exc())
+            return {"err": "db.connect_failed", "msg": str(e)}
+
+
+class AdminMigrateDB(BaseHandler):
+    """Migrate all Talebook user-data tables from the current database to a new one."""
+
+    @js
+    @auth
+    def post(self):
+        if not self.admin_user:
+            return {"err": "permission", "msg": _("无权访问此接口")}
+
+        try:
+            new_db_url = _get_database_url(self, allow_sqlite=False)
+        except ValueError as e:
+            return {"err": "params.invalid", "msg": str(e)}
+
+        force = self.get_argument("force", "0").strip() == "1"
+        source_url = CONF["user_database"]
+
+        if new_db_url == source_url:
+            return {"err": "params.invalid", "msg": _("目标数据库与当前数据库相同")}
+
+        try:
+            from webserver.migrate_db import TargetNotEmptyError, migrate_data
+
+            migrate_data(source_url, new_db_url, force=force)
+        except TargetNotEmptyError as e:
+            return {
+                "err": "db.target_has_data",
+                "count": e.count,
+                "msg": _("目标数据库已有 %d 条记录，继续迁移将清空这些数据。如需强制迁移，请再次确认。") % e.count,
+            }
+        except Exception as e:
+            logging.error(traceback.format_exc())
+            return {"err": "db.migrate_failed", "msg": _("数据迁移失败: %s") % str(e)}
+
+        # Persist new user_database — load ALL current settings so other keys aren't lost
+        try:
+            args = loader.SettingsLoader()
+            args["user_database"] = new_db_url
+            args["installed"] = True
+            args.dumpfile()
+        except Exception as e:
+            logging.error(traceback.format_exc())
+            return {"err": "file.permission", "msg": _("保存配置失败: %s") % str(e)}
+
+        CONF["user_database"] = new_db_url
+        return {"err": "ok", "msg": _("数据迁移成功，请重启服务器以生效"), "need_restart": True}
+
+
 class AdminInstall(BaseHandler):
     def should_be_invited(self):
         pass
@@ -433,8 +615,31 @@ class AdminInstall(BaseHandler):
         if len(password) < 8 or len(password) > 20 or not re.match(Reader.RE_PASSWORD, password):
             return {"err": "params.password.invalid", "msg": _("密码无效")}
 
+        # Optional database configuration. Persist only the existing user_database setting;
+        # the UI may collect separate fields but submits the composed SQLAlchemy URL.
+        target_session = self.session
+        try:
+            target_db_url = _get_database_url(self)
+        except ValueError as e:
+            return {"err": "params.invalid", "msg": str(e)}
+
+        if not target_db_url.startswith("sqlite"):
+            try:
+                from sqlalchemy import create_engine
+                from sqlalchemy.orm import sessionmaker
+
+                from webserver import models
+
+                new_engine = create_engine(target_db_url, pool_pre_ping=True, pool_size=1, max_overflow=0)
+                models.user_syncdb(new_engine)
+                NewSession = sessionmaker(bind=new_engine, autoflush=True, autocommit=False)
+                target_session = NewSession()
+            except Exception as e:
+                logging.error(traceback.format_exc())
+                return {"err": "db.connect_failed", "msg": _("数据库连接失败: %s") % str(e)}
+
         # 避免重复创建
-        user = self.session.query(Reader).filter(Reader.username == username).first()
+        user = target_session.query(Reader).filter(Reader.username == username).first()
         if not user:
             user = Reader()
             user.username = username
@@ -451,8 +656,13 @@ class AdminInstall(BaseHandler):
         user.extra = {"kindle_email": ""}
         user.set_secure_password(password)
         try:
-            user.save()
-        except:
+            if target_session is self.session:
+                user.save()
+            else:
+                target_session.add(user)
+                target_session.commit()
+                target_session.close()
+        except Exception:
             logging.error(traceback.format_exc())
             return {"err": "db.error", "msg": _("系统异常，请重试或更换注册信息")}
 
@@ -475,6 +685,9 @@ class AdminInstall(BaseHandler):
             args["INVITE_CODE"] = code
         else:
             args["INVITE_MODE"] = False
+
+        if target_db_url and target_db_url != CONF["user_database"]:
+            args["user_database"] = target_db_url
 
         logic = SettingsSaverLogic()
         return logic.save_extra_settings(args)
@@ -724,20 +937,19 @@ class AdminOPDSBrowse(BaseHandler):
     def post(self):
         try:
             req = tornado.escape.json_decode(self.request.body)
+            # 优先接受完整 url 字段，兼容旧的 host/port/path 三字段形式
+            url = req.get("url", "")
             host = req.get("host", "")
             port = req.get("port", "")
             path = req.get("path", "")
 
-            if not host:
-                return {"err": "params.error", "msg": _("参数错误，主机地址不能为空")}
+            if not url and not host:
+                return {"err": "params.error", "msg": _("参数错误，必须提供 url 或 host")}
 
-            logging.info(f"OPDS浏览请求: host={host}, port={port}, path={path}")
+            logging.info(f"OPDS浏览请求: url={url}, host={host}, port={port}, path={path}")
 
-            # 创建OPDS导入服务实例
             opds_service = OPDSImportService()
-
-            # 浏览目录
-            result = opds_service.browse_opds_catalog(host, port, path)
+            result = opds_service.browse_opds_catalog(url=url, host=host, port=port, path=path)
 
             if result.get("success"):
                 return {
@@ -763,7 +975,7 @@ class AdminOPDSImportStatus(BaseHandler):
         # 返回全局导入状态（单例模式）
         from webserver.services.opds_import import OPDSImportService
 
-        opds_service = OPDSImportService.get_instance()
+        opds_service = OPDSImportService()
         status = {
             "total": opds_service.count_total,
             "done": opds_service.count_done,
@@ -861,7 +1073,7 @@ class AdminOPDSImportRetry(BaseHandler):
             def retry_task():
                 from webserver.services.opds_import import OPDSImportService
 
-                opds_service = OPDSImportService.get_instance()
+                opds_service = OPDSImportService()
                 book_data = {
                     "title": sf.title,
                     "author": sf.author,
@@ -935,7 +1147,7 @@ class AdminOPDSImport(BaseHandler):
             def import_task():
                 from webserver.services.opds_import import OPDSImportService
 
-                opds_service = OPDSImportService.get_instance()
+                opds_service = OPDSImportService()
                 opds_service.reset_counters()
                 if books:
                     opds_service.import_selected_books(opds_url, self.user_id(), delete_after, books)
@@ -1062,13 +1274,82 @@ class AdminUpdateCheck(BaseHandler):
         return {"err": "ok", "status": status}
 
 
+MAX_LOG_LINES = 2000
+DEFAULT_LOG_LINES = 500
+
+
+def _get_log_file():
+    return getattr(tornado_options, "log_file_prefix", None) or "/data/log/talebook.log"
+
+
+class AdminSystemLog(BaseHandler):
+    @js
+    @is_admin
+    def get(self):
+        log_file = _get_log_file()
+        try:
+            lines_count = int(self.get_argument("lines", DEFAULT_LOG_LINES))
+        except (ValueError, TypeError):
+            lines_count = DEFAULT_LOG_LINES
+        lines_count = max(1, min(lines_count, MAX_LOG_LINES))
+
+        if not os.path.exists(log_file):
+            return {"err": "ok", "lines": [], "total": 0, "file": log_file}
+
+        total = 0
+        tail_deque = collections.deque(maxlen=lines_count)
+        with open(log_file, "r", encoding="utf-8", errors="replace") as f:
+            for line in f:
+                total += 1
+                tail_deque.append(line)
+
+        tail = [line.rstrip("\n") for line in tail_deque]
+        return {"err": "ok", "lines": tail, "total": total, "file": log_file}
+
+
+class AdminSystemLogDownload(BaseHandler):
+    async def get(self):
+        if not self.current_user:
+            self.set_status(403)
+            self.finish({"err": "user.need_login", "msg": _("请先登录")})
+            return
+        if not self.admin_user:
+            self.set_status(403)
+            self.finish({"err": "permission.not_admin", "msg": _("当前用户非管理员")})
+            return
+
+        log_file = _get_log_file()
+
+        if not os.path.exists(log_file):
+            self.set_status(404)
+            self.finish()
+            return
+
+        file_size = os.path.getsize(log_file)
+        self.set_header("Content-Type", "text/plain; charset=utf-8")
+        self.set_header("Content-Disposition", 'attachment; filename="talebook.log"')
+        self.set_header("Content-Length", str(file_size))
+        chunk_size = 64 * 1024
+        with open(log_file, "rb") as f:
+            while True:
+                chunk = f.read(chunk_size)
+                if not chunk:
+                    break
+                self.write(chunk)
+                await self.flush()
+        self.finish()
+
+
 def routes():
     return [
         (r"/api/admin/ssl", AdminSSL),
         (r"/api/admin/users", AdminUsers),
+        (r"/api/admin/users/batch", AdminUsersBatch),
         (r"/api/admin/install", AdminInstall),
         (r"/api/admin/settings", AdminSettings),
         (r"/api/admin/testmail", AdminTestMail),
+        (r"/api/admin/testdb", AdminTestDB),
+        (r"/api/admin/migratedb", AdminMigrateDB),
         (r"/api/admin/update", AdminUpdateCheck),
         (r"/api/admin/book/list", AdminBookList),
         (r"/api/admin/book/fill", AdminBookFill),
@@ -1082,4 +1363,6 @@ def routes():
         (r"/api/admin/opds/sources", AdminOpdsSources),
         (r"/api/admin/trash/size", AdminTrashSize),
         (r"/api/admin/trash/clear", AdminTrashClear),
+        (r"/api/admin/log", AdminSystemLog),
+        (r"/api/admin/log/download", AdminSystemLogDownload),
     ]

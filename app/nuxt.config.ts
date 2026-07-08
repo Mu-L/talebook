@@ -45,6 +45,7 @@ export default defineNuxtConfig({
         '/api/**': { proxy: (process.env.API_URL || 'http://127.0.0.1:8080') + '/api/**' },
         '/get/**': { proxy: (process.env.API_URL || 'http://127.0.0.1:8080') + '/get/**' },
         '/read/**': { proxy: (process.env.API_URL || 'http://127.0.0.1:8080') + '/read/**' },
+        '/static/themes/**': { proxy: (process.env.API_URL || 'http://127.0.0.1:8080') + '/static/themes/**' },
     },
     app: {
         head: {

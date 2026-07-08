@@ -60,6 +60,9 @@ test.describe('Navigation Sidebar', () => {
         await expect(page.locator('nav').getByRole('link', { name: 'OPDS 介绍' })).toBeVisible();
         await expect(page.locator('nav').getByRole('link', { name: 'OPDS 介绍' })).toHaveAttribute('href', '/opds-readme');
 
+        await expect(page.locator('nav').getByRole('link', { name: 'WebDAV 介绍' })).toBeVisible();
+        await expect(page.locator('nav').getByRole('link', { name: 'WebDAV 介绍' })).toHaveAttribute('href', '/webdav-readme');
+
     });
 
     test('Can navigate via all sidebar links', async ({ page }) => {

@@ -405,6 +405,7 @@
     "systemVersion": "System Version",
     "userCount": "User Count",
     "opdsIntroduction": "OPDS Introduction",
+    "webdavIntroduction": "WebDAV Introduction",
     "all": "All",
     "collapse": "Collapse",
     "more": "More",
@@ -473,7 +474,32 @@
     "closedTitle": "OPDS Disabled",
     "closedMessage": "The OPDS service is currently disabled. Contact the administrator to enable OPDS.",
     "iosReaderDesc": "E-book reader for iOS and macOS",
-    "androidReaderDesc": "Powerful e-book reader for Android platform"
+    "androidReaderDesc": "Powerful e-book reader for Android platform",
+    "webdavSection": "WebDAV Connection",
+    "webdavDesc": "Besides OPDS readers, you can mount the library via WebDAV. See the guide:",
+    "webdavLink": "WebDAV Guide"
+  },
+  "webdavPage": {
+    "title": "WebDAV Guide",
+    "links": "WebDAV Links",
+    "yourLink": "Your WebDAV link:",
+    "accountTip": "Use your site account and password to sign in; guest accounts cannot access it.",
+    "commonClients": "Common WebDAV Clients",
+    "windowsDesc": "In This PC, choose Add a network location and enter the WebDAV link to mount it.",
+    "macosDesc": "In Finder, choose Connect to Server and enter the WebDAV link to mount it.",
+    "androidDesc": "In the app, add remote storage, choose WebDAV and fill in the link with your account.",
+    "configGuide": "Configuration Guide",
+    "steps": {
+      "openClient": "Open a WebDAV-capable file manager or reader",
+      "enterLink": "Enter your WebDAV link",
+      "enterAccount": "Enter your account and password to authenticate",
+      "browse": "Start browsing, downloading and managing your books"
+    },
+    "noteTitle": "Note",
+    "clientNote": "Some systems have limited WebDAV support; if it fails, try HTTPS or a third-party client.",
+    "noteUseAccount": "Sign in with your registered account instead of anonymous access.",
+    "closedTitle": "WebDAV Disabled",
+    "closedMessage": "The WebDAV service is currently disabled. Contact the administrator to enable WebDAV."
   },
   "welcomePage": {
     "inputTitle": "Enter access password",
@@ -698,6 +724,8 @@
         "convertTimeout": "Convert timeout",
         "autoreload": "Auto restart",
         "opdsEnabled": "Enable OPDS",
+        "webdavEnabled": "Enable WebDAV",
+        "webdavSyncFolder": "Enable WebDAV sync folder (per-user writable reader directory)",
         "smtpServer": "SMTP Server (e.g., smtp-mail.outlook.com:587)",
         "smtpUsername": "SMTP Username (e.g., user{'@'}gmail.com)",
         "smtpPassword": "SMTP Password",

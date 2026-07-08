@@ -41,6 +41,13 @@
                     <li>{{ t('opdsPage.noteAllowDownload') }}</li>
                 </ol>
             </section>
+            <section>
+                <h2>{{ t('opdsPage.webdavSection') }}</h2>
+                <p>
+                    {{ t('opdsPage.webdavDesc') }}
+                    <a href="/webdav-readme" target="_blank" rel="noopener noreferrer">{{ t('opdsPage.webdavLink') }}</a>
+                </p>
+            </section>
         </template>
         <template v-else>
             <h1>{{ t('opdsPage.closedTitle') }}</h1>

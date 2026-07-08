@@ -10,10 +10,19 @@ vi.mock('vue-i18n', () => ({
     useI18n: () => ({ t: (key: string) => key }),
 }));
 
-const { alertMock, backendMock, pushMock } = vi.hoisted(() => ({
+const { alertMock, backendMock, pushMock, storeState } = vi.hoisted(() => ({
     alertMock: vi.fn(),
     backendMock: vi.fn(),
     pushMock: vi.fn(),
+    storeState: {
+        sys: {
+            upload: {
+                chunk_enabled: true,
+                chunk_threshold: 8 * 1024 * 1024,
+                chunk_size: 4 * 1024 * 1024,
+            },
+        },
+    },
 }));
 
 mockNuxtImport('useNuxtApp', () => {
@@ -23,6 +32,10 @@ mockNuxtImport('useNuxtApp', () => {
 mockNuxtImport('useRouter', () => {
     return () => ({ push: pushMock });
 });
+
+vi.mock('@/stores/main', () => ({
+    useMainStore: () => storeState,
+}));
 
 const vuetify = createVuetify({ components, directives });
 global.ResizeObserver = require('resize-observer-polyfill');
@@ -46,6 +59,11 @@ function mountUpload() {
     alertMock.mockReset();
     backendMock.mockReset();
     pushMock.mockReset();
+    storeState.sys.upload = {
+        chunk_enabled: true,
+        chunk_threshold: 8 * 1024 * 1024,
+        chunk_size: 4 * 1024 * 1024,
+    };
     return mount(Upload, {
         global: {
             plugins: [vuetify],
@@ -113,6 +131,46 @@ describe('Upload.vue', () => {
         await flushPromises();
 
         expect(alertMock).toHaveBeenCalledWith('error', 'chunk too large');
+        wrapper.unmount();
+    });
+
+    it('uploads large files as a single request when chunking is disabled in settings', async () => {
+        const wrapper = mountUpload();
+        storeState.sys.upload.chunk_enabled = false;
+        backendMock.mockResolvedValue({ err: 'ok', book_id: 55 });
+
+        (wrapper.vm as unknown as UploadVm).ebooks = makeFakeFile('big.epub', 9 * 1024 * 1024);
+        (wrapper.vm as unknown as UploadVm).do_upload();
+        await flushPromises();
+
+        expect(backendMock).toHaveBeenCalledTimes(1);
+        expect(backendMock).toHaveBeenCalledWith('/book/upload', expect.objectContaining({ method: 'POST' }));
+        expect(pushMock).toHaveBeenCalledWith('/book/55');
+        wrapper.unmount();
+    });
+
+    it('respects a custom chunk threshold and chunk size from settings', async () => {
+        const wrapper = mountUpload();
+        // 自定义为 2MB 阈值 / 1MB 分片，3MB 文件应被切成 3 片
+        storeState.sys.upload.chunk_threshold = 2 * 1024 * 1024;
+        storeState.sys.upload.chunk_size = 1 * 1024 * 1024;
+        backendMock.mockImplementation((url: string) => {
+            if (url === '/book/upload/chunk') {
+                return Promise.resolve({ err: 'ok' });
+            }
+            if (url === '/book/upload/complete') {
+                return Promise.resolve({ err: 'ok', book_id: 88 });
+            }
+            return Promise.reject(new Error('unexpected url: ' + url));
+        });
+
+        (wrapper.vm as unknown as UploadVm).ebooks = makeFakeFile('medium.epub', 3 * 1024 * 1024);
+        (wrapper.vm as unknown as UploadVm).do_upload();
+        await flushPromises();
+
+        const chunkCalls = backendMock.mock.calls.filter(([url]) => url === '/book/upload/chunk');
+        expect(chunkCalls.length).toBe(3);
+        expect(pushMock).toHaveBeenCalledWith('/book/88');
         wrapper.unmount();
     });
 });

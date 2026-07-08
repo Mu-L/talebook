@@ -64,6 +64,11 @@ settings = {
     "MAX_CHUNK_UPLOAD_SIZE": "1024MB",
     "MAX_CHUNK_COUNT": 4096,
 
+    # 分片上传功能开关，及前端触发分片的文件大小阈值、单个分片大小（均可在管理后台调整）
+    "UPLOAD_CHUNK_ENABLED": True,
+    "UPLOAD_CHUNK_THRESHOLD": "8MB",
+    "UPLOAD_CHUNK_SIZE": "4MB",
+
     "CANDLE_READER_SERVER": "https://brs.talebook.org",
     "EPUB_VIEWER": "creader.html",
     "PDF_VIEWER": "/static/pdfjs/web/viewer.html?file=%(pdf_url)s",

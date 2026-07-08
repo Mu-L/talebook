@@ -40,6 +40,31 @@ class TestAdminSettingsSecurity(TestWithAdminUser):
             d = self.json("/api/admin/settings", method="POST", body=req)
             self.assertEqual(d["err"], "ok")
 
+    def test_settings_update_chunk_upload_settings(self):
+        """管理员可以开关分片上传功能并自定义分片阈值/分片大小"""
+        conf = loader.get_settings()
+        prev_enabled = conf.get("UPLOAD_CHUNK_ENABLED", True)
+        prev_threshold = conf.get("UPLOAD_CHUNK_THRESHOLD", "8MB")
+        prev_size = conf.get("UPLOAD_CHUNK_SIZE", "4MB")
+        try:
+            with mock.patch("webserver.loader.SettingsLoader.set_store_path", return_value="/tmp/"):
+                req = json.dumps(
+                    {
+                        "UPLOAD_CHUNK_ENABLED": False,
+                        "UPLOAD_CHUNK_THRESHOLD": "16MB",
+                        "UPLOAD_CHUNK_SIZE": "8MB",
+                    }
+                )
+                d = self.json("/api/admin/settings", method="POST", body=req)
+                self.assertEqual(d["err"], "ok")
+                self.assertEqual(d["rsp"]["UPLOAD_CHUNK_ENABLED"], False)
+                self.assertEqual(d["rsp"]["UPLOAD_CHUNK_THRESHOLD"], "16MB")
+                self.assertEqual(d["rsp"]["UPLOAD_CHUNK_SIZE"], "8MB")
+        finally:
+            conf["UPLOAD_CHUNK_ENABLED"] = prev_enabled
+            conf["UPLOAD_CHUNK_THRESHOLD"] = prev_threshold
+            conf["UPLOAD_CHUNK_SIZE"] = prev_size
+
     def test_settings_update_rejected_for_non_admin(self):
         """普通用户（非管理员）不能修改管理员配置，必须返回 permission 错误"""
         from webserver import models

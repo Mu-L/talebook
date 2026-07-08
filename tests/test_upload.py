@@ -288,6 +288,41 @@ class TestUploadChunk(TestWithUserLogin):
         self.assertEqual(d["err"], "ok")
 
 
+class TestUploadChunkToggle(TestWithUserLogin):
+    """分片上传功能开关（UPLOAD_CHUNK_ENABLED）测试"""
+
+    def setUp(self):
+        super().setUp()
+        from webserver.handlers.book import CONF
+        self.CONF = CONF
+        self._prev_enabled = CONF.get("UPLOAD_CHUNK_ENABLED", True)
+
+    def tearDown(self):
+        self.CONF["UPLOAD_CHUNK_ENABLED"] = self._prev_enabled
+        super().tearDown()
+
+    def test_chunk_upload_rejected_when_disabled(self):
+        self.CONF["UPLOAD_CHUNK_ENABLED"] = False
+        headers = {"Content-Type": "multipart/form-data; boundary=empty"}
+        rsp = self.fetch(
+            "/api/book/upload/chunk?upload_id=toggle-id&chunk_index=0&total_chunks=1",
+            method="POST",
+            body=b"--empty--\r\n",
+            headers=headers,
+        )
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "params.chunk_disabled")
+
+    def test_complete_rejected_when_disabled(self):
+        self.CONF["UPLOAD_CHUNK_ENABLED"] = False
+        body = urllib.parse.urlencode({"upload_id": "toggle-id", "filename": "book.epub", "total_chunks": 1})
+        rsp = self.fetch("/api/book/upload/complete", method="POST", body=body)
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "params.chunk_disabled")
+
+
 class TestUploadChunkGuestPermission(TestApp):
     """默认关闭访客上传时，分片上传接口也应拒绝匿名用户"""
 

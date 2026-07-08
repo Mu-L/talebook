@@ -9,7 +9,7 @@ import re
 import tornado.escape
 from tornado import web
 
-from webserver import loader
+from webserver import loader, utils
 from webserver.handlers.base import BaseHandler, auth, js
 from webserver.i18n import _
 from webserver.models import Device, Message, Reader
@@ -437,6 +437,11 @@ class UserInfo(BaseHandler):
                 "push": CONF["ALLOW_GUEST_PUSH"],
                 "read": CONF["ALLOW_GUEST_READ"],
                 "FEEDBACK": CONF["ALLOW_FEEDBACK"],
+            },
+            "upload": {
+                "chunk_enabled": CONF.get("UPLOAD_CHUNK_ENABLED", True),
+                "chunk_threshold": utils.parse_size(CONF.get("UPLOAD_CHUNK_THRESHOLD", "8MB")),
+                "chunk_size": utils.parse_size(CONF.get("UPLOAD_CHUNK_SIZE", "4MB")),
             },
         }
 

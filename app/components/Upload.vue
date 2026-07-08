@@ -68,22 +68,26 @@
 </template>
 
 <script setup>
-import { ref } from 'vue';
+import { ref, computed } from 'vue';
 import { useI18n } from 'vue-i18n';
+import { useMainStore } from '@/stores/main';
 
 const { $backend, $alert } = useNuxtApp();
 const { t } = useI18n();
 const router = useRouter();
+const store = useMainStore();
 
 const loading = ref(false);
 const dialog = ref(false);
 const ebooks = ref(null);
 const progress = ref(0);
 
-// 单个分片大小，需小于反代（如 Cloudflare 免费版）100MB 的单请求体积限制
-const CHUNK_SIZE = 4 * 1024 * 1024;
+// 是否启用分片上传，及分片阈值/分片大小，均可在管理后台自定义（webserver 通过 sys.upload 下发）
+const CHUNK_ENABLED = computed(() => store.sys?.upload?.chunk_enabled ?? true);
 // 超过该大小的文件才走分片上传，避免小文件多一次网络往返
-const CHUNK_THRESHOLD = 8 * 1024 * 1024;
+const CHUNK_THRESHOLD = computed(() => store.sys?.upload?.chunk_threshold ?? 8 * 1024 * 1024);
+// 单个分片大小，需小于反代（如 Cloudflare 免费版）100MB 的单请求体积限制
+const CHUNK_SIZE = computed(() => store.sys?.upload?.chunk_size ?? 4 * 1024 * 1024);
 
 function generateUploadId() {
     if (typeof crypto !== 'undefined' && crypto.randomUUID) {
@@ -102,12 +106,13 @@ function uploadWhole(file) {
 }
 
 async function uploadInChunks(file) {
+    const chunkSize = CHUNK_SIZE.value;
     const uploadId = generateUploadId();
-    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+    const totalChunks = Math.ceil(file.size / chunkSize);
 
     for (let index = 0; index < totalChunks; index++) {
-        const start = index * CHUNK_SIZE;
-        const chunk = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
+        const start = index * chunkSize;
+        const chunk = file.slice(start, Math.min(start + chunkSize, file.size));
         const data = new FormData();
         data.append('chunk', chunk);
         data.append('upload_id', uploadId);
@@ -147,7 +152,8 @@ function do_upload() {
 
     loading.value = true;
     progress.value = 0;
-    const uploadPromise = file.size > CHUNK_THRESHOLD ? uploadInChunks(file) : uploadWhole(file);
+    const useChunks = CHUNK_ENABLED.value && file.size > CHUNK_THRESHOLD.value;
+    const uploadPromise = useChunks ? uploadInChunks(file) : uploadWhole(file);
 
     uploadPromise
         .then(rsp => {

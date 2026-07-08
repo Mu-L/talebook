@@ -248,10 +248,26 @@ class TestAppWithoutLogin(TestApp):
         self.assertEqual(d["user"]["is_login"], False)
         self.assertEqual(d["user"]["is_admin"], False)
         self.assertEqual(d["sys"]["books"], 13)
+        self.assertEqual(d["sys"]["upload"]["chunk_enabled"], True)
+        self.assertEqual(d["sys"]["upload"]["chunk_threshold"], 8 * 1024 * 1024)
+        self.assertEqual(d["sys"]["upload"]["chunk_size"], 4 * 1024 * 1024)
 
         d = self.json("/api/user/info?detail=1")
         self.assertEqual(d["user"]["is_login"], False)
         self.assertEqual(d["sys"], {})
+
+    def test_user_info_reflects_custom_chunk_settings(self):
+        prev_enabled = main.CONF.get("UPLOAD_CHUNK_ENABLED", True)
+        prev_threshold = main.CONF.get("UPLOAD_CHUNK_THRESHOLD", "8MB")
+        try:
+            main.CONF["UPLOAD_CHUNK_ENABLED"] = False
+            main.CONF["UPLOAD_CHUNK_THRESHOLD"] = "16MB"
+            d = self.json("/api/user/info")
+            self.assertEqual(d["sys"]["upload"]["chunk_enabled"], False)
+            self.assertEqual(d["sys"]["upload"]["chunk_threshold"], 16 * 1024 * 1024)
+        finally:
+            main.CONF["UPLOAD_CHUNK_ENABLED"] = prev_enabled
+            main.CONF["UPLOAD_CHUNK_THRESHOLD"] = prev_threshold
 
     def test_book(self):
         d = self.json("/api/book/1")

@@ -1284,6 +1284,9 @@ class BookUploadChunk(BookUploadBase):
 
     @js
     def post(self):
+        if not CONF.get("UPLOAD_CHUNK_ENABLED", True):
+            return {"err": "params.chunk_disabled", "msg": _("分片上传功能已禁用")}
+
         err = self.check_upload_permission()
         if err:
             return err
@@ -1334,6 +1337,9 @@ class BookUploadComplete(BookUploadBase):
 
     @js
     def post(self):
+        if not CONF.get("UPLOAD_CHUNK_ENABLED", True):
+            return {"err": "params.chunk_disabled", "msg": _("分片上传功能已禁用")}
+
         err = self.check_upload_permission()
         if err:
             return err

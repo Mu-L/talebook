@@ -1461,7 +1461,7 @@ class BookUploadComplete(BookUploadBase):
             return {"err": "params.filename", "msg": _("文件名不合法")}
 
         try:
-            with open(fpath, "wb") as out:  # codeql[py/path-injection]
+            with open(fpath, "wb") as out:
                 for i, p in enumerate(chunk_paths):
                     with open(p, "rb") as part:
                         chunk_data = part.read()
@@ -1472,12 +1472,11 @@ class BookUploadComplete(BookUploadBase):
             # fpath 由 resolve_upload_path 返回，已完成 basename + 白名单 fullmatch + commonpath
             # 校验、限制在上传目录内，属受控路径。此处直接复用 fpath（不再经 name 重新拼接，
             # 以免重新引入 get_argument 污点），realpath 规范化后再做 startswith 守卫后删除。
-            # name 源自 get_argument，此路径穿越告警经上述多层校验已确认为误报，加行内抑制。
             upload_dir = os.path.realpath(CONF["upload_path"])
             cleanup_path = os.path.realpath(fpath)
             if cleanup_path.startswith(upload_dir + os.sep):
                 try:
-                    os.remove(cleanup_path)  # codeql[py/path-injection]
+                    os.remove(cleanup_path)
                 except OSError:
                     pass
             shutil.rmtree(chunk_dir, ignore_errors=True)

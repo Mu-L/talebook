@@ -1456,19 +1456,20 @@ class BookUploadComplete(BookUploadBase):
                             raise ValueError("format mismatch")
                         out.write(chunk_data)
         except ValueError:
-            # fpath 源于用户文件名，移除前再次确认仍落在上传目录内，防御路径穿越
+            # 移除前再次确认目标仍落在上传目录内，防御路径穿越
             upload_dir = os.path.realpath(CONF["upload_path"])
-            target_real = os.path.realpath(fpath) if fpath else None
+            safe_name = os.path.basename(name)
+            cleanup_target = os.path.realpath(os.path.join(upload_dir, safe_name)) if safe_name else None
             try:
                 in_upload_dir = bool(
-                    target_real
-                    and os.path.exists(target_real)
-                    and os.path.commonpath([upload_dir, target_real]) == upload_dir
+                    cleanup_target
+                    and os.path.exists(cleanup_target)
+                    and os.path.commonpath([upload_dir, cleanup_target]) == upload_dir
                 )
             except ValueError:
                 in_upload_dir = False
             if in_upload_dir:
-                os.remove(target_real)
+                os.remove(cleanup_target)
             shutil.rmtree(chunk_dir, ignore_errors=True)
             return {"err": "params.format", "msg": _("文件内容与格式不匹配")}
 

@@ -1458,8 +1458,7 @@ class BookUploadComplete(BookUploadBase):
         except ValueError:
             # 移除前再次确认目标仍落在上传目录内，防御路径穿越
             upload_dir = os.path.realpath(CONF["upload_path"])
-            safe_name = os.path.basename(name)
-            cleanup_target = os.path.realpath(os.path.join(upload_dir, safe_name)) if safe_name else None
+            cleanup_target = os.path.realpath(fpath) if fpath else None
             try:
                 in_upload_dir = bool(
                     cleanup_target

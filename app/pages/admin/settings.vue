@@ -945,6 +945,8 @@ const cards = computed(() => [
             { icon: '', key: 'UPLOAD_CHUNK_ENABLED', label: t('admin.settings.label.uploadChunkEnabled'), type: 'checkbox' },
             { icon: 'mdi-information', key: 'UPLOAD_CHUNK_THRESHOLD', label: t('admin.settings.label.uploadChunkThreshold'), show_when: () => settings.value.UPLOAD_CHUNK_ENABLED },
             { icon: 'mdi-information', key: 'UPLOAD_CHUNK_SIZE', label: t('admin.settings.label.uploadChunkSize'), show_when: () => settings.value.UPLOAD_CHUNK_ENABLED },
+            { icon: 'mdi-information', key: 'MAX_CHUNK_UPLOAD_SIZE', label: t('admin.settings.label.maxChunkUploadSize'), show_when: () => settings.value.UPLOAD_CHUNK_ENABLED },
+            { icon: 'mdi-information', key: 'MAX_CHUNK_COUNT', label: t('admin.settings.label.maxChunkCount'), show_when: () => settings.value.UPLOAD_CHUNK_ENABLED },
             { icon: 'mdi-lock', key: 'cookie_secret', label: t('admin.settings.label.cookieSecret') },
             { icon: 'mdi-folder', key: 'scan_upload_path', label: t('admin.settings.label.scanUploadPath') },
             { icon: 'mdi-information', key: 'push_title', label: t('admin.settings.label.pushTitle') },

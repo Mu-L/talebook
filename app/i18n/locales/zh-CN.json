@@ -726,6 +726,8 @@
         "uploadChunkEnabled": "启用超大文件分片上传（绕过反代单请求体积限制）",
         "uploadChunkThreshold": "触发分片上传的文件大小阈值 (例如 8MB)",
         "uploadChunkSize": "每个分片的大小 (例如 4MB)",
+        "maxChunkUploadSize": "分片上传的单个文件总大小上限 (例如 1024MB)",
+        "maxChunkCount": "分片上传允许的最大分片数量 (例如 4096)",
         "cookieSecret": "COOKIE 随机密钥",
         "scanUploadPath": "批量导入扫描目录",
         "pushTitle": "邮件推送的标题",

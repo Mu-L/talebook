@@ -339,6 +339,22 @@ class TestUploadChunk(TestWithUserLogin):
             d = self._upload_chunk(upload_id, 1, 2, b"B" * chunk_len)
             self.assertEqual(d["err"], "params.chunk")
 
+    def test_max_chunk_count_accepts_string_config_without_crashing(self):
+        """MAX_CHUNK_COUNT 经面板保存后可能是字符串（如 "10"），
+        book.py 读取时用 int() 转换，避免 total_chunks > max_chunks 比较抛 TypeError"""
+        from webserver.handlers.book import CONF
+
+        # 限制为最多 2 片（以字符串形式模拟面板保存结果）
+        with mock.patch.dict(CONF, {"MAX_CHUNK_COUNT": "2"}):
+            upload_id = "count-limit"
+            d = self._upload_chunk(upload_id, 0, 3, b"A" * 1024)
+            self.assertEqual(d["err"], "ok")
+            d = self._upload_chunk(upload_id, 1, 3, b"B" * 1024)
+            self.assertEqual(d["err"], "ok")
+            # 第 3 片声明 total_chunks=3 超过上限 2，应被拒绝（而非 500 异常）
+            d = self._upload_chunk(upload_id, 2, 3, b"C" * 1024)
+            self.assertEqual(d["err"], "params.chunk")
+
     def test_complete_rechecks_total_size_bypassing_per_chunk_check(self):
         """并发上传绕过单次/chunk请求的总大小校验后，/complete合并前必须重新校验实际总大小"""
         from webserver.handlers.book import CONF

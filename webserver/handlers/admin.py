@@ -359,15 +359,22 @@ class AdminSettings(BaseHandler):
         if invite_mode and not invite_code:
             return {"err": "params.invite_code_required", "msg": _("访问码不能为空")}
 
-        # 验证：分片上传的阈值/分片大小必须是合法的大小字符串（如 4MB），
+        # 验证：分片上传的大小类配置必须是合法的大小字符串（如 4MB），
         # 否则会导致 /api/user/info 在解析配置时抛异常，影响所有访客
-        for size_key in ("UPLOAD_CHUNK_THRESHOLD", "UPLOAD_CHUNK_SIZE"):
+        for size_key in ("UPLOAD_CHUNK_THRESHOLD", "UPLOAD_CHUNK_SIZE", "MAX_CHUNK_UPLOAD_SIZE"):
             if size_key in data:
                 try:
                     if utils.parse_size(data[size_key]) <= 0:
                         raise ValueError("size must be positive: %r" % data[size_key])
                 except (TypeError, ValueError):
                     return {"err": "params.%s" % size_key.lower(), "msg": _("分片大小配置格式不合法，例如 4MB")}
+        # 最大分片数量必须是合法的正整数
+        if "MAX_CHUNK_COUNT" in data:
+            try:
+                if int(data["MAX_CHUNK_COUNT"]) <= 0:
+                    raise ValueError("chunk count must be positive")
+            except (TypeError, ValueError):
+                return {"err": "params.max_chunk_count", "msg": _("最大分片数量必须是正整数")}
 
         KEYS = [
             "ALLOW_GUEST_DOWNLOAD",
@@ -393,6 +400,8 @@ class AdminSettings(BaseHandler):
             "UPLOAD_CHUNK_ENABLED",
             "UPLOAD_CHUNK_THRESHOLD",
             "UPLOAD_CHUNK_SIZE",
+            "MAX_CHUNK_UPLOAD_SIZE",
+            "MAX_CHUNK_COUNT",
             "RESET_MAIL_CONTENT",
             "RESET_MAIL_TITLE",
             "SIGNUP_MAIL_CONTENT",

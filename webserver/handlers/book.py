@@ -1353,7 +1353,7 @@ class BookUploadChunk(BookUploadBase):
         except ValueError:
             return {"err": "params.chunk", "msg": _("分片参数不合法")}
 
-        max_chunks = CONF.get("MAX_CHUNK_COUNT", 4096)
+        max_chunks = int(CONF.get("MAX_CHUNK_COUNT", 4096))
         if total_chunks <= 0 or total_chunks > max_chunks or not (0 <= chunk_index < total_chunks):
             return {"err": "params.chunk", "msg": _("分片参数不合法")}
 
@@ -1413,7 +1413,7 @@ class BookUploadComplete(BookUploadBase):
             total_chunks = int(self.get_argument("total_chunks", ""))
         except ValueError:
             return {"err": "params.chunk", "msg": _("分片参数不合法")}
-        max_chunks = CONF.get("MAX_CHUNK_COUNT", 4096)
+        max_chunks = int(CONF.get("MAX_CHUNK_COUNT", 4096))
         if total_chunks <= 0 or total_chunks > max_chunks:
             return {"err": "params.chunk", "msg": _("分片参数不合法")}
 

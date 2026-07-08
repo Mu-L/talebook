@@ -77,7 +77,7 @@ docker-compose -f docker-compose.yml  up -d
 `docker run -d --name talebook -p 8080:80 -v /tmp/demo:/data talebook/talebook`
 
 
-## Start History
+## Star History
  <picture>
    <source media="(prefers-color-scheme: dark)" srcset="https://api.star-history.com/chart?repos=talebook/talebook&type=date&theme=dark&legend=top-left" />
    <source media="(prefers-color-scheme: light)" srcset="https://api.star-history.com/chart?repos=talebook/talebook&type=date&legend=top-left" />

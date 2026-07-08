@@ -4,7 +4,9 @@ import logging
 
 
 def routes():
-    from . import admin, book, booksource_admin, captcha, files, meta, network_library, opds, scan, theme, user, webdav
+    from webserver.webdav import handler as webdav
+
+    from . import admin, book, booksource_admin, captcha, files, meta, network_library, opds, scan, theme, user
 
     routes = []
     routes += admin.routes()

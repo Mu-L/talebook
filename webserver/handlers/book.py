@@ -1155,7 +1155,10 @@ class BookUploadBase(BaseHandler):
         # strip path components to prevent directory traversal
         upload_dir = os.path.realpath(CONF["upload_path"])
         fpath = os.path.realpath(os.path.join(upload_dir, name))
-        if not fpath.startswith(upload_dir + os.sep) and fpath != upload_dir:
+        try:
+            if os.path.commonpath([upload_dir, fpath]) != upload_dir:
+                return None
+        except ValueError:
             return None
         return fpath
 

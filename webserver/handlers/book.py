@@ -1132,7 +1132,9 @@ def decode_filename(filename):
 
 
 UPLOAD_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
-UPLOAD_FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,255}$")
+# 白名单：仅拒绝路径穿越元字符（\ / 空字节），放行中文、空格、点等合法文件名字符；
+# fullmatch 作为 CodeQL 认可的净化器，配合下方 basename + commonpath 校验限制路径。
+UPLOAD_FILENAME_RE = re.compile(r"[^\\\/\x00]{1,255}")
 
 
 class BookUploadBase(BaseHandler):

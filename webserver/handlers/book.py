@@ -1152,7 +1152,15 @@ class BookUploadBase(BaseHandler):
         return None
 
     def resolve_upload_path(self, name):
-        # strip path components to prevent directory traversal
+        # reject unsafe filename patterns early
+        if (
+            not name
+            or name in (".", "..")
+            or "\x00" in name
+            or os.path.sep in name
+            or (os.path.altsep and os.path.altsep in name)
+        ):
+            return None
         upload_dir = os.path.realpath(CONF["upload_path"])
         fpath = os.path.realpath(os.path.join(upload_dir, name))
         try:
@@ -1398,6 +1406,14 @@ class BookUploadComplete(BookUploadBase):
 
         name = urllib.parse.unquote(decode_filename(name))
         name = os.path.basename(name)
+        if (
+            not name
+            or name in (".", "..")
+            or "\x00" in name
+            or os.path.sep in name
+            or (os.path.altsep and os.path.altsep in name)
+        ):
+            return {"err": "params.filename", "msg": _("文件名不合法")}
         fmt = os.path.splitext(name)[1]
         fmt = fmt[1:] if fmt else None
         if not fmt:

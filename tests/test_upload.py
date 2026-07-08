@@ -292,18 +292,18 @@ class TestUploadChunk(TestWithUserLogin):
         d = self._complete_upload("too-many-parts", "book.epub", 999999)
         self.assertEqual(d["err"], "params.chunk")
 
-    def test_chunk_honors_configured_chunk_size_above_default_cap(self):
-        """当管理员把 UPLOAD_CHUNK_SIZE 调大后，分片校验应放行相应大小的分片"""
+    def test_chunk_honors_configured_chunk_size(self):
+        """单分片大小上限直接采用管理员配置的 UPLOAD_CHUNK_SIZE，放行该值以内的分片"""
         from webserver.handlers.book import CONF
-        with mock.patch.dict(CONF, {"MAX_CHUNK_SIZE": "1MB", "UPLOAD_CHUNK_SIZE": "2MB"}):
+        with mock.patch.dict(CONF, {"UPLOAD_CHUNK_SIZE": "2MB"}):
             data = b"x" * int(1.5 * 1024 * 1024)
             d = self._upload_chunk("size-honor-ok", 0, 1, data)
             self.assertEqual(d["err"], "ok")
 
-    def test_chunk_still_rejects_oversized_chunk(self):
-        """即使调大了UPLOAD_CHUNK_SIZE，超出该值的分片仍应被拒绝"""
+    def test_chunk_rejects_oversized_chunk(self):
+        """超出 UPLOAD_CHUNK_SIZE 的分片应被拒绝"""
         from webserver.handlers.book import CONF
-        with mock.patch.dict(CONF, {"MAX_CHUNK_SIZE": "1MB", "UPLOAD_CHUNK_SIZE": "2MB"}):
+        with mock.patch.dict(CONF, {"UPLOAD_CHUNK_SIZE": "2MB"}):
             data = b"x" * int(2.5 * 1024 * 1024)
             d = self._upload_chunk("size-honor-reject", 0, 1, data)
             self.assertEqual(d["err"], "params.chunk")

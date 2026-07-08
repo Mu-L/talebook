@@ -1366,11 +1366,9 @@ class BookUploadChunk(BookUploadBase):
             return {"err": "params.chunk", "msg": _("缺少分片数据")}
         data = files[0]["body"]
 
-        # 分片大小上限取服务端硬上限与管理员配置的分片大小两者较大值，
-        # 避免管理员把UPLOAD_CHUNK_SIZE调大后，合法分片被隐藏的MAX_CHUNK_SIZE拒绝
-        hard_limit = utils.parse_size_safe(CONF.get("MAX_CHUNK_SIZE", "20MB"), "20MB")
-        configured_size = utils.parse_size_safe(CONF.get("UPLOAD_CHUNK_SIZE", "4MB"), "4MB")
-        max_chunk_size = max(hard_limit, configured_size)
+        # 单分片大小上限直接使用管理员在面板配置的值，不再叠加隐藏硬上限，
+        # 以免把合法分片错误拒绝（管理员已自行权衡反代单请求体积限制）
+        max_chunk_size = utils.parse_size_safe(CONF.get("UPLOAD_CHUNK_SIZE", "4MB"), "4MB")
         if len(data) > max_chunk_size:
             return {"err": "params.chunk", "msg": _("分片过大")}
 

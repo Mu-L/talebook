@@ -59,8 +59,7 @@ settings = {
     # 100MB, tornado default max_buffer_size value
     "MAX_UPLOAD_SIZE": "100MB",
 
-    # 分片上传：单个分片大小上限、合并后文件大小上限、允许的最大分片数量
-    "MAX_CHUNK_SIZE": "20MB",
+    # 分片上传：合并后文件大小上限、允许的最大分片数量
     "MAX_CHUNK_UPLOAD_SIZE": "1024MB",
     "MAX_CHUNK_COUNT": 4096,
     # 分片目录过期时间（秒），超过该时间未完成的分片上传会在后续请求中被自动清理

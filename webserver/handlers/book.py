@@ -1462,12 +1462,12 @@ class BookUploadComplete(BookUploadBase):
                             raise ValueError("format mismatch")
                         out.write(chunk_data)
         except ValueError:
-            # name 源自 get_argument，但此处仅用 os.path.basename 提取纯文件名后，
-            # 拼接到受信任的上传目录（realpath 后的常量前缀），因此路径受控、不会越界；
-            # 删除的正是本函数刚写入的文件。basename 是 CodeQL 认可的净化器，可消除污点。
+            # fpath 由 resolve_upload_path 返回，已完成 basename + realpath + commonpath
+            # 校验、限制在上传目录内，属受控路径。此处直接复用 fpath（不再经 name 重新拼接，
+            # 以免重新引入 get_argument 污点），realpath 规范化后再做 startswith 守卫后删除。
             upload_dir = os.path.realpath(CONF["upload_path"])
-            cleanup_path = os.path.join(upload_dir, os.path.basename(name))
-            if os.path.realpath(cleanup_path).startswith(upload_dir + os.sep):
+            cleanup_path = os.path.realpath(fpath)
+            if cleanup_path.startswith(upload_dir + os.sep):
                 try:
                     os.remove(cleanup_path)
                 except OSError:

@@ -1162,7 +1162,12 @@ class BookUploadBase(BaseHandler):
         ):
             return None
         upload_dir = os.path.realpath(CONF["upload_path"])
-        fpath = os.path.realpath(os.path.join(upload_dir, name))
+        # 使用 os.path.basename 提取纯文件名：basename 是 CodeQL 认可的净化器，
+        # 可切断源自 get_argument 的污点，避免下游 open/os.remove 被标脏
+        safe_name = os.path.basename(name)
+        if not safe_name or safe_name in (".", ".."):
+            return None
+        fpath = os.path.realpath(os.path.join(upload_dir, safe_name))
         try:
             if os.path.commonpath([upload_dir, fpath]) != upload_dir:
                 return None

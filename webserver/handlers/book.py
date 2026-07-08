@@ -1188,7 +1188,10 @@ class BookUploadBase(BaseHandler):
         ttl = CONF.get("UPLOAD_CHUNK_TTL_SECONDS", 24 * 3600)
         now = time.time()
         for entry in os.listdir(owner_dir):
-            d = os.path.join(owner_dir, entry)
+            d = os.path.realpath(os.path.join(owner_dir, entry))
+            # 再次进行路径包含性校验，确保清理目标仍在owner_dir之内，防御路径穿越
+            if not d.startswith(owner_dir + os.sep):
+                continue
             try:
                 if os.path.isdir(d) and now - os.path.getmtime(d) > ttl:
                     shutil.rmtree(d, ignore_errors=True)
@@ -1354,9 +1357,7 @@ class BookUploadChunk(BookUploadBase):
         os.makedirs(chunk_dir, exist_ok=True)
 
         max_total_size = utils.parse_size_safe(CONF.get("MAX_CHUNK_UPLOAD_SIZE", "1024MB"), "1024MB")
-        existing_size = sum(
-            os.path.getsize(os.path.join(chunk_dir, f)) for f in os.listdir(chunk_dir) if f.endswith(".part")
-        )
+        existing_size = sum(os.path.getsize(os.path.join(chunk_dir, f)) for f in os.listdir(chunk_dir) if f.endswith(".part"))
         if existing_size + len(data) > max_total_size:
             shutil.rmtree(chunk_dir, ignore_errors=True)
             return {"err": "params.chunk", "msg": _("文件总大小超出限制")}

@@ -43,11 +43,19 @@
                     <v-progress-linear
                         v-if="loading && progress > 0"
                         :model-value="progress"
-                        color="primary"
-                        height="18"
+                        :color="stage === 'merging' ? 'amber-darken-2' : 'primary'"
+                        height="20"
+                        rounded
+                        :striped="stage === 'uploading'"
+                        :indeterminate="stage === 'merging'"
                     >
                         <template #default>
-                            {{ $t('messages.uploadProgress', { percent: progress }) }}
+                            <strong v-if="stage === 'merging'">
+                                {{ $t('messages.uploadMerging') }}
+                            </strong>
+                            <strong v-else>
+                                {{ $t('messages.uploadProgress', { percent: progress }) }}
+                            </strong>
                         </template>
                     </v-progress-linear>
                 </v-card-text>
@@ -81,6 +89,8 @@ const loading = ref(false);
 const dialog = ref(false);
 const ebooks = ref(null);
 const progress = ref(0);
+// 上传阶段状态：uploading（分片上传中）/ merging（分片已传完，正在合并）
+const stage = ref(null);
 
 // 是否启用分片上传，及分片阈值/分片大小，均可在管理后台自定义（webserver 通过 sys.upload 下发）
 const CHUNK_ENABLED = computed(() => store.sys?.upload?.chunk_enabled ?? true);
@@ -110,9 +120,11 @@ async function uploadInChunks(file) {
     const uploadId = generateUploadId();
     const totalChunks = Math.ceil(file.size / chunkSize);
 
+    stage.value = 'uploading';
     for (let index = 0; index < totalChunks; index++) {
         const start = index * chunkSize;
-        const chunk = file.slice(start, Math.min(start + chunkSize, file.size));
+        const end = Math.min(start + chunkSize, file.size);
+        const chunk = file.slice(start, end);
         const data = new FormData();
         data.append('chunk', chunk);
         data.append('upload_id', uploadId);
@@ -126,9 +138,13 @@ async function uploadInChunks(file) {
         if (rsp.err !== 'ok') {
             return rsp;
         }
-        progress.value = Math.round(((index + 1) / totalChunks) * 100);
+        // 按已上传字节数计算进度，比按分片序号更准确
+        progress.value = Math.min(100, Math.round((end / file.size) * 100));
     }
 
+    // 分片已全部上传完成，进入合并阶段：进度条切换为不确定动画并显示“正在合并”
+    stage.value = 'merging';
+    progress.value = 100;
     const data = new FormData();
     data.append('upload_id', uploadId);
     data.append('filename', encodeURIComponent(file.name || 'upload.bin'));
@@ -152,6 +168,7 @@ function do_upload() {
 
     loading.value = true;
     progress.value = 0;
+    stage.value = null;
     const useChunks = CHUNK_ENABLED.value && file.size > CHUNK_THRESHOLD.value;
     const uploadPromise = useChunks ? uploadInChunks(file) : uploadWhole(file);
 
@@ -174,6 +191,7 @@ function do_upload() {
         .finally(() => {
             loading.value = false;
             progress.value = 0;
+            stage.value = null;
         });
 }
 </script>

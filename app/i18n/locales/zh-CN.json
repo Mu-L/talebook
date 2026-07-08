@@ -437,6 +437,7 @@
     "uploadSuccess": "上传成功！",
     "uploadNotice": "大文件将自动分片上传，请保持网络连接稳定。",
     "uploadProgress": "正在上传... {percent}%",
+    "uploadMerging": "分片上传完成，正在合并文件...",
     "selectEbook": "请选择要上传的电子书",
     "uploadBooks": "上传书籍",
     "activateSuccess": "激活成功",

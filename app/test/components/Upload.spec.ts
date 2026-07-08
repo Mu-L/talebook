@@ -45,6 +45,8 @@ import Upload from '@/components/Upload.vue';
 type UploadVm = {
     do_upload: () => void;
     ebooks: File | null;
+    stage: string | null;
+    progress: number;
 };
 
 function makeFakeFile(name: string, size: number): File {
@@ -171,6 +173,39 @@ describe('Upload.vue', () => {
         const chunkCalls = backendMock.mock.calls.filter(([url]) => url === '/book/upload/chunk');
         expect(chunkCalls.length).toBe(3);
         expect(pushMock).toHaveBeenCalledWith('/book/88');
+        wrapper.unmount();
+    });
+
+    it('switches to merging stage before calling /complete and resets after', async () => {
+        const wrapper = mountUpload();
+        // capture stage/progress at the moment /complete is invoked
+        const seen: { stage: unknown; progress: number }[] = [];
+        backendMock.mockImplementation((url: string) => {
+            if (url === '/book/upload/chunk') {
+                return Promise.resolve({ err: 'ok' });
+            }
+            if (url === '/book/upload/complete') {
+                const vm = wrapper.vm as unknown as UploadVm;
+                seen.push({ stage: vm.stage, progress: vm.progress });
+                return Promise.resolve({ err: 'ok', book_id: 99 });
+            }
+            return Promise.reject(new Error('unexpected url: ' + url));
+        });
+
+        const vm = wrapper.vm as unknown as UploadVm;
+        (vm).ebooks = makeFakeFile('big.epub', 9 * 1024 * 1024);
+        (vm).do_upload();
+        // 在分片循环进行中，stage 应为 uploading
+        expect(vm.stage).toBe('uploading');
+        await flushPromises();
+
+        // 进入合并阶段时 stage 为 merging 且进度已满
+        expect(seen.length).toBe(1);
+        expect(seen[0].stage).toBe('merging');
+        expect(seen[0].progress).toBe(100);
+        // 流程结束后 stage 复位
+        expect(vm.stage).toBeNull();
+        expect(pushMock).toHaveBeenCalledWith('/book/99');
         wrapper.unmount();
     });
 });

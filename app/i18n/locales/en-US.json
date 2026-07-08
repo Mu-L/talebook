@@ -422,6 +422,7 @@
     "uploadSuccess": "Upload succeeded!",
     "uploadNotice": "Large files are uploaded automatically in chunks, please keep your network connection stable.",
     "uploadProgress": "Uploading... {percent}%",
+    "uploadMerging": "Chunks uploaded, merging file...",
     "selectEbook": "Please select an ebook to upload",
     "uploadBooks": "Upload Books",
     "activateSuccess": "Activation Successful",

@@ -20,6 +20,20 @@ def remove_zlibrary_suffix(text):
     return ZLIBRARY_PATTERN.sub("", text).strip()
 
 
+_SIZE_UNITS = {"": 1, "b": 1, "k": 1024, "kb": 1024, "m": 1024**2, "mb": 1024**2, "g": 1024**3, "gb": 1024**3}
+_SIZE_RE = re.compile(r"^\s*([\d.]+)\s*([a-z]*)\s*$")
+
+
+def parse_size(size):
+    """解析形如 "100MB"/"1024" 的大小配置，返回字节数"""
+    if isinstance(size, (int, float)):
+        return int(size)
+    m = _SIZE_RE.match(str(size).lower())
+    if not m or m.group(2) not in _SIZE_UNITS:
+        raise ValueError("invalid size string: %r" % size)
+    return int(float(m.group(1)) * _SIZE_UNITS[m.group(2)])
+
+
 def get_title_sort(title):
     """获取标题的排序字符串"""
     if not title:

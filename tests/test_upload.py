@@ -3,6 +3,7 @@
 
 import json
 import unittest
+import urllib.parse
 import warnings
 from unittest import mock
 from tests.test_main import TestApp, TestWithUserLogin, setUpModule as init, testdir, get_db
@@ -194,6 +195,120 @@ class TestUploadFormatSecurity(TestWithUserLogin):
         m.return_value = ("test.pdf", data)
         d = self.json("/api/book/upload", method="POST", body="k=1")
         self.assertNotEqual(d["err"], "params.format")
+
+
+class TestUploadChunk(TestWithUserLogin):
+    """分片上传（/api/book/upload/chunk + /api/book/upload/complete）测试"""
+
+    def _upload_chunk(self, upload_id, chunk_index, total_chunks, data):
+        boundary = "----TalebookChunkBoundary"
+        body = (
+            "--%s\r\n"
+            'Content-Disposition: form-data; name="chunk"; filename="chunk.bin"\r\n'
+            "Content-Type: application/octet-stream\r\n\r\n" % boundary
+        ).encode() + data + ("\r\n--%s--\r\n" % boundary).encode()
+        headers = {"Content-Type": "multipart/form-data; boundary=%s" % boundary}
+        url = "/api/book/upload/chunk?upload_id=%s&chunk_index=%s&total_chunks=%s" % (
+            urllib.parse.quote(str(upload_id), safe=""),
+            chunk_index,
+            total_chunks,
+        )
+        rsp = self.fetch(url, method="POST", body=body, headers=headers)
+        self.assertEqual(rsp.code, 200)
+        return json.loads(rsp.body)
+
+    def _complete_upload(self, upload_id, filename, total_chunks):
+        body = urllib.parse.urlencode({"upload_id": upload_id, "filename": filename, "total_chunks": total_chunks})
+        return self.json("/api/book/upload/complete", method="POST", body=body)
+
+    def test_chunk_invalid_upload_id_rejected(self):
+        d = self._upload_chunk("../../evil", 0, 1, b"data")
+        self.assertEqual(d["err"], "params.upload_id")
+
+    def test_chunk_bad_index_params_rejected(self):
+        d = self._upload_chunk("valid-id-1", "abc", 1, b"data")
+        self.assertEqual(d["err"], "params.chunk")
+
+    def test_chunk_index_out_of_range_rejected(self):
+        d = self._upload_chunk("valid-id-2", 5, 2, b"data")
+        self.assertEqual(d["err"], "params.chunk")
+
+    def test_chunk_missing_file_rejected(self):
+        headers = {"Content-Type": "multipart/form-data; boundary=empty"}
+        rsp = self.fetch(
+            "/api/book/upload/chunk?upload_id=valid-id-3&chunk_index=0&total_chunks=1",
+            method="POST",
+            body=b"--empty--\r\n",
+            headers=headers,
+        )
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "params.chunk")
+
+    def test_complete_missing_upload_rejected(self):
+        d = self._complete_upload("no-such-upload", "book.epub", 2)
+        self.assertEqual(d["err"], "params.upload_id")
+
+    def test_complete_unsupported_format_rejected(self):
+        d = self._complete_upload("some-id", "malware.exe", 1)
+        self.assertEqual(d["err"], "params.format")
+
+    def test_complete_missing_chunk_after_partial_upload(self):
+        upload_id = "partialflow"
+        d = self._upload_chunk(upload_id, 0, 2, b"AAAA")
+        self.assertEqual(d["err"], "ok")
+        d = self._complete_upload(upload_id, "partial.epub", 2)
+        self.assertEqual(d["err"], "params.chunk")
+
+    def test_complete_magic_mismatch_rejected(self):
+        upload_id = "magicmismatch"
+        d = self._upload_chunk(upload_id, 0, 1, b"NOT-A-REAL-PDF")
+        self.assertEqual(d["err"], "ok")
+        d = self._complete_upload(upload_id, "fake.pdf", 1)
+        self.assertEqual(d["err"], "params.format")
+
+    @mock.patch("webserver.handlers.base.BaseHandler.user_history")
+    @mock.patch("webserver.handlers.base.BaseHandler.add_msg")
+    @mock.patch("webserver.models.Item.save")
+    @mock.patch("calibre.db.legacy.LibraryDatabase.import_book")
+    def test_chunk_upload_full_flow(self, m_import, m_save, m_msg, m_hist):
+        warnings.simplefilter("ignore", ResourceWarning)
+        m_import.return_value = 1008610087
+        path = testdir + "/cases/new.epub"
+        with open(path, "rb") as f:
+            data = f.read()
+        mid = len(data) // 2
+        chunks = [data[:mid], data[mid:]]
+        upload_id = "flowtest1"
+        for i, chunk in enumerate(chunks):
+            d = self._upload_chunk(upload_id, i, len(chunks), chunk)
+            self.assertEqual(d["err"], "ok")
+
+        d = self._complete_upload(upload_id, "flow_new.epub", len(chunks))
+        self.assertEqual(d["err"], "ok")
+
+
+class TestUploadChunkGuestPermission(TestApp):
+    """默认关闭访客上传时，分片上传接口也应拒绝匿名用户"""
+
+    def test_chunk_upload_requires_login_by_default(self):
+        headers = {"Content-Type": "multipart/form-data; boundary=empty"}
+        rsp = self.fetch(
+            "/api/book/upload/chunk?upload_id=guest-id&chunk_index=0&total_chunks=1",
+            method="POST",
+            body=b"--empty--\r\n",
+            headers=headers,
+        )
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "user.need_login")
+
+    def test_complete_requires_login_by_default(self):
+        body = urllib.parse.urlencode({"upload_id": "guest-id", "filename": "book.epub", "total_chunks": 1})
+        rsp = self.fetch("/api/book/upload/complete", method="POST", body=body)
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "user.need_login")
 
 
 class TestCoverUploadSecurity(TestWithUserLogin):

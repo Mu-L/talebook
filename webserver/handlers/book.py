@@ -1131,61 +1131,42 @@ def decode_filename(filename):
         return filename
 
 
-class BookUpload(BaseHandler):
-    def get_upload_file(self):
-        # for unittest mock
-        files = self.request.files.get("ebook")
-        if not files:
-            return None, None
-        p = files[0]
-        filename = decode_filename(p["filename"])
-        filename = urllib.parse.unquote(filename)
-        return (filename, p["body"])
+UPLOAD_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
 
-    @js
-    def post(self):
-        from calibre.ebooks.metadata.meta import get_metadata
 
+class BookUploadBase(BaseHandler):
+    """封装普通上传与分片上传共用的权限校验、路径解析与入库逻辑"""
+
+    EBOOK_MAGIC = {
+        "epub": b"PK\x03\x04",
+        "pdf": b"%PDF",
+    }
+
+    def check_upload_permission(self):
         # 检查访客上传权限
         if not self.current_user:
             if not CONF.get("ALLOW_GUEST_UPLOAD", False):
                 return {"err": "user.need_login", "msg": _("请先登录")}
         elif not self.current_user.can_upload():
             return {"err": "permission", "msg": _("无权操作")}
-        name, data = self.get_upload_file()
-        if not name or data is None:
-            return {"err": "params.ebook", "msg": _("请选择要上传的文件")}
-        logging.error("upload book name = " + repr(name))
+        return None
+
+    def resolve_upload_path(self, name):
         # strip path components to prevent directory traversal
-        name = os.path.basename(name)
-        fmt = os.path.splitext(name)[1]
-        fmt = fmt[1:] if fmt else None
-        if not fmt:
-            return {"err": "params.filename", "msg": _("文件名不合法")}
-        fmt = fmt.lower()
-
-        # validate format against whitelist before touching disk
-        from webserver.handlers.scan import SCAN_EXT
-
-        if fmt not in SCAN_EXT:
-            return {"err": "params.format", "msg": _("不支持的文件格式: %s") % fmt}
-
-        # validate magic bytes for structured formats
-        EBOOK_MAGIC = {
-            "epub": b"PK\x03\x04",
-            "pdf": b"%PDF",
-        }
-        if fmt in EBOOK_MAGIC and not data.startswith(EBOOK_MAGIC[fmt]):
-            return {"err": "params.format", "msg": _("文件内容与格式不匹配")}
-
-        # save file
         upload_dir = os.path.realpath(CONF["upload_path"])
         fpath = os.path.realpath(os.path.join(upload_dir, name))
         if not fpath.startswith(upload_dir + os.sep) and fpath != upload_dir:
-            return {"err": "params.filename", "msg": _("文件名不合法")}
-        with open(fpath, "wb") as f:
-            f.write(data)
-        logging.debug("save upload file into [%s]", fpath)
+            return None
+        return fpath
+
+    def get_chunk_dir(self, upload_id):
+        if not upload_id or not UPLOAD_ID_RE.match(upload_id):
+            return None
+        owner = str(self.user_id() or "guest")
+        return os.path.join(os.path.realpath(CONF["upload_path"]), "chunks", owner, upload_id)
+
+    def import_uploaded_book(self, fpath, fmt):
+        from calibre.ebooks.metadata.meta import get_metadata
 
         # read ebook meta
         with open(fpath, "rb") as stream:
@@ -1247,6 +1228,169 @@ class BookUpload(BaseHandler):
         self.add_msg("success", _("导入书籍成功！"))
         AutoFillService().auto_fill(book_id)
         return {"err": "ok", "book_id": book_id}
+
+
+class BookUpload(BookUploadBase):
+    def get_upload_file(self):
+        # for unittest mock
+        files = self.request.files.get("ebook")
+        if not files:
+            return None, None
+        p = files[0]
+        filename = decode_filename(p["filename"])
+        filename = urllib.parse.unquote(filename)
+        return (filename, p["body"])
+
+    @js
+    def post(self):
+        err = self.check_upload_permission()
+        if err:
+            return err
+        name, data = self.get_upload_file()
+        if not name or data is None:
+            return {"err": "params.ebook", "msg": _("请选择要上传的文件")}
+        logging.error("upload book name = " + repr(name))
+        # strip path components to prevent directory traversal
+        name = os.path.basename(name)
+        fmt = os.path.splitext(name)[1]
+        fmt = fmt[1:] if fmt else None
+        if not fmt:
+            return {"err": "params.filename", "msg": _("文件名不合法")}
+        fmt = fmt.lower()
+
+        # validate format against whitelist before touching disk
+        from webserver.handlers.scan import SCAN_EXT
+
+        if fmt not in SCAN_EXT:
+            return {"err": "params.format", "msg": _("不支持的文件格式: %s") % fmt}
+
+        # validate magic bytes for structured formats
+        if fmt in self.EBOOK_MAGIC and not data.startswith(self.EBOOK_MAGIC[fmt]):
+            return {"err": "params.format", "msg": _("文件内容与格式不匹配")}
+
+        # save file
+        fpath = self.resolve_upload_path(name)
+        if not fpath:
+            return {"err": "params.filename", "msg": _("文件名不合法")}
+        with open(fpath, "wb") as f:
+            f.write(data)
+        logging.debug("save upload file into [%s]", fpath)
+
+        return self.import_uploaded_book(fpath, fmt)
+
+
+class BookUploadChunk(BookUploadBase):
+    """接收单个上传分片，落盘为临时分片文件"""
+
+    @js
+    def post(self):
+        err = self.check_upload_permission()
+        if err:
+            return err
+
+        upload_id = self.get_argument("upload_id", "")
+        try:
+            chunk_index = int(self.get_argument("chunk_index", ""))
+            total_chunks = int(self.get_argument("total_chunks", ""))
+        except ValueError:
+            return {"err": "params.chunk", "msg": _("分片参数不合法")}
+
+        max_chunks = CONF.get("MAX_CHUNK_COUNT", 4096)
+        if total_chunks <= 0 or total_chunks > max_chunks or not (0 <= chunk_index < total_chunks):
+            return {"err": "params.chunk", "msg": _("分片参数不合法")}
+
+        chunk_dir = self.get_chunk_dir(upload_id)
+        if not chunk_dir:
+            return {"err": "params.upload_id", "msg": _("上传ID不合法")}
+
+        files = self.request.files.get("chunk")
+        if not files:
+            return {"err": "params.chunk", "msg": _("缺少分片数据")}
+        data = files[0]["body"]
+
+        max_chunk_size = utils.parse_size(CONF.get("MAX_CHUNK_SIZE", "20MB"))
+        if len(data) > max_chunk_size:
+            return {"err": "params.chunk", "msg": _("分片过大")}
+
+        os.makedirs(chunk_dir, exist_ok=True)
+
+        max_total_size = utils.parse_size(CONF.get("MAX_CHUNK_UPLOAD_SIZE", "1024MB"))
+        existing_size = sum(
+            os.path.getsize(os.path.join(chunk_dir, f)) for f in os.listdir(chunk_dir) if f.endswith(".part")
+        )
+        if existing_size + len(data) > max_total_size:
+            shutil.rmtree(chunk_dir, ignore_errors=True)
+            return {"err": "params.chunk", "msg": _("文件总大小超出限制")}
+
+        chunk_path = os.path.join(chunk_dir, "%d.part" % chunk_index)
+        with open(chunk_path, "wb") as f:
+            f.write(data)
+
+        return {"err": "ok"}
+
+
+class BookUploadComplete(BookUploadBase):
+    """合并所有分片为完整文件，并复用普通上传的入库逻辑"""
+
+    @js
+    def post(self):
+        err = self.check_upload_permission()
+        if err:
+            return err
+
+        upload_id = self.get_argument("upload_id", "")
+        name = self.get_argument("filename", "")
+        try:
+            total_chunks = int(self.get_argument("total_chunks", ""))
+        except ValueError:
+            return {"err": "params.chunk", "msg": _("分片参数不合法")}
+        if total_chunks <= 0:
+            return {"err": "params.chunk", "msg": _("分片参数不合法")}
+
+        name = urllib.parse.unquote(decode_filename(name))
+        name = os.path.basename(name)
+        fmt = os.path.splitext(name)[1]
+        fmt = fmt[1:] if fmt else None
+        if not fmt:
+            return {"err": "params.filename", "msg": _("文件名不合法")}
+        fmt = fmt.lower()
+
+        from webserver.handlers.scan import SCAN_EXT
+
+        if fmt not in SCAN_EXT:
+            return {"err": "params.format", "msg": _("不支持的文件格式: %s") % fmt}
+
+        chunk_dir = self.get_chunk_dir(upload_id)
+        if not chunk_dir or not os.path.isdir(chunk_dir):
+            return {"err": "params.upload_id", "msg": _("找不到上传分片，请重新上传")}
+
+        chunk_paths = [os.path.join(chunk_dir, "%d.part" % i) for i in range(total_chunks)]
+        for p in chunk_paths:
+            if not os.path.isfile(p):
+                return {"err": "params.chunk", "msg": _("分片缺失，请重新上传")}
+
+        fpath = self.resolve_upload_path(name)
+        if not fpath:
+            shutil.rmtree(chunk_dir, ignore_errors=True)
+            return {"err": "params.filename", "msg": _("文件名不合法")}
+
+        try:
+            with open(fpath, "wb") as out:
+                for i, p in enumerate(chunk_paths):
+                    with open(p, "rb") as part:
+                        chunk_data = part.read()
+                        if i == 0 and fmt in self.EBOOK_MAGIC and not chunk_data.startswith(self.EBOOK_MAGIC[fmt]):
+                            raise ValueError("format mismatch")
+                        out.write(chunk_data)
+        except ValueError:
+            if os.path.exists(fpath):
+                os.remove(fpath)
+            return {"err": "params.format", "msg": _("文件内容与格式不匹配")}
+        finally:
+            shutil.rmtree(chunk_dir, ignore_errors=True)
+
+        logging.debug("save chunked upload file into [%s]", fpath)
+        return self.import_uploaded_book(fpath, fmt)
 
 
 class BookRead(BaseHandler):
@@ -2172,6 +2316,8 @@ def routes():
         (r"/api/scopedbooks", BookScoped),
         (r"/api/book/nav", BookNav),
         (r"/api/book/upload", BookUpload),
+        (r"/api/book/upload/chunk", BookUploadChunk),
+        (r"/api/book/upload/complete", BookUploadComplete),
         (r"/api/book/([0-9]+)", BookDetail),
         (r"/api/book/([0-9]+)/delete", BookDelete),
         (r"/api/book/([0-9]+)/edit", BookEdit),

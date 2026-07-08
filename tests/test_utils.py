@@ -5,7 +5,7 @@
 import datetime
 import unittest
 
-from webserver.utils import ReadingStateFormatter, compare_books_by_rating_or_id, remove_zlibrary_suffix
+from webserver.utils import ReadingStateFormatter, compare_books_by_rating_or_id, parse_size, remove_zlibrary_suffix
 
 
 class TestUtils(unittest.TestCase):
@@ -106,3 +106,28 @@ class TestReadingStateFormatter(unittest.TestCase):
         self.assertFalse(result["wants"])
         self.assertEqual(result["read_state"], 1)
         self.assertEqual(result["read_date"], now.isoformat())
+
+
+class TestParseSize(unittest.TestCase):
+    def test_plain_bytes(self):
+        self.assertEqual(parse_size("1024"), 1024)
+        self.assertEqual(parse_size(2048), 2048)
+
+    def test_kb(self):
+        self.assertEqual(parse_size("10KB"), 10 * 1024)
+        self.assertEqual(parse_size("10k"), 10 * 1024)
+
+    def test_mb(self):
+        self.assertEqual(parse_size("100MB"), 100 * 1024 * 1024)
+        self.assertEqual(parse_size("1.5mb"), int(1.5 * 1024 * 1024))
+
+    def test_gb(self):
+        self.assertEqual(parse_size("1GB"), 1024 * 1024 * 1024)
+
+    def test_invalid_unit_raises(self):
+        with self.assertRaises(ValueError):
+            parse_size("100TB")
+
+    def test_invalid_string_raises(self):
+        with self.assertRaises(ValueError):
+            parse_size("not-a-size")

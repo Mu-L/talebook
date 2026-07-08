@@ -40,6 +40,16 @@
                             :label="$t('messages.selectEbook')"
                         />
                     </v-form>
+                    <v-progress-linear
+                        v-if="loading && progress > 0"
+                        :model-value="progress"
+                        color="primary"
+                        height="18"
+                    >
+                        <template #default>
+                            {{ $t('messages.uploadProgress', { percent: progress }) }}
+                        </template>
+                    </v-progress-linear>
                 </v-card-text>
                 <v-card-actions>
                     <v-spacer />
@@ -68,6 +78,61 @@ const router = useRouter();
 const loading = ref(false);
 const dialog = ref(false);
 const ebooks = ref(null);
+const progress = ref(0);
+
+// 单个分片大小，需小于反代（如 Cloudflare 免费版）100MB 的单请求体积限制
+const CHUNK_SIZE = 4 * 1024 * 1024;
+// 超过该大小的文件才走分片上传，避免小文件多一次网络往返
+const CHUNK_THRESHOLD = 8 * 1024 * 1024;
+
+function generateUploadId() {
+    if (typeof crypto !== 'undefined' && crypto.randomUUID) {
+        return crypto.randomUUID().replace(/-/g, '');
+    }
+    return Date.now().toString(36) + Math.random().toString(36).slice(2);
+}
+
+function uploadWhole(file) {
+    const data = new FormData();
+    data.append('ebook', file, encodeURIComponent(file.name || 'upload.bin'));
+    return $backend('/book/upload', {
+        method: 'POST',
+        body: data,
+    });
+}
+
+async function uploadInChunks(file) {
+    const uploadId = generateUploadId();
+    const totalChunks = Math.ceil(file.size / CHUNK_SIZE);
+
+    for (let index = 0; index < totalChunks; index++) {
+        const start = index * CHUNK_SIZE;
+        const chunk = file.slice(start, Math.min(start + CHUNK_SIZE, file.size));
+        const data = new FormData();
+        data.append('chunk', chunk);
+        data.append('upload_id', uploadId);
+        data.append('chunk_index', index);
+        data.append('total_chunks', totalChunks);
+
+        const rsp = await $backend('/book/upload/chunk', {
+            method: 'POST',
+            body: data,
+        });
+        if (rsp.err !== 'ok') {
+            return rsp;
+        }
+        progress.value = Math.round(((index + 1) / totalChunks) * 100);
+    }
+
+    const data = new FormData();
+    data.append('upload_id', uploadId);
+    data.append('filename', encodeURIComponent(file.name || 'upload.bin'));
+    data.append('total_chunks', totalChunks);
+    return $backend('/book/upload/complete', {
+        method: 'POST',
+        body: data,
+    });
+}
 
 function do_upload() {
     let file = null;
@@ -81,13 +146,10 @@ function do_upload() {
     }
 
     loading.value = true;
-    const data = new FormData();
-    data.append('ebook', file, encodeURIComponent(file.name || 'upload.bin'));
+    progress.value = 0;
+    const uploadPromise = file.size > CHUNK_THRESHOLD ? uploadInChunks(file) : uploadWhole(file);
 
-    $backend('/book/upload', {
-        method: 'POST',
-        body: data,
-    })
+    uploadPromise
         .then(rsp => {
             dialog.value = false;
             if (rsp.err === 'ok') {
@@ -100,8 +162,12 @@ function do_upload() {
                 $alert('error', rsp.msg);
             }
         })
+        .catch(() => {
+            // $backend 已在网络/HTTP异常场景下弹出提示，这里仅需终止流程
+        })
         .finally(() => {
             loading.value = false;
+            progress.value = 0;
         });
 }
 </script>

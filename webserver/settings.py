@@ -59,6 +59,11 @@ settings = {
     # 100MB, tornado default max_buffer_size value
     "MAX_UPLOAD_SIZE": "100MB",
 
+    # 分片上传：单个分片大小上限、合并后文件大小上限、允许的最大分片数量
+    "MAX_CHUNK_SIZE": "20MB",
+    "MAX_CHUNK_UPLOAD_SIZE": "1024MB",
+    "MAX_CHUNK_COUNT": 4096,
+
     "CANDLE_READER_SERVER": "https://brs.talebook.org",
     "EPUB_VIEWER": "creader.html",
     "PDF_VIEWER": "/static/pdfjs/web/viewer.html?file=%(pdf_url)s",

@@ -347,19 +347,14 @@ def _enqueue_pending_booksource_checks(scoped_session):
 
 
 def get_upload_size():
-    n = 1
-    s = CONF["MAX_UPLOAD_SIZE"].lower().strip()
-    if s.endswith("k") or s.endswith("kb"):
-        n = 1024
-        s = s.split("k")[0]
-    elif s.endswith("m") or s.endswith("mb"):
-        n = 1024 * 1024
-        s = s.split("m")[0]
-    elif s.endswith("g") or s.endswith("gb"):
-        n = 1024 * 1024 * 1024
-        s = s.split("g")[0]
-    s = s.strip()
-    return int(s) * n
+    # Tornado 的 max_buffer_size 决定单个 HTTP 请求能接收的 body 上限。
+    # 分片上传的单个分片大小可在后台配置（UPLOAD_CHUNK_SIZE），为避免单分片请求
+    # 在 HTTP 层被 “Content-Length too long” 拒绝，取普通上传上限与单分片上限的较大值。
+    from webserver.utils import parse_size_safe
+
+    upload_size = parse_size_safe(CONF.get("MAX_UPLOAD_SIZE", "100MB"), "100MB")
+    chunk_size = parse_size_safe(CONF.get("UPLOAD_CHUNK_SIZE", "4MB"), "4MB")
+    return max(upload_size, chunk_size)
 
 
 def setup_logging():

@@ -1132,6 +1132,7 @@ def decode_filename(filename):
 
 
 UPLOAD_ID_RE = re.compile(r"^[a-zA-Z0-9_-]{1,64}$")
+UPLOAD_FILENAME_RE = re.compile(r"^[A-Za-z0-9._-]{1,255}$")
 
 
 class BookUploadBase(BaseHandler):
@@ -1162,10 +1163,11 @@ class BookUploadBase(BaseHandler):
         ):
             return None
         upload_dir = os.path.realpath(CONF["upload_path"])
-        # 使用 os.path.basename 提取纯文件名：basename 是 CodeQL 认可的净化器，
-        # 可切断源自 get_argument 的污点，避免下游 open/os.remove 被标脏
+        # 使用 os.path.basename 提取纯文件名，再以白名单正则 fullmatch 校验：
+        # fullmatch 是 CodeQL 认可的净化器，可将源自 get_argument 的污点标记为受控，
+        # 避免下游 open/os.remove 被标脏
         safe_name = os.path.basename(name)
-        if not safe_name or safe_name in (".", ".."):
+        if not safe_name or safe_name in (".", "..") or not UPLOAD_FILENAME_RE.fullmatch(safe_name):
             return None
         fpath = os.path.realpath(os.path.join(upload_dir, safe_name))
         try:
@@ -1459,7 +1461,7 @@ class BookUploadComplete(BookUploadBase):
             return {"err": "params.filename", "msg": _("文件名不合法")}
 
         try:
-            with open(fpath, "wb") as out:  # codeql[py/path-injection]
+            with open(fpath, "wb") as out:
                 for i, p in enumerate(chunk_paths):
                     with open(p, "rb") as part:
                         chunk_data = part.read()
@@ -1467,14 +1469,14 @@ class BookUploadComplete(BookUploadBase):
                             raise ValueError("format mismatch")
                         out.write(chunk_data)
         except ValueError:
-            # fpath 由 resolve_upload_path 返回，已完成 basename + realpath + commonpath
+            # fpath 由 resolve_upload_path 返回，已完成 basename + 白名单 fullmatch + commonpath
             # 校验、限制在上传目录内，属受控路径。此处直接复用 fpath（不再经 name 重新拼接，
             # 以免重新引入 get_argument 污点），realpath 规范化后再做 startswith 守卫后删除。
             upload_dir = os.path.realpath(CONF["upload_path"])
             cleanup_path = os.path.realpath(fpath)
             if cleanup_path.startswith(upload_dir + os.sep):
                 try:
-                    os.remove(cleanup_path)  # codeql[py/path-injection]
+                    os.remove(cleanup_path)
                 except OSError:
                     pass
             shutil.rmtree(chunk_dir, ignore_errors=True)

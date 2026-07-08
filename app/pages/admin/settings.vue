@@ -946,7 +946,7 @@ const cards = computed(() => [
             { icon: 'mdi-information', key: 'push_content', label: t('admin.settings.label.pushContent') },
             { icon: 'mdi-clock', key: 'convert_timeout', label: t('admin.settings.label.convertTimeout') },
             { icon: '', key: 'autoreload', label: t('admin.settings.label.autoreload'), type: 'checkbox' },
-            { icon: 'mdi-cloud-sync', key: 'WEBDAV_ENABLED', label: t('admin.settings.label.webdavEnabled'), type: 'checkbox' },
+            { icon: 'mdi-cloud-sync', key: 'ENABLE_WEBDAV_SERVICE', label: t('admin.settings.label.webdavEnabled'), type: 'checkbox' },
             { icon: 'mdi-cloud-upload', key: 'WEBDAV_SYNC_FOLDER', label: t('admin.settings.label.webdavSyncFolder'), type: 'checkbox' },
         ],
         tips: [

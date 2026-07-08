@@ -64,7 +64,7 @@ onMounted(() => {
     // 获取 WebDAV 服务状态
     $backend('/admin/settings').then(rsp => {
         if (rsp.err === 'ok') {
-            webdavEnabled.value = rsp.settings.WEBDAV_ENABLED !== false;
+            webdavEnabled.value = rsp.settings.ENABLE_WEBDAV_SERVICE !== false;
         }
     });
 });

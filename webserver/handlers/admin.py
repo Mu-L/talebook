@@ -387,7 +387,7 @@ class AdminSettings(BaseHandler):
             "SOCIALS",
             "SHOW_SIDEBAR_SYS",
             "OPDS_ENABLED",
-            "WEBDAV_ENABLED",
+            "ENABLE_WEBDAV_SERVICE",
             "WEBDAV_SYNC_FOLDER",
             "WEBDAV_SYNC_FOLDER_NAME",
             "autoreload",

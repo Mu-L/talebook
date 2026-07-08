@@ -123,7 +123,7 @@ settings = {
     'DEFAULT_USER_PERMISSION' : '',
     'ALLOW_FEEDBACK' : True,
     'OPDS_ENABLED' : True,
-    'WEBDAV_ENABLED' : True,
+    'ENABLE_WEBDAV_SERVICE' : True,
     'WEBDAV_SYNC_FOLDER' : False,
     'WEBDAV_SYNC_FOLDER_NAME' : 'reader',
     'FEEDBACK_URL' : 'https://github.com/talebook/talebook/issues',

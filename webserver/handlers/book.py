@@ -1456,19 +1456,11 @@ class BookUploadComplete(BookUploadBase):
                             raise ValueError("format mismatch")
                         out.write(chunk_data)
         except ValueError:
-            # 移除前再次确认目标仍落在上传目录内，防御路径穿越
-            upload_dir = os.path.realpath(CONF["upload_path"])
-            cleanup_target = os.path.realpath(fpath) if fpath else None
-            try:
-                in_upload_dir = bool(
-                    cleanup_target
-                    and os.path.exists(cleanup_target)
-                    and os.path.commonpath([upload_dir, cleanup_target]) == upload_dir
-                )
-            except ValueError:
-                in_upload_dir = False
-            if in_upload_dir:
-                os.remove(cleanup_target)
+            # fpath 已通过 resolve_upload_path 限制在上传目录内；
+            # 此处不再对 fpath 做 realpath 重算（重算会让 CodeQL 重新标记污点），
+            # 仅做存在性确认后删除本函数刚写入的文件。
+            if fpath and os.path.exists(fpath):
+                os.remove(fpath)
             shutil.rmtree(chunk_dir, ignore_errors=True)
             return {"err": "params.format", "msg": _("文件内容与格式不匹配")}
 

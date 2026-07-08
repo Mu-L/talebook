@@ -56,11 +56,11 @@ settings = {
         "pool_recycle": 3600,
     },
 
-    # 100MB, tornado default max_buffer_size value
+    # 允许上传的最大文件大小。分片关闭时限制单文件（整体上传）；
+    # 分片开启时限制分片合并后的总文件大小（单分片大小由 UPLOAD_CHUNK_SIZE 控制）
     "MAX_UPLOAD_SIZE": "100MB",
 
-    # 分片上传：合并后文件大小上限、允许的最大分片数量
-    "MAX_CHUNK_UPLOAD_SIZE": "1024MB",
+    # 分片上传：允许的最大分片数量
     "MAX_CHUNK_COUNT": 4096,
     # 分片目录过期时间（秒），超过该时间未完成的分片上传会在后续请求中被自动清理
     "UPLOAD_CHUNK_TTL_SECONDS": 24 * 3600,

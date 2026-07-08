@@ -318,7 +318,7 @@ class TestUploadChunk(TestWithUserLogin):
         chunk_len = 1024
         max_total = int(chunk_len * 1.5)
         upload_id = "retry-index"
-        with mock.patch.dict(CONF, {"MAX_CHUNK_UPLOAD_SIZE": "%dB" % max_total}):
+        with mock.patch.dict(CONF, {"MAX_UPLOAD_SIZE": "%dB" % max_total}):
             d = self._upload_chunk(upload_id, 0, 2, b"A" * chunk_len)
             self.assertEqual(d["err"], "ok")
             # 重试同一个 chunk_index（响应丢失后重发），应被减去旧分片大小后仍通过
@@ -332,7 +332,7 @@ class TestUploadChunk(TestWithUserLogin):
         chunk_len = 1024
         max_total = int(chunk_len * 1.5)
         upload_id = "retry-limit"
-        with mock.patch.dict(CONF, {"MAX_CHUNK_UPLOAD_SIZE": "%dB" % max_total}):
+        with mock.patch.dict(CONF, {"MAX_UPLOAD_SIZE": "%dB" % max_total}):
             d = self._upload_chunk(upload_id, 0, 2, b"A" * chunk_len)
             self.assertEqual(d["err"], "ok")
             # 写入另一个不同索引的分片，新旧两份累计超过上限，应被拒绝
@@ -360,7 +360,7 @@ class TestUploadChunk(TestWithUserLogin):
         from webserver.handlers.book import CONF
 
         upload_id = "resum-bypass"
-        with mock.patch.dict(CONF, {"MAX_CHUNK_UPLOAD_SIZE": "1024MB"}):
+        with mock.patch.dict(CONF, {"MAX_UPLOAD_SIZE": "1024MB"}):
             d = self._upload_chunk(upload_id, 0, 2, b"A" * 1024)
             self.assertEqual(d["err"], "ok")
             d = self._upload_chunk(upload_id, 1, 2, b"B" * 1024)
@@ -368,7 +368,7 @@ class TestUploadChunk(TestWithUserLogin):
 
         # 分片落盘时总大小限制是1024MB，此时都能通过；管理员随后把限制调小，
         # /complete 应基于磁盘上分片的实际大小重新求和校验，而不是信任之前的请求
-        with mock.patch.dict(CONF, {"MAX_CHUNK_UPLOAD_SIZE": "1KB"}):
+        with mock.patch.dict(CONF, {"MAX_UPLOAD_SIZE": "1KB"}):
             d = self._complete_upload(upload_id, "resum.epub", 2)
             self.assertEqual(d["err"], "params.chunk")
 

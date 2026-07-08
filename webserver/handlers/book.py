@@ -1374,7 +1374,7 @@ class BookUploadChunk(BookUploadBase):
 
         os.makedirs(chunk_dir, exist_ok=True)
 
-        max_total_size = utils.parse_size_safe(CONF.get("MAX_CHUNK_UPLOAD_SIZE", "1024MB"), "1024MB")
+        max_total_size = utils.parse_size_safe(CONF.get("MAX_UPLOAD_SIZE", "100MB"), "100MB")
         existing_size = sum(os.path.getsize(os.path.join(chunk_dir, f)) for f in os.listdir(chunk_dir) if f.endswith(".part"))
         # 客户端重试已写入的分片索引时（如响应丢失后重发），下方会以 "wb" 覆盖同一
         # <index>.part 文件，因此需先减去该旧分片已占大小，避免接近上限时重试被重复
@@ -1449,7 +1449,7 @@ class BookUploadComplete(BookUploadBase):
 
         # 并发上传时单个/chunk请求校验的existing_size可能都在彼此完成前通过，
         # 这里合并前基于磁盘上实际分片大小重新求和，防止绕过总大小限制
-        max_total_size = utils.parse_size_safe(CONF.get("MAX_CHUNK_UPLOAD_SIZE", "1024MB"), "1024MB")
+        max_total_size = utils.parse_size_safe(CONF.get("MAX_UPLOAD_SIZE", "100MB"), "100MB")
         total_size = sum(os.path.getsize(p) for p in chunk_paths)
         if total_size > max_total_size:
             shutil.rmtree(chunk_dir, ignore_errors=True)

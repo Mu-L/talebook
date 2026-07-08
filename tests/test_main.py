@@ -1057,18 +1057,26 @@ def setUpModule():
 
 
 class TestGetUploadSize(unittest.TestCase):
-    """Tornado max_buffer_size 应覆盖最大的合法单请求，避免分片请求在 HTTP 层被拒"""
+    """Tornado max_buffer_size 是单请求（单分片）上限：
+    分片关闭时取 MAX_UPLOAD_SIZE（整体即单请求），开启时取 UPLOAD_CHUNK_SIZE"""
 
-    def test_takes_max_of_upload_and_chunk_size(self):
+    def test_chunk_disabled_uses_max_upload_size(self):
         from webserver import main
         from webserver.handlers.book import CONF
 
-        with mock.patch.dict(CONF, {"MAX_UPLOAD_SIZE": "100MB", "UPLOAD_CHUNK_SIZE": "4MB"}):
+        with mock.patch.dict(CONF, {"UPLOAD_CHUNK_ENABLED": False, "MAX_UPLOAD_SIZE": "100MB"}):
             self.assertEqual(main.get_upload_size(), 100 * 1024 * 1024)
 
-        # 单分片上限大于普通上传上限时，取单分片上限，否则大分片请求会被 HTTP 层拒
-        with mock.patch.dict(CONF, {"MAX_UPLOAD_SIZE": "100MB", "UPLOAD_CHUNK_SIZE": "200MB"}):
-            self.assertEqual(main.get_upload_size(), 200 * 1024 * 1024)
+    def test_chunk_enabled_uses_chunk_size(self):
+        from webserver import main
+        from webserver.handlers.book import CONF
+
+        # 分片开启时单请求上限取单分片大小，MAX_UPLOAD_SIZE 此时作为总文件上限
+        with mock.patch.dict(
+            CONF,
+            {"UPLOAD_CHUNK_ENABLED": True, "MAX_UPLOAD_SIZE": "100MB", "UPLOAD_CHUNK_SIZE": "50MB"},
+        ):
+            self.assertEqual(main.get_upload_size(), 50 * 1024 * 1024)
 
 
 if __name__ == "__main__":

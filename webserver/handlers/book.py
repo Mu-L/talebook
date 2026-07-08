@@ -1369,6 +1369,12 @@ class BookUploadChunk(BookUploadBase):
 
         max_total_size = utils.parse_size_safe(CONF.get("MAX_CHUNK_UPLOAD_SIZE", "1024MB"), "1024MB")
         existing_size = sum(os.path.getsize(os.path.join(chunk_dir, f)) for f in os.listdir(chunk_dir) if f.endswith(".part"))
+        # 客户端重试已写入的分片索引时（如响应丢失后重发），下方会以 "wb" 覆盖同一
+        # <index>.part 文件，因此需先减去该旧分片已占大小，避免接近上限时重试被重复
+        # 计入、误判超限并清空整个分片目录
+        current_part = os.path.join(chunk_dir, "%d.part" % chunk_index)
+        if os.path.isfile(current_part):
+            existing_size -= os.path.getsize(current_part)
         if existing_size + len(data) > max_total_size:
             shutil.rmtree(chunk_dir, ignore_errors=True)
             return {"err": "params.chunk", "msg": _("文件总大小超出限制")}

@@ -308,6 +308,37 @@ class TestUploadChunk(TestWithUserLogin):
             d = self._upload_chunk("size-honor-reject", 0, 1, data)
             self.assertEqual(d["err"], "params.chunk")
 
+    def test_chunk_retry_existing_index_not_double_counted(self):
+        """客户端重试已写入的分片索引时，总大小校验应减去旧分片大小，
+        避免接近上限时重试被重复计入而误删整个分片目录"""
+        from webserver.handlers.book import CONF
+
+        # 限制设为单个分片大小的两倍少一点：刚好容纳一次写入，
+        # 但容纳不下“旧分片 + 新分片”被重复计入的情形
+        chunk_len = 1024
+        max_total = int(chunk_len * 1.5)
+        upload_id = "retry-index"
+        with mock.patch.dict(CONF, {"MAX_CHUNK_UPLOAD_SIZE": "%dB" % max_total}):
+            d = self._upload_chunk(upload_id, 0, 2, b"A" * chunk_len)
+            self.assertEqual(d["err"], "ok")
+            # 重试同一个 chunk_index（响应丢失后重发），应被减去旧分片大小后仍通过
+            d = self._upload_chunk(upload_id, 0, 2, b"B" * chunk_len)
+            self.assertEqual(d["err"], "ok")
+
+    def test_chunk_retry_different_index_still_enforces_limit(self):
+        """重试不同分片索引仍受总大小限制约束，不因修复逻辑而绕过校验"""
+        from webserver.handlers.book import CONF
+
+        chunk_len = 1024
+        max_total = int(chunk_len * 1.5)
+        upload_id = "retry-limit"
+        with mock.patch.dict(CONF, {"MAX_CHUNK_UPLOAD_SIZE": "%dB" % max_total}):
+            d = self._upload_chunk(upload_id, 0, 2, b"A" * chunk_len)
+            self.assertEqual(d["err"], "ok")
+            # 写入另一个不同索引的分片，新旧两份累计超过上限，应被拒绝
+            d = self._upload_chunk(upload_id, 1, 2, b"B" * chunk_len)
+            self.assertEqual(d["err"], "params.chunk")
+
     def test_complete_rechecks_total_size_bypassing_per_chunk_check(self):
         """并发上传绕过单次/chunk请求的总大小校验后，/complete合并前必须重新校验实际总大小"""
         from webserver.handlers.book import CONF

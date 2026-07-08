@@ -17,7 +17,8 @@ def create_webdav_app(calibre_cache, sqlite_session):
 
     Args:
         calibre_cache: Calibre library cache (new_api)
-        sqlite_session: SQLAlchemy scoped session factory for user authentication
+        sqlite_session: SQLAlchemy Session factory (callable returning a new
+            Session) used for user authentication and reading states.
 
     Returns:
         A configured WsgiDAVApp instance.

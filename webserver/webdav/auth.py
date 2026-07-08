@@ -29,6 +29,7 @@ class WebDavDomainController:
         """
         from webserver.models import Reader
 
+        session = self.sqlite_session()
         try:
             username = user_name.strip().lower()
             password = password.strip()
@@ -37,7 +38,7 @@ class WebDavDomainController:
                 logging.warning("WebDAV auth failed: empty username or password")
                 return False
 
-            user = self.sqlite_session().query(Reader).filter(Reader.username == username).first()
+            user = session.query(Reader).filter(Reader.username == username).first()
 
             if not user:
                 logging.warning(f"WebDAV auth failed: user '{username}' not found")
@@ -61,6 +62,8 @@ class WebDavDomainController:
 
             logging.error(traceback.format_exc())
             return False
+        finally:
+            session.close()
 
     def supports_http_digest_auth(self):
         """We only support Basic Auth for simplicity."""
@@ -78,9 +81,12 @@ class WebDavDomainController:
         """Return True if user_name is a known user."""
         from webserver.models import Reader
 
+        session = self.sqlite_session()
         try:
             username = user_name.strip().lower()
-            user = self.sqlite_session().query(Reader).filter(Reader.username == username).first()
+            user = session.query(Reader).filter(Reader.username == username).first()
             return user is not None
         except Exception:
             return False
+        finally:
+            session.close()

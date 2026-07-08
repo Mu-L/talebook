@@ -541,8 +541,11 @@ class MyBooksDavProvider(DAVProvider):
             from webserver.models import Reader
 
             session = self.get_session_func()
-            user = session.query(Reader).filter(Reader.username == username).first()
-            return user.id if user else None
+            try:
+                user = session.query(Reader).filter(Reader.username == username).first()
+                return user.id if user else None
+            finally:
+                session.close()
         except Exception as e:
             logging.error(f"Error getting user ID: {e}")
             return None
@@ -558,10 +561,13 @@ class MyBooksDavProvider(DAVProvider):
             from webserver.models import ReadingState
 
             session = self.get_session_func()
-            reading_states = session.query(ReadingState).filter(ReadingState.reader_id == user_id).all()
+            try:
+                reading_states = session.query(ReadingState).filter(ReadingState.reader_id == user_id).all()
 
-            filtered_states = [state for state in reading_states if filter_func(state)]
-            return [state.book_id for state in filtered_states]
+                filtered_states = [state for state in reading_states if filter_func(state)]
+                return [state.book_id for state in filtered_states]
+            finally:
+                session.close()
 
         except Exception as e:
             logging.error(f"Error getting reading state books: {e}")

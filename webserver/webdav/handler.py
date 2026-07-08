@@ -49,7 +49,7 @@ class WebDAVHandler(BaseHandler):
             if WebDAVHandler._wsgi_container is None:
                 from webserver.webdav.server import create_webdav_app
 
-                wsgi_app = create_webdav_app(self.cache, self.session)
+                wsgi_app = create_webdav_app(self.cache, self.settings["SessionMaker"])
                 WebDAVHandler._wsgi_container = WSGIContainer(wsgi_app)
                 logging.info("[WebDAV] WSGI app initialized")
         return WebDAVHandler._wsgi_container

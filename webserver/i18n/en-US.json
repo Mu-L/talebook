@@ -68,6 +68,7 @@
     "上传过程出错: %s。请查看日志获取详细信息": "Upload error: %s. Please check logs for details",
     "分片上传功能已禁用": "Chunked upload is disabled",
     "分片参数不合法": "Invalid chunk parameters",
+    "最大上传大小需不小于分片触发阈值，分片触发阈值需不小于单个分片大小": "Max upload size must be no less than the chunk trigger threshold, and the threshold must be no less than the chunk size",
     "分片缺失，请重新上传": "Missing chunk(s), please re-upload",
     "分片过大": "Chunk too large",
     "找不到上传分片，请重新上传": "Upload chunks not found, please re-upload",

@@ -812,6 +812,31 @@ class TestAdmin(TestWithAdminUser):
             self.assertEqual(d["rsp"]["site_title"], "abc")
             self.assertTrue("not_work" not in d["rsp"])
 
+    def test_admin_settings_rejects_inconsistent_chunk_sizes(self):
+        """分片大小配置必须满足 总大小 ≥ 触发阈值 ≥ 单分片大小，否则保存被拒"""
+        with mock.patch.object(loader.SettingsLoader, "set_store_path", return_value="/tmp/"):
+            # 单分片大小大于触发阈值，违反约束，应返回 params.upload_size_order
+            req = {
+                "UPLOAD_CHUNK_ENABLED": True,
+                "UPLOAD_CHUNK_THRESHOLD": "8MB",
+                "UPLOAD_CHUNK_SIZE": "50MB",
+                "MAX_UPLOAD_SIZE": "100MB",
+            }
+            d = self.json("/api/admin/settings", method="POST", body=json.dumps(req))
+            self.assertEqual(d["err"], "params.upload_size_order")
+
+    def test_admin_settings_accepts_consistent_chunk_sizes(self):
+        """总大小 ≥ 阈值 ≥ 单分片 的合法配置应保存成功"""
+        with mock.patch.object(loader.SettingsLoader, "set_store_path", return_value="/tmp/"):
+            req = {
+                "UPLOAD_CHUNK_ENABLED": True,
+                "UPLOAD_CHUNK_THRESHOLD": "8MB",
+                "UPLOAD_CHUNK_SIZE": "4MB",
+                "MAX_UPLOAD_SIZE": "100MB",
+            }
+            d = self.json("/api/admin/settings", method="POST", body=json.dumps(req))
+            self.assertEqual(d["err"], "ok")
+
 
 class TestOpds(TestWithUserLogin):
     def parse_xml(self, text):

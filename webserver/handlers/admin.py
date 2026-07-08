@@ -376,6 +376,27 @@ class AdminSettings(BaseHandler):
             except (TypeError, ValueError):
                 return {"err": "params.max_chunk_count", "msg": _("最大分片数量必须是正整数")}
 
+        # 大小关系约束：总大小上限 ≥ 分片触发阈值 ≥ 单个分片大小，
+        # 否则分片逻辑自相矛盾（如阈值小于单分片、或总大小小于阈值）
+        size_keys = ("MAX_UPLOAD_SIZE", "UPLOAD_CHUNK_THRESHOLD", "UPLOAD_CHUNK_SIZE")
+        if any(k in data for k in size_keys):
+
+            def _size(key):
+                raw = data.get(key, CONF.get(key, "0"))
+                try:
+                    return utils.parse_size(raw)
+                except (TypeError, ValueError):
+                    return 0
+
+            total = _size("MAX_UPLOAD_SIZE")
+            threshold = _size("UPLOAD_CHUNK_THRESHOLD")
+            chunk = _size("UPLOAD_CHUNK_SIZE")
+            if not (total >= threshold >= chunk):
+                return {
+                    "err": "params.upload_size_order",
+                    "msg": _("最大上传大小需不小于分片触发阈值，分片触发阈值需不小于单个分片大小"),
+                }
+
         KEYS = [
             "ALLOW_GUEST_DOWNLOAD",
             "ALLOW_GUEST_PUSH",

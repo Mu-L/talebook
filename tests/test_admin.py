@@ -78,6 +78,19 @@ class TestAdminSettingsSecurity(TestWithAdminUser):
         finally:
             conf["UPLOAD_CHUNK_THRESHOLD"] = prev_threshold
 
+    def test_settings_update_rejects_zero_chunk_size(self):
+        """分片大小配置为0时必须被拒绝，避免前端把分片数计算为Infinity导致上传全部失败"""
+        conf = loader.get_settings()
+        prev_size = conf.get("UPLOAD_CHUNK_SIZE", "4MB")
+        try:
+            with mock.patch("webserver.loader.SettingsLoader.set_store_path", return_value="/tmp/"):
+                req = json.dumps({"UPLOAD_CHUNK_SIZE": "0MB"})
+                d = self.json("/api/admin/settings", method="POST", body=req)
+                self.assertEqual(d["err"], "params.upload_chunk_size")
+                self.assertEqual(conf.get("UPLOAD_CHUNK_SIZE", "4MB"), prev_size)
+        finally:
+            conf["UPLOAD_CHUNK_SIZE"] = prev_size
+
     def test_settings_update_rejected_for_non_admin(self):
         """普通用户（非管理员）不能修改管理员配置，必须返回 permission 错误"""
         from webserver import models

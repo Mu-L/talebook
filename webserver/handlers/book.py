@@ -1415,6 +1415,14 @@ class BookUploadComplete(BookUploadBase):
             if not p or not os.path.isfile(p):
                 return {"err": "params.chunk", "msg": _("分片缺失，请重新上传")}
 
+        # 并发上传时单个/chunk请求校验的existing_size可能都在彼此完成前通过，
+        # 这里合并前基于磁盘上实际分片大小重新求和，防止绕过总大小限制
+        max_total_size = utils.parse_size_safe(CONF.get("MAX_CHUNK_UPLOAD_SIZE", "1024MB"), "1024MB")
+        total_size = sum(os.path.getsize(p) for p in chunk_paths)
+        if total_size > max_total_size:
+            shutil.rmtree(chunk_dir, ignore_errors=True)
+            return {"err": "params.chunk", "msg": _("文件总大小超出限制")}
+
         fpath = self.resolve_upload_path(name)
         if not fpath:
             shutil.rmtree(chunk_dir, ignore_errors=True)
@@ -1431,9 +1439,12 @@ class BookUploadComplete(BookUploadBase):
         except ValueError:
             if os.path.exists(fpath):
                 os.remove(fpath)
-            return {"err": "params.format", "msg": _("文件内容与格式不匹配")}
-        finally:
             shutil.rmtree(chunk_dir, ignore_errors=True)
+            return {"err": "params.format", "msg": _("文件内容与格式不匹配")}
+
+        # 合并成功后才清理分片目录；若合并过程中出现非预期异常（如磁盘写满），
+        # 分片会保留在磁盘上以便用户重新调用/complete重试，而不是被静默丢弃
+        shutil.rmtree(chunk_dir, ignore_errors=True)
 
         logging.debug("save chunked upload file into [%s]", fpath)
         return self.import_uploaded_book(fpath, fmt)

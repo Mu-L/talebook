@@ -364,7 +364,8 @@ class AdminSettings(BaseHandler):
         for size_key in ("UPLOAD_CHUNK_THRESHOLD", "UPLOAD_CHUNK_SIZE"):
             if size_key in data:
                 try:
-                    utils.parse_size(data[size_key])
+                    if utils.parse_size(data[size_key]) <= 0:
+                        raise ValueError("size must be positive: %r" % data[size_key])
                 except (TypeError, ValueError):
                     return {"err": "params.%s" % size_key.lower(), "msg": _("分片大小配置格式不合法，例如 4MB")}
 

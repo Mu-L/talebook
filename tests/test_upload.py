@@ -308,6 +308,61 @@ class TestUploadChunk(TestWithUserLogin):
             d = self._upload_chunk("size-honor-reject", 0, 1, data)
             self.assertEqual(d["err"], "params.chunk")
 
+    def test_complete_rechecks_total_size_bypassing_per_chunk_check(self):
+        """并发上传绕过单次/chunk请求的总大小校验后，/complete合并前必须重新校验实际总大小"""
+        from webserver.handlers.book import CONF
+
+        upload_id = "resum-bypass"
+        with mock.patch.dict(CONF, {"MAX_CHUNK_UPLOAD_SIZE": "1024MB"}):
+            d = self._upload_chunk(upload_id, 0, 2, b"A" * 1024)
+            self.assertEqual(d["err"], "ok")
+            d = self._upload_chunk(upload_id, 1, 2, b"B" * 1024)
+            self.assertEqual(d["err"], "ok")
+
+        # 分片落盘时总大小限制是1024MB，此时都能通过；管理员随后把限制调小，
+        # /complete 应基于磁盘上分片的实际大小重新求和校验，而不是信任之前的请求
+        with mock.patch.dict(CONF, {"MAX_CHUNK_UPLOAD_SIZE": "1KB"}):
+            d = self._complete_upload(upload_id, "resum.epub", 2)
+            self.assertEqual(d["err"], "params.chunk")
+
+    @mock.patch("webserver.handlers.base.BaseHandler.user_history")
+    @mock.patch("webserver.handlers.base.BaseHandler.add_msg")
+    @mock.patch("webserver.models.Item.save")
+    @mock.patch("calibre.db.legacy.LibraryDatabase.import_book")
+    def test_complete_preserves_chunks_on_unexpected_merge_error(self, m_import, m_save, m_msg, m_hist):
+        """合并分片时出现非预期异常（如磁盘写满）时应保留分片目录，以便用户重试"""
+        import os
+        from webserver.handlers.book import CONF
+
+        upload_id = "merge-io-error"
+        path = testdir + "/cases/new.epub"
+        with open(path, "rb") as f:
+            data = f.read()
+        mid = len(data) // 2
+        d = self._upload_chunk(upload_id, 0, 2, data[:mid])
+        self.assertEqual(d["err"], "ok")
+        d = self._upload_chunk(upload_id, 1, 2, data[mid:])
+        self.assertEqual(d["err"], "ok")
+
+        chunk_dir = os.path.join(CONF["upload_path"], "chunks", "1", upload_id)
+        self.assertTrue(os.path.isdir(chunk_dir))
+
+        real_open = open
+
+        def fake_open(file, mode="r", *args, **kwargs):
+            # 仅让合并目标文件的写入失败，分片文件的读取与其它文件操作不受影响
+            if "wb" in mode and "chunks" not in str(file):
+                raise OSError("disk full")
+            return real_open(file, mode, *args, **kwargs)
+
+        body = urllib.parse.urlencode({"upload_id": upload_id, "filename": "merge_io.epub", "total_chunks": 2})
+        with mock.patch("builtins.open", side_effect=fake_open):
+            rsp = self.fetch("/api/book/upload/complete", method="POST", body=body)
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "exception")
+        self.assertTrue(os.path.isdir(chunk_dir))
+
     def test_stale_chunk_dir_cleaned_up(self):
         """超过TTL未完成的分片目录，应在后续分片请求时被自动清理"""
         import os

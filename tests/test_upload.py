@@ -341,19 +341,33 @@ class TestUploadChunk(TestWithUserLogin):
 
     def test_max_chunk_count_accepts_string_config_without_crashing(self):
         """MAX_CHUNK_COUNT 经面板保存后可能是字符串（如 "10"），
-        book.py 读取时用 int() 转换，避免 total_chunks > max_chunks 比较抛 TypeError"""
+        book.py 读取时用 int() 转换，避免 total_chunks > max_chunks 比较抛 TypeError；
+        声明的总片数超过上限时，每一片都应在落盘前被拒绝（而非 500 异常）"""
         from webserver.handlers.book import CONF
 
         # 限制为最多 2 片（以字符串形式模拟面板保存结果）
         with mock.patch.dict(CONF, {"MAX_CHUNK_COUNT": "2"}):
             upload_id = "count-limit"
+            # total_chunks=3 超过上限 2，所有分片都应在首片即被拒绝，且不抛 TypeError
+            d = self._upload_chunk(upload_id, 0, 3, b"A" * 1024)
+            self.assertEqual(d["err"], "params.chunk")
+            d = self._upload_chunk(upload_id, 1, 3, b"B" * 1024)
+            self.assertEqual(d["err"], "params.chunk")
+            d = self._upload_chunk(upload_id, 2, 3, b"C" * 1024)
+            self.assertEqual(d["err"], "params.chunk")
+
+    def test_max_chunk_count_allows_within_limit(self):
+        """声明的总片数未超过上限时，分片应正常接收（验证字符串配置下未误伤合法上传）"""
+        from webserver.handlers.book import CONF
+
+        with mock.patch.dict(CONF, {"MAX_CHUNK_COUNT": "5"}):
+            upload_id = "count-ok"
             d = self._upload_chunk(upload_id, 0, 3, b"A" * 1024)
             self.assertEqual(d["err"], "ok")
             d = self._upload_chunk(upload_id, 1, 3, b"B" * 1024)
             self.assertEqual(d["err"], "ok")
-            # 第 3 片声明 total_chunks=3 超过上限 2，应被拒绝（而非 500 异常）
             d = self._upload_chunk(upload_id, 2, 3, b"C" * 1024)
-            self.assertEqual(d["err"], "params.chunk")
+            self.assertEqual(d["err"], "ok")
 
     def test_complete_rechecks_total_size_bypassing_per_chunk_check(self):
         """并发上传绕过单次/chunk请求的总大小校验后，/complete合并前必须重新校验实际总大小"""

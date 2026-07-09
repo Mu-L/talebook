@@ -18,6 +18,7 @@ jobs:
     name: Respond to maintainer request
     if: |
       github.actor != 'github-actions[bot]' &&
+      contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association) &&
       (
         (
           github.event_name == 'issue_comment' &&

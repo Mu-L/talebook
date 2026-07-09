@@ -168,6 +168,74 @@ class TestBookShelf(TestWithUserLogin):
         self.assertEqual(d["err"], "params.book.invalid")
 
 
+class TestBookReadingProgress(TestWithUserLogin):
+    def _clear_reading_state(self, book_id, reader_id=1):
+        from webserver.models import ReadingState
+
+        session = get_db()
+        state = (
+            session.query(ReadingState)
+            .filter(ReadingState.book_id == book_id, ReadingState.reader_id == reader_id)
+            .first()
+        )
+        if state:
+            session.delete(state)
+            session.commit()
+
+    def test_progress_get_no_state(self):
+        self._clear_reading_state(BID_EPUB)
+        d = self.json("/api/book/%d/progress" % BID_EPUB)
+        self.assertEqual(d["err"], "ok")
+        self.assertEqual(d["progress"], {})
+        self.assertIsNone(d["update_time"])
+
+    def test_progress_post_and_get(self):
+        self._clear_reading_state(BID_EPUB)
+        try:
+            progress = {"cfi": "epubcfi(/6/4!/4/2/2)", "percentage": 12.5, "device": "iPhone"}
+            body = json.dumps({"progress": progress})
+            d = self.json("/api/book/%d/progress" % BID_EPUB, method="POST", body=body)
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["progress"], progress)
+
+            d = self.json("/api/book/%d/progress" % BID_EPUB)
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["progress"], progress)
+            self.assertIsNotNone(d["update_time"])
+        finally:
+            self._clear_reading_state(BID_EPUB)
+
+    def test_progress_post_overwrites_previous(self):
+        self._clear_reading_state(BID_EPUB)
+        try:
+            body = json.dumps({"progress": {"percentage": 10}})
+            self.json("/api/book/%d/progress" % BID_EPUB, method="POST", body=body)
+
+            body = json.dumps({"progress": {"percentage": 50}})
+            d = self.json("/api/book/%d/progress" % BID_EPUB, method="POST", body=body)
+            self.assertEqual(d["err"], "ok")
+
+            d = self.json("/api/book/%d/progress" % BID_EPUB)
+            self.assertEqual(d["progress"]["percentage"], 50)
+        finally:
+            self._clear_reading_state(BID_EPUB)
+
+    def test_progress_post_invalid_payload(self):
+        body = json.dumps({"progress": "not-a-dict"})
+        d = self.json("/api/book/%d/progress" % BID_EPUB, method="POST", body=body)
+        self.assertEqual(d["err"], "params.invalid")
+
+    def test_progress_post_too_large(self):
+        body = json.dumps({"progress": {"blob": "x" * 9000}})
+        d = self.json("/api/book/%d/progress" % BID_EPUB, method="POST", body=body)
+        self.assertEqual(d["err"], "params.invalid")
+
+    def test_progress_post_nonexistent_book(self):
+        body = json.dumps({"progress": {"percentage": 1}})
+        d = self.json("/api/book/99999/progress", method="POST", body=body)
+        self.assertEqual(d["err"], "params.book.invalid")
+
+
 class TestReadingLists(TestWithUserLogin):
     def test_reading_list(self):
         d = self.json("/api/reading")

@@ -483,6 +483,8 @@ class ReadingState(Base, SQLAlchemyMixin):
     read_date = Column(DateTime)
     online_read = Column(Integer, default=0)
     download = Column(Integer, default=0)
+    progress = Column(MutableDict.as_mutable(JSONType), default={})
+    progress_update_time = Column(DateTime)
 
     reader = relationship(Reader, backref="reading_states")
 
@@ -521,6 +523,13 @@ class ReadingState(Base, SQLAlchemyMixin):
 
     def set_download(self, download_status):
         self.download = 1 if download_status else 0
+
+    def set_progress(self, progress):
+        self.progress = progress or {}
+        self.progress_update_time = datetime.datetime.now()
+
+    def get_progress(self):
+        return self.progress or {}
 
 
 class BookSourceModel(Base, SQLAlchemyMixin):

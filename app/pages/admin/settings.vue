@@ -854,7 +854,8 @@ const cards = computed(() => [
         subtitle: t('admin.settings.message.bookInfoSourcesInfo'),
         fields: [
             { icon: '', key: 'auto_fill_meta', label: t('admin.settings.label.autoFillMeta'), type: 'checkbox' },
-            { 
+            { icon: '', key: 'auto_fill_keep_cover', label: t('admin.settings.label.autoFillKeepCover'), type: 'checkbox' },
+            {
                 icon: 'mdi-source-branch',
                 key: 'META_SELECTED_SOURCES',
                 label: t('admin.settings.label.metaSelectedSource'),

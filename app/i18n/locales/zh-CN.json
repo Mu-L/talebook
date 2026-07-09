@@ -712,6 +712,7 @@
         "name": "名称",
         "link": "链接",
         "autoFillMeta": "自动从互联网拉取新书的书籍信息",
+        "autoFillKeepCover": "自动拉取书籍信息时，仅修改书籍信息",
         "metaSelectedSource": "选择启用的元数据源",
         "doubanBaseurl": "豆瓣插件 API 地址 (例如 http://10.0.0.1:8080 )",
         "doubanApiKey": "豆瓣 API Key",

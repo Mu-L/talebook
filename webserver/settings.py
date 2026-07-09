@@ -94,6 +94,7 @@ settings = {
     'douban_baseurl'    : "https://api.douban.com",
     'douban_max_count'  : 2,
     'auto_fill_meta'    : False,
+    'auto_fill_keep_cover': True,
     'META_SELECTED_SOURCES': ["douban", "baidu", "google", "amazon", "xinhua"],
     'ai_api_url'        : "https://api.openai.com/v1/chat/completions",
     'ai_api_key'        : "",

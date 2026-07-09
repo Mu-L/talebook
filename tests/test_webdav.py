@@ -52,7 +52,7 @@ class TestWebDav(TestApp):
         from webserver import loader
 
         loader.get_settings()["ENABLE_WEBDAV_SERVICE"] = True
-        rsp = self.fetch("/books/", method="PROPFIND")
+        rsp = self.fetch("/books/", method="PROPFIND", allow_nonstandard_methods=True)
         # WsgiDAV responds 401 with a WWW-Authenticate header when unauthenticated.
         self.assertEqual(rsp.code, 401)
         self.assertIn("WWW-Authenticate", rsp.headers)
@@ -68,6 +68,7 @@ class TestWebDav(TestApp):
             "/books/",
             method="PROPFIND",
             headers={"Authorization": self._auth_header(username, password)},
+            allow_nonstandard_methods=True,
         )
         # 207 Multi-Status is the WebDAV success code for PROPFIND.
         self.assertEqual(rsp.code, 207)

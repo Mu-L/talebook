@@ -702,7 +702,7 @@
                                 >
                                     <v-chip
                                         size="small"
-                                        color="indigo"
+                                        color="primary"
                                     >
                                         <v-icon
                                             size="small"
@@ -737,9 +737,9 @@
                                         :key="'author-' + author"
                                         class="ma-1"
                                         size="small"
-                                        color="indigo"
+                                        color="primary"
                                         :to="'/author/' + encodeURIComponent(author)"
-                                        variant="flat"
+                                        variant="tonal"
                                     >
                                         <v-icon start>
                                             mdi-account
@@ -749,9 +749,9 @@
                                     <v-chip
                                         class="ma-1"
                                         size="small"
-                                        color="indigo"
+                                        color="primary"
                                         :to="'/publisher/' + encodeURIComponent(book.publisher)"
-                                        variant="flat"
+                                        variant="tonal"
                                     >
                                         <v-icon start>
                                             mdi-domain
@@ -762,9 +762,9 @@
                                         v-if="book.series"
                                         class="ma-1"
                                         size="small"
-                                        color="indigo"
+                                        color="primary"
                                         :to="'/series/' + encodeURIComponent(book.series)"
-                                        variant="flat"
+                                        variant="tonal"
                                     >
                                         <v-icon start>
                                             mdi-bookshelf
@@ -775,8 +775,8 @@
                                         v-if="book.isbn"
                                         class="ma-1"
                                         size="small"
-                                        color="grey"
-                                        variant="flat"
+                                        color="primary"
+                                        variant="tonal"
                                     >
                                         <v-icon start>
                                             mdi-barcode
@@ -789,9 +789,9 @@
                                             :key="'tag-' + tag"
                                             class="ma-1"
                                             size="small"
-                                            color="grey"
+                                            color="primary"
                                             :to="'/tag/' + encodeURIComponent(tag)"
-                                            variant="flat"
+                                            variant="tonal"
                                         >
                                             <v-icon start>
                                                 mdi-tag

@@ -208,6 +208,7 @@
             v-model="sidebar"
             class="tb-theme-drawer"
             :order="2"
+            mobile-breakpoint="md"
             :rail="isLightGray && miniVariant"
             :rail-width="64"
             :width="drawerWidth"
@@ -437,6 +438,7 @@ function syncThemeBodyClasses() {
 }
 
 onMounted(() => {
+    sidebar.value = display.mdAndUp.value;
     injectThemeStyles();
     stopBodyClassWatch = watch(
         [() => props.variant, () => store.theme],
@@ -508,6 +510,9 @@ const themeCss = {
         body.tb-current-builtin-theme-light-gray.tb-current-builtin-theme-mode-light .upload-btn { background: #555c64 !important; color: #fff !important; box-shadow: 0 10px 22px rgba(85,92,100,.22) !important; }
         body.tb-current-builtin-theme-light-gray.tb-current-builtin-theme-mode-light .tb-theme-light-gray .tb-theme-appbar { background: #f7f8f8 !important; color: #2b2f33 !important; border-bottom-color: #d0d3d6; box-shadow: 0 1px 8px rgba(39,43,48,.06) !important; }
         body.tb-current-builtin-theme-light-gray.tb-current-builtin-theme-mode-light .tb-theme-light-gray .tb-theme-drawer { background: #eceeef !important; color: #34383d !important; border-right-color: #d0d3d6; }
+        body.tb-current-builtin-theme-light-gray.tb-current-builtin-theme-mode-light .tb-theme-light-gray * { scrollbar-color: #b3b8bf #eceeef; }
+        body.tb-current-builtin-theme-light-gray.tb-current-builtin-theme-mode-light .tb-theme-light-gray ::-webkit-scrollbar-thumb { background: #b3b8bf; }
+        body.tb-current-builtin-theme-light-gray.tb-current-builtin-theme-mode-light .tb-theme-light-gray ::-webkit-scrollbar-track { background: #eceeef; }
         body.tb-current-builtin-theme-light-gray.tb-current-builtin-theme-mode-light .tb-theme-light-gray .tb-theme-brand-mark { background: #555c64; color: #fff; box-shadow: none; }
         body.tb-current-builtin-theme-light-gray.tb-current-builtin-theme-mode-light .tb-theme-light-gray .tb-theme-brand-title { color: #24282d; }
         body.tb-current-builtin-theme-light-gray.tb-current-builtin-theme-mode-light .tb-theme-light-gray .tb-theme-icon,
@@ -653,6 +658,9 @@ const themeCss = {
         body.tb-current-builtin-theme-graphite.tb-current-builtin-theme-mode-light .upload-btn { background: #3f6da3 !important; color: #fff !important; box-shadow: 0 10px 22px rgba(63,109,163,.22) !important; }
         body.tb-current-builtin-theme-graphite.tb-current-builtin-theme-mode-light .tb-theme-graphite .tb-theme-appbar { background: #ffffff !important; color: #1b1f24 !important; border-bottom-color: #dde2e8; box-shadow: 0 1px 2px rgba(15,23,42,.05) !important; }
         body.tb-current-builtin-theme-graphite.tb-current-builtin-theme-mode-light .tb-theme-graphite .tb-theme-drawer { background: #f5f7f9 !important; color: #3a434d !important; border-right-color: #e2e6eb; }
+        body.tb-current-builtin-theme-graphite.tb-current-builtin-theme-mode-light .tb-theme-graphite * { scrollbar-color: #c3ccd5 #eef1f4; }
+        body.tb-current-builtin-theme-graphite.tb-current-builtin-theme-mode-light .tb-theme-graphite ::-webkit-scrollbar-thumb { background: #c3ccd5; }
+        body.tb-current-builtin-theme-graphite.tb-current-builtin-theme-mode-light .tb-theme-graphite ::-webkit-scrollbar-track { background: #eef1f4; }
         body.tb-current-builtin-theme-graphite.tb-current-builtin-theme-mode-light .tb-theme-graphite .tb-theme-brand-mark { background: #3f6da3; color: #fff; }
         body.tb-current-builtin-theme-graphite.tb-current-builtin-theme-mode-light .tb-theme-graphite .tb-theme-brand-title { color: #14181d; }
         body.tb-current-builtin-theme-graphite.tb-current-builtin-theme-mode-light .tb-theme-graphite .tb-theme-icon,
@@ -735,6 +743,9 @@ const themeCss = {
         body.tb-current-builtin-theme-brass.tb-current-builtin-theme-mode-light .upload-btn { background: #a9773a !important; color: #fff !important; box-shadow: 0 10px 22px rgba(169,119,58,.22) !important; }
         body.tb-current-builtin-theme-brass.tb-current-builtin-theme-mode-light .tb-theme-brass .tb-theme-appbar { background: #fbf9f4 !important; color: #2a251d !important; border-bottom: 1px solid rgba(169,119,58,.6); box-shadow: 0 1px 2px rgba(60,50,30,.05) !important; }
         body.tb-current-builtin-theme-brass.tb-current-builtin-theme-mode-light .tb-theme-brass .tb-theme-drawer { background: #efebe1 !important; color: #4a4436 !important; border-right-color: #e2dccc; }
+        body.tb-current-builtin-theme-brass.tb-current-builtin-theme-mode-light .tb-theme-brass * { scrollbar-color: #cdbb95 #efebe1; }
+        body.tb-current-builtin-theme-brass.tb-current-builtin-theme-mode-light .tb-theme-brass ::-webkit-scrollbar-thumb { background: #cdbb95; }
+        body.tb-current-builtin-theme-brass.tb-current-builtin-theme-mode-light .tb-theme-brass ::-webkit-scrollbar-track { background: #efebe1; }
         body.tb-current-builtin-theme-brass.tb-current-builtin-theme-mode-light .tb-theme-brass .tb-theme-brand-mark { background: transparent; color: #a9773a; border: 1px solid #a9773a; }
         body.tb-current-builtin-theme-brass.tb-current-builtin-theme-mode-light .tb-theme-brass .tb-theme-brand-title { color: #2a251d; }
         body.tb-current-builtin-theme-brass.tb-current-builtin-theme-mode-light .tb-theme-brass .tb-theme-icon,
@@ -817,6 +828,9 @@ const themeCss = {
         body.tb-current-builtin-theme-warm-red.tb-current-builtin-theme-mode-dark .upload-btn { background: #b5524a !important; color: #201d18 !important; box-shadow: 0 10px 22px rgba(181,82,74,.28) !important; }
         body.tb-current-builtin-theme-warm-red.tb-current-builtin-theme-mode-dark .tb-theme-warm-red .tb-theme-appbar { background: #262019 !important; color: #ece7dd !important; border-bottom-color: #3a342b; }
         body.tb-current-builtin-theme-warm-red.tb-current-builtin-theme-mode-dark .tb-theme-warm-red .tb-theme-drawer { background: #1c1914 !important; color: #cabfad !important; border-right-color: #33302a; }
+        body.tb-current-builtin-theme-warm-red.tb-current-builtin-theme-mode-dark .tb-theme-warm-red * { scrollbar-color: #574b3f #1c1914; }
+        body.tb-current-builtin-theme-warm-red.tb-current-builtin-theme-mode-dark .tb-theme-warm-red ::-webkit-scrollbar-thumb { background: #574b3f; }
+        body.tb-current-builtin-theme-warm-red.tb-current-builtin-theme-mode-dark .tb-theme-warm-red ::-webkit-scrollbar-track { background: #1c1914; }
         body.tb-current-builtin-theme-warm-red.tb-current-builtin-theme-mode-dark .tb-theme-warm-red .tb-theme-brand-mark { background: #b5524a; color: #201d18; }
         body.tb-current-builtin-theme-warm-red.tb-current-builtin-theme-mode-dark .tb-theme-warm-red .tb-theme-brand-title { color: #ece7dd; }
         body.tb-current-builtin-theme-warm-red.tb-current-builtin-theme-mode-dark .tb-theme-warm-red .tb-theme-icon,

@@ -316,6 +316,7 @@
             v-model="sidebar"
             class="app-navigation-drawer"
             :order="2"
+            mobile-breakpoint="md"
             width="240"
         >
             <v-list
@@ -534,7 +535,7 @@ const items = computed(() => {
 
 onMounted(() => {
     visit_admin_pages.value = route.path.indexOf('/admin/') == 0;
-    sidebar.value = display.lgAndUp.value;
+    sidebar.value = display.mdAndUp.value;
     store.bootstrap().then((rsp) => {
         err.value = rsp.err;
     });

@@ -1325,6 +1325,10 @@ class BookUpload(BookUploadBase):
         fpath = self.resolve_upload_path(name)
         if not fpath:
             return {"err": "params.filename", "msg": _("文件名不合法")}
+        upload_dir = os.path.realpath(CONF["upload_path"])
+        fpath = os.path.realpath(fpath)
+        if not fpath.startswith(upload_dir + os.sep):
+            return {"err": "params.filename", "msg": _("文件名不合法")}
         with open(fpath, "wb") as f:
             f.write(data)
         logging.debug("save upload file into [%s]", fpath)
@@ -1460,6 +1464,13 @@ class BookUploadComplete(BookUploadBase):
             shutil.rmtree(chunk_dir, ignore_errors=True)
             return {"err": "params.filename", "msg": _("文件名不合法")}
 
+        # ponytail: CodeQL 无法跨方法边界追踪净化器，此处内联 realpath+startswith 守卫
+        upload_dir = os.path.realpath(CONF["upload_path"])
+        fpath = os.path.realpath(fpath)
+        if not fpath.startswith(upload_dir + os.sep):
+            shutil.rmtree(chunk_dir, ignore_errors=True)
+            return {"err": "params.filename", "msg": _("文件名不合法")}
+
         try:
             with open(fpath, "wb") as out:
                 for i, p in enumerate(chunk_paths):
@@ -1469,9 +1480,7 @@ class BookUploadComplete(BookUploadBase):
                             raise ValueError("format mismatch")
                         out.write(chunk_data)
         except ValueError:
-            # fpath 由 resolve_upload_path 返回，已完成 basename + 白名单 fullmatch + commonpath
-            # 校验、限制在上传目录内，属受控路径。此处直接复用 fpath（不再经 name 重新拼接，
-            # 以免重新引入 get_argument 污点），realpath 规范化后再做 startswith 守卫后删除。
+            # fpath 已通过 realpath + startswith 守卫校验，属受控路径
             upload_dir = os.path.realpath(CONF["upload_path"])
             cleanup_path = os.path.realpath(fpath)
             if cleanup_path.startswith(upload_dir + os.sep):

@@ -52,6 +52,10 @@ class WebDavDomainController:
                 logging.warning(f"WebDAV auth failed: user '{username}' cannot login")
                 return False
 
+            if not user.can_save() or not user.is_active():
+                logging.warning(f"WebDAV auth failed: user '{username}' lacks download permission or is inactive")
+                return False
+
             logging.info(f"WebDAV auth success: user '{username}'")
             environ["webdav.user"] = user
             return True

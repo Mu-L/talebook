@@ -185,10 +185,11 @@ class BooksCollection(VirtualCollection):
 
     def get_dynamic_members(self):
         books = []
-        # Talebook has no per-user "sole/private" book concept, so every book
-        # is visible (unlike mybooks which skipped books marked private by
-        # other users).
+        user_id = self.provider._get_user_id_from_environ(self.environ)
+        private_ids = self.provider._get_other_private_book_ids(user_id)
         for book_id in self.book_ids:
+            if book_id in private_ids:
+                continue
             logging.info(f"Processing book ID {book_id} for collection '{self.title}'")
             try:
                 mi = self.provider.cache.get_metadata(book_id, get_cover=False, get_user_categories=False)
@@ -313,6 +314,24 @@ class MyBooksDavProvider(DAVProvider):
             return int(book_id_str)
         except (ValueError, IndexError):
             return None
+
+    def _resolve_book(self, filename, path, environ):
+        """Resolve a book filename to WebDavResource, respecting private-book access."""
+        book_id = self._parse_book_id_from_filename(filename)
+        if book_id is None:
+            return None
+
+        user_id = self._get_user_id_from_environ(environ)
+        private_ids = self._get_other_private_book_ids(user_id)
+        if book_id in private_ids:
+            return None
+
+        mi = self.cache.get_metadata(book_id, get_cover=False)
+        if not mi:
+            return None
+
+        item = self._build_book_item(book_id, mi)
+        return WebDavResource(path, environ, item, self.cache)
 
     def get_resource_inst(self, path, environ):
         original_path = path
@@ -439,16 +458,7 @@ class MyBooksDavProvider(DAVProvider):
 
         elif len(parts) == 3:
             try:
-                filename = unquote(parts[2])
-                book_id = self._parse_book_id_from_filename(filename)
-                if book_id is None:
-                    return None
-                mi = self.cache.get_metadata(book_id, get_cover=False)
-                if not mi:
-                    return None
-
-                item = self._build_book_item(book_id, mi)
-                return WebDavResource(path, environ, item, self.cache)
+                return self._resolve_book(unquote(parts[2]), path, environ)
             except Exception as e:
                 logging.error(f"Error getting book {parts[2]}: {e}")
                 return None
@@ -480,16 +490,7 @@ class MyBooksDavProvider(DAVProvider):
                 return None
         elif len(parts) == 3:
             try:
-                filename = unquote(parts[2])
-                book_id = self._parse_book_id_from_filename(filename)
-                if book_id is None:
-                    return None
-                mi = self.cache.get_metadata(book_id, get_cover=False)
-                if not mi:
-                    return None
-
-                item = self._build_book_item(book_id, mi)
-                return WebDavResource(path, environ, item, self.cache)
+                return self._resolve_book(unquote(parts[2]), path, environ)
             except Exception as e:
                 logging.error(f"Error getting book {parts[2]}: {e}")
                 return None
@@ -516,16 +517,7 @@ class MyBooksDavProvider(DAVProvider):
                 pass
         elif len(parts) == 3:
             try:
-                filename = unquote(parts[2])
-                book_id = self._parse_book_id_from_filename(filename)
-                if book_id is None:
-                    return None
-                mi = self.cache.get_metadata(book_id, get_cover=False)
-                if not mi:
-                    return None
-
-                item = self._build_book_item(book_id, mi)
-                return WebDavResource(path, environ, item, self.cache)
+                return self._resolve_book(unquote(parts[2]), path, environ)
             except Exception as e:
                 logging.error(f"Error getting book {parts[2]}: {e}")
                 return None
@@ -549,6 +541,22 @@ class MyBooksDavProvider(DAVProvider):
         except Exception as e:
             logging.error(f"Error getting user ID: {e}")
             return None
+
+    def _get_other_private_book_ids(self, user_id):
+        """Return set of book_ids that are private and owned by other users."""
+        if not self.get_session_func:
+            return set()
+        from webserver.models import Item
+
+        session = self.get_session_func()
+        try:
+            if user_id:
+                items = session.query(Item).filter(Item.scope == "private", Item.collector_id != user_id).all()
+            else:
+                items = session.query(Item).filter(Item.scope == "private").all()
+            return {item.book_id for item in items}
+        finally:
+            session.close()
 
     def _get_reading_state_books(self, environ, filter_func):
         """Return book ids matching a ReadingState predicate for the current user."""

@@ -17,7 +17,7 @@ import pytest
 pytest.importorskip("wsgidav")
 
 from tests.test_main import TestApp  # noqa: E402
-from tests.test_main import setUpModule as init
+from tests.test_main import setUpModule as init, get_db  # noqa: E402
 
 
 logger = logging.getLogger(__name__)
@@ -25,6 +25,22 @@ logger = logging.getLogger(__name__)
 
 def setUpModule():
     init()
+    # ponytail: WebDAV auth queries DB directly, mock user_id patch doesn't help;
+    # seed a real admin user so tests can authenticate via Basic Auth.
+    from datetime import datetime
+    from webserver.models import Reader
+
+    session = get_db()
+    if not session.query(Reader).filter(Reader.username == "admin").first():
+        user = Reader()
+        user.username = "admin"
+        user.name = "Admin"
+        user.email = "admin@talebook.local"
+        user.permission = "admin"
+        user.create_time = datetime.now()
+        user.set_secure_password("admin")
+        session.add(user)
+        session.commit()
 
 
 class TestWebDav(TestApp):

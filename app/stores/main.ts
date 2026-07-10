@@ -34,6 +34,11 @@ export const useMainStore = defineStore('main', () => {
     footer: '',
     footer_extra_html: '',
     friends: [],
+    upload: {
+      chunk_enabled: true,
+      chunk_threshold: 8 * 1024 * 1024,
+      chunk_size: 4 * 1024 * 1024,
+    },
   })
   const messages = ref<any[]>([])
 

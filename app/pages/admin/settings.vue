@@ -47,64 +47,66 @@
                             v-for="f in card.fields"
                             :key="f.key"
                         >
-                            <v-checkbox
-                                v-if="f.type === 'checkbox' "
-                                v-model="settings[f.key]"
-                                density="compact"
-                                hide-details
-                                :prepend-icon="f.icon"
-                                :label="f.label"
-                                color="primary"
-                            />
-                            <v-textarea
-                                v-else-if="f.type === 'textarea' "
-                                v-model="settings[f.key]"
-                                variant="outlined"
-                                :prepend-icon="f.icon"
-                                :label="f.label"
-                                rows="3"
-                            />
-                            <v-select
-                                v-else-if="f.type === 'select' "
-                                v-model="settings[f.key]"
-                                :prepend-icon="f.icon"
-                                :items="f.items"
-                                :label="f.label"
-                                hide-details
-                                class="mb-4"
-                                item-title="text"
-                                item-value="value"
-                            />
-                            <template
-                                v-else-if="f.type === 'meta_sources'"
-                            >
-                                <v-select
-                                    v-model="settings['META_SELECTED_SOURCES']"
-                                    :items="metaSourceItems"
-                                    :label="f.label"
+                            <template v-if="!f.show_when || f.show_when()">
+                                <v-checkbox
+                                    v-if="f.type === 'checkbox' "
+                                    v-model="settings[f.key]"
+                                    density="compact"
+                                    hide-details
                                     :prepend-icon="f.icon"
-                                    multiple
-                                    chips
-                                    closable-chips
+                                    :label="f.label"
+                                    color="primary"
+                                />
+                                <v-textarea
+                                    v-else-if="f.type === 'textarea' "
+                                    v-model="settings[f.key]"
+                                    variant="outlined"
+                                    :prepend-icon="f.icon"
+                                    :label="f.label"
+                                    rows="3"
+                                />
+                                <v-select
+                                    v-else-if="f.type === 'select' "
+                                    v-model="settings[f.key]"
+                                    :prepend-icon="f.icon"
+                                    :items="f.items"
+                                    :label="f.label"
+                                    hide-details
+                                    class="mb-4"
                                     item-title="text"
                                     item-value="value"
+                                />
+                                <template
+                                    v-else-if="f.type === 'meta_sources'"
                                 >
-                                </v-select>
+                                    <v-select
+                                        v-model="settings['META_SELECTED_SOURCES']"
+                                        :items="metaSourceItems"
+                                        :label="f.label"
+                                        :prepend-icon="f.icon"
+                                        multiple
+                                        chips
+                                        closable-chips
+                                        item-title="text"
+                                        item-value="value"
+                                    >
+                                    </v-select>
+                                </template>
+                                <v-text-field
+                                    v-else-if="f.type === 'number'"
+                                    v-model.number="settings[f.key]"
+                                    :prepend-icon="f.icon"
+                                    :label="f.label"
+                                    type="number"
+                                />
+                                <v-text-field
+                                    v-else
+                                    v-model="settings[f.key]"
+                                    :prepend-icon="f.icon"
+                                    :label="f.label"
+                                    type="text"
+                                />
                             </template>
-                            <v-text-field
-                                v-else-if="f.type === 'number'"
-                                v-model.number="settings[f.key]"
-                                :prepend-icon="f.icon"
-                                :label="f.label"
-                                type="number"
-                            />
-                            <v-text-field
-                                v-else
-                                v-model="settings[f.key]"
-                                :prepend-icon="f.icon"
-                                :label="f.label"
-                                type="text"
-                            />
                         </template>
                 
                         <div
@@ -941,6 +943,10 @@ const cards = computed(() => [
             },
             { icon: 'mdi-information', key: 'avatar_service', label: t('admin.settings.label.avatarService') },
             { icon: 'mdi-information', key: 'MAX_UPLOAD_SIZE', label: t('admin.settings.label.maxUploadSize') },
+            { icon: '', key: 'UPLOAD_CHUNK_ENABLED', label: t('admin.settings.label.uploadChunkEnabled'), type: 'checkbox' },
+            { icon: 'mdi-information', key: 'UPLOAD_CHUNK_THRESHOLD', label: t('admin.settings.label.uploadChunkThreshold'), show_when: () => settings.value.UPLOAD_CHUNK_ENABLED },
+            { icon: 'mdi-information', key: 'UPLOAD_CHUNK_SIZE', label: t('admin.settings.label.uploadChunkSize'), show_when: () => settings.value.UPLOAD_CHUNK_ENABLED },
+            { icon: 'mdi-information', key: 'MAX_CHUNK_COUNT', label: t('admin.settings.label.maxChunkCount'), show_when: () => settings.value.UPLOAD_CHUNK_ENABLED },
             { icon: 'mdi-lock', key: 'cookie_secret', label: t('admin.settings.label.cookieSecret') },
             { icon: 'mdi-folder', key: 'scan_upload_path', label: t('admin.settings.label.scanUploadPath') },
             { icon: 'mdi-information', key: 'push_title', label: t('admin.settings.label.pushTitle') },

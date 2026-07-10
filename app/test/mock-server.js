@@ -154,7 +154,8 @@ router.get('/api/user/info', eventHandler(() => ({
     version: '1.0.0',
     users: 5,
     friends: [],
-    allow: { register: true, download: true, push: true, read: true }
+    allow: { register: true, download: true, push: true, read: true },
+    upload: { chunk_enabled: true, chunk_threshold: 8 * 1024 * 1024, chunk_size: 4 * 1024 * 1024 }
   },
   user: {
     is_login: true,

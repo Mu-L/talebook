@@ -3,6 +3,7 @@
 
 import json
 import unittest
+import urllib.parse
 import warnings
 from unittest import mock
 from tests.test_main import TestApp, TestWithUserLogin, setUpModule as init, testdir, get_db
@@ -194,6 +195,312 @@ class TestUploadFormatSecurity(TestWithUserLogin):
         m.return_value = ("test.pdf", data)
         d = self.json("/api/book/upload", method="POST", body="k=1")
         self.assertNotEqual(d["err"], "params.format")
+
+
+class TestUploadChunk(TestWithUserLogin):
+    """分片上传（/api/book/upload/chunk + /api/book/upload/complete）测试"""
+
+    def _upload_chunk(self, upload_id, chunk_index, total_chunks, data):
+        boundary = "----TalebookChunkBoundary"
+        body = (
+            "--%s\r\n"
+            'Content-Disposition: form-data; name="chunk"; filename="chunk.bin"\r\n'
+            "Content-Type: application/octet-stream\r\n\r\n" % boundary
+        ).encode() + data + ("\r\n--%s--\r\n" % boundary).encode()
+        headers = {"Content-Type": "multipart/form-data; boundary=%s" % boundary}
+        url = "/api/book/upload/chunk?upload_id=%s&chunk_index=%s&total_chunks=%s" % (
+            urllib.parse.quote(str(upload_id), safe=""),
+            chunk_index,
+            total_chunks,
+        )
+        rsp = self.fetch(url, method="POST", body=body, headers=headers)
+        self.assertEqual(rsp.code, 200)
+        return json.loads(rsp.body)
+
+    def _complete_upload(self, upload_id, filename, total_chunks):
+        body = urllib.parse.urlencode({"upload_id": upload_id, "filename": filename, "total_chunks": total_chunks})
+        return self.json("/api/book/upload/complete", method="POST", body=body)
+
+    def test_chunk_invalid_upload_id_rejected(self):
+        d = self._upload_chunk("../../evil", 0, 1, b"data")
+        self.assertEqual(d["err"], "params.upload_id")
+
+    def test_chunk_bad_index_params_rejected(self):
+        d = self._upload_chunk("valid-id-1", "abc", 1, b"data")
+        self.assertEqual(d["err"], "params.chunk")
+
+    def test_chunk_index_out_of_range_rejected(self):
+        d = self._upload_chunk("valid-id-2", 5, 2, b"data")
+        self.assertEqual(d["err"], "params.chunk")
+
+    def test_chunk_missing_file_rejected(self):
+        headers = {"Content-Type": "multipart/form-data; boundary=empty"}
+        rsp = self.fetch(
+            "/api/book/upload/chunk?upload_id=valid-id-3&chunk_index=0&total_chunks=1",
+            method="POST",
+            body=b"--empty--\r\n",
+            headers=headers,
+        )
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "params.chunk")
+
+    def test_complete_missing_upload_rejected(self):
+        d = self._complete_upload("no-such-upload", "book.epub", 2)
+        self.assertEqual(d["err"], "params.upload_id")
+
+    def test_complete_unsupported_format_rejected(self):
+        d = self._complete_upload("some-id", "malware.exe", 1)
+        self.assertEqual(d["err"], "params.format")
+
+    def test_complete_missing_chunk_after_partial_upload(self):
+        upload_id = "partialflow"
+        d = self._upload_chunk(upload_id, 0, 2, b"AAAA")
+        self.assertEqual(d["err"], "ok")
+        d = self._complete_upload(upload_id, "partial.epub", 2)
+        self.assertEqual(d["err"], "params.chunk")
+
+    def test_complete_magic_mismatch_rejected(self):
+        upload_id = "magicmismatch"
+        d = self._upload_chunk(upload_id, 0, 1, b"NOT-A-REAL-PDF")
+        self.assertEqual(d["err"], "ok")
+        d = self._complete_upload(upload_id, "fake.pdf", 1)
+        self.assertEqual(d["err"], "params.format")
+
+    @mock.patch("webserver.handlers.base.BaseHandler.user_history")
+    @mock.patch("webserver.handlers.base.BaseHandler.add_msg")
+    @mock.patch("webserver.models.Item.save")
+    @mock.patch("calibre.db.legacy.LibraryDatabase.import_book")
+    def test_chunk_upload_full_flow(self, m_import, m_save, m_msg, m_hist):
+        warnings.simplefilter("ignore", ResourceWarning)
+        m_import.return_value = 1008610087
+        path = testdir + "/cases/new.epub"
+        with open(path, "rb") as f:
+            data = f.read()
+        mid = len(data) // 2
+        chunks = [data[:mid], data[mid:]]
+        upload_id = "flowtest1"
+        for i, chunk in enumerate(chunks):
+            d = self._upload_chunk(upload_id, i, len(chunks), chunk)
+            self.assertEqual(d["err"], "ok")
+
+        d = self._complete_upload(upload_id, "flow_new.epub", len(chunks))
+        self.assertEqual(d["err"], "ok")
+
+    def test_complete_total_chunks_exceeds_max_rejected(self):
+        """total_chunks 超出 MAX_CHUNK_COUNT 时必须在拼接分片路径前被拒绝"""
+        d = self._complete_upload("too-many-parts", "book.epub", 999999)
+        self.assertEqual(d["err"], "params.chunk")
+
+    def test_chunk_honors_configured_chunk_size(self):
+        """单分片大小上限直接采用管理员配置的 UPLOAD_CHUNK_SIZE，放行该值以内的分片"""
+        from webserver.handlers.book import CONF
+        with mock.patch.dict(CONF, {"UPLOAD_CHUNK_SIZE": "2MB"}):
+            data = b"x" * int(1.5 * 1024 * 1024)
+            d = self._upload_chunk("size-honor-ok", 0, 1, data)
+            self.assertEqual(d["err"], "ok")
+
+    def test_chunk_rejects_oversized_chunk(self):
+        """超出 UPLOAD_CHUNK_SIZE 的分片应被拒绝"""
+        from webserver.handlers.book import CONF
+        with mock.patch.dict(CONF, {"UPLOAD_CHUNK_SIZE": "2MB"}):
+            data = b"x" * int(2.5 * 1024 * 1024)
+            d = self._upload_chunk("size-honor-reject", 0, 1, data)
+            self.assertEqual(d["err"], "params.chunk")
+
+    def test_chunk_retry_existing_index_not_double_counted(self):
+        """客户端重试已写入的分片索引时，总大小校验应减去旧分片大小，
+        避免接近上限时重试被重复计入而误删整个分片目录"""
+        from webserver.handlers.book import CONF
+
+        # 限制设为单个分片大小的两倍少一点：刚好容纳一次写入，
+        # 但容纳不下“旧分片 + 新分片”被重复计入的情形
+        chunk_len = 1024
+        max_total = int(chunk_len * 1.5)
+        upload_id = "retry-index"
+        with mock.patch.dict(CONF, {"MAX_UPLOAD_SIZE": "%dB" % max_total}):
+            d = self._upload_chunk(upload_id, 0, 2, b"A" * chunk_len)
+            self.assertEqual(d["err"], "ok")
+            # 重试同一个 chunk_index（响应丢失后重发），应被减去旧分片大小后仍通过
+            d = self._upload_chunk(upload_id, 0, 2, b"B" * chunk_len)
+            self.assertEqual(d["err"], "ok")
+
+    def test_chunk_retry_different_index_still_enforces_limit(self):
+        """重试不同分片索引仍受总大小限制约束，不因修复逻辑而绕过校验"""
+        from webserver.handlers.book import CONF
+
+        chunk_len = 1024
+        max_total = int(chunk_len * 1.5)
+        upload_id = "retry-limit"
+        with mock.patch.dict(CONF, {"MAX_UPLOAD_SIZE": "%dB" % max_total}):
+            d = self._upload_chunk(upload_id, 0, 2, b"A" * chunk_len)
+            self.assertEqual(d["err"], "ok")
+            # 写入另一个不同索引的分片，新旧两份累计超过上限，应被拒绝
+            d = self._upload_chunk(upload_id, 1, 2, b"B" * chunk_len)
+            self.assertEqual(d["err"], "params.chunk")
+
+    def test_max_chunk_count_accepts_string_config_without_crashing(self):
+        """MAX_CHUNK_COUNT 经面板保存后可能是字符串（如 "10"），
+        book.py 读取时用 int() 转换，避免 total_chunks > max_chunks 比较抛 TypeError；
+        声明的总片数超过上限时，每一片都应在落盘前被拒绝（而非 500 异常）"""
+        from webserver.handlers.book import CONF
+
+        # 限制为最多 2 片（以字符串形式模拟面板保存结果）
+        with mock.patch.dict(CONF, {"MAX_CHUNK_COUNT": "2"}):
+            upload_id = "count-limit"
+            # total_chunks=3 超过上限 2，所有分片都应在首片即被拒绝，且不抛 TypeError
+            d = self._upload_chunk(upload_id, 0, 3, b"A" * 1024)
+            self.assertEqual(d["err"], "params.chunk")
+            d = self._upload_chunk(upload_id, 1, 3, b"B" * 1024)
+            self.assertEqual(d["err"], "params.chunk")
+            d = self._upload_chunk(upload_id, 2, 3, b"C" * 1024)
+            self.assertEqual(d["err"], "params.chunk")
+
+    def test_max_chunk_count_allows_within_limit(self):
+        """声明的总片数未超过上限时，分片应正常接收（验证字符串配置下未误伤合法上传）"""
+        from webserver.handlers.book import CONF
+
+        with mock.patch.dict(CONF, {"MAX_CHUNK_COUNT": "5"}):
+            upload_id = "count-ok"
+            d = self._upload_chunk(upload_id, 0, 3, b"A" * 1024)
+            self.assertEqual(d["err"], "ok")
+            d = self._upload_chunk(upload_id, 1, 3, b"B" * 1024)
+            self.assertEqual(d["err"], "ok")
+            d = self._upload_chunk(upload_id, 2, 3, b"C" * 1024)
+            self.assertEqual(d["err"], "ok")
+
+    def test_complete_rechecks_total_size_bypassing_per_chunk_check(self):
+        """并发上传绕过单次/chunk请求的总大小校验后，/complete合并前必须重新校验实际总大小"""
+        from webserver.handlers.book import CONF
+
+        upload_id = "resum-bypass"
+        with mock.patch.dict(CONF, {"MAX_UPLOAD_SIZE": "1024MB"}):
+            d = self._upload_chunk(upload_id, 0, 2, b"A" * 1024)
+            self.assertEqual(d["err"], "ok")
+            d = self._upload_chunk(upload_id, 1, 2, b"B" * 1024)
+            self.assertEqual(d["err"], "ok")
+
+        # 分片落盘时总大小限制是1024MB，此时都能通过；管理员随后把限制调小，
+        # /complete 应基于磁盘上分片的实际大小重新求和校验，而不是信任之前的请求
+        with mock.patch.dict(CONF, {"MAX_UPLOAD_SIZE": "1KB"}):
+            d = self._complete_upload(upload_id, "resum.epub", 2)
+            self.assertEqual(d["err"], "params.chunk")
+
+    @mock.patch("webserver.handlers.base.BaseHandler.user_history")
+    @mock.patch("webserver.handlers.base.BaseHandler.add_msg")
+    @mock.patch("webserver.models.Item.save")
+    @mock.patch("calibre.db.legacy.LibraryDatabase.import_book")
+    def test_complete_preserves_chunks_on_unexpected_merge_error(self, m_import, m_save, m_msg, m_hist):
+        """合并分片时出现非预期异常（如磁盘写满）时应保留分片目录，以便用户重试"""
+        import os
+        from webserver.handlers.book import CONF
+
+        upload_id = "merge-io-error"
+        path = testdir + "/cases/new.epub"
+        with open(path, "rb") as f:
+            data = f.read()
+        mid = len(data) // 2
+        d = self._upload_chunk(upload_id, 0, 2, data[:mid])
+        self.assertEqual(d["err"], "ok")
+        d = self._upload_chunk(upload_id, 1, 2, data[mid:])
+        self.assertEqual(d["err"], "ok")
+
+        chunk_dir = os.path.join(CONF["upload_path"], "chunks", "1", upload_id)
+        self.assertTrue(os.path.isdir(chunk_dir))
+
+        real_open = open
+
+        def fake_open(file, mode="r", *args, **kwargs):
+            # 仅让合并目标文件的写入失败，分片文件的读取与其它文件操作不受影响
+            if "wb" in mode and "chunks" not in str(file):
+                raise OSError("disk full")
+            return real_open(file, mode, *args, **kwargs)
+
+        body = urllib.parse.urlencode({"upload_id": upload_id, "filename": "merge_io.epub", "total_chunks": 2})
+        with mock.patch("builtins.open", side_effect=fake_open):
+            rsp = self.fetch("/api/book/upload/complete", method="POST", body=body)
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "exception")
+        self.assertTrue(os.path.isdir(chunk_dir))
+
+    def test_stale_chunk_dir_cleaned_up(self):
+        """超过TTL未完成的分片目录，应在后续分片请求时被自动清理"""
+        import os
+        import time
+        from webserver.handlers.book import CONF
+
+        d = self._upload_chunk("stale-upload", 0, 2, b"AAAA")
+        self.assertEqual(d["err"], "ok")
+        stale_dir = os.path.join(CONF["upload_path"], "chunks", "1", "stale-upload")
+        self.assertTrue(os.path.isdir(stale_dir))
+
+        old_time = time.time() - 3600
+        os.utime(stale_dir, (old_time, old_time))
+
+        with mock.patch.dict(CONF, {"UPLOAD_CHUNK_TTL_SECONDS": 1}):
+            d = self._upload_chunk("another-upload", 0, 1, b"BBBB")
+            self.assertEqual(d["err"], "ok")
+
+        self.assertFalse(os.path.exists(stale_dir))
+
+
+class TestUploadChunkToggle(TestWithUserLogin):
+    """分片上传功能开关（UPLOAD_CHUNK_ENABLED）测试"""
+
+    def setUp(self):
+        super().setUp()
+        from webserver.handlers.book import CONF
+        self.CONF = CONF
+        self._prev_enabled = CONF.get("UPLOAD_CHUNK_ENABLED", True)
+
+    def tearDown(self):
+        self.CONF["UPLOAD_CHUNK_ENABLED"] = self._prev_enabled
+        super().tearDown()
+
+    def test_chunk_upload_rejected_when_disabled(self):
+        self.CONF["UPLOAD_CHUNK_ENABLED"] = False
+        headers = {"Content-Type": "multipart/form-data; boundary=empty"}
+        rsp = self.fetch(
+            "/api/book/upload/chunk?upload_id=toggle-id&chunk_index=0&total_chunks=1",
+            method="POST",
+            body=b"--empty--\r\n",
+            headers=headers,
+        )
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "params.chunk_disabled")
+
+    def test_complete_rejected_when_disabled(self):
+        self.CONF["UPLOAD_CHUNK_ENABLED"] = False
+        body = urllib.parse.urlencode({"upload_id": "toggle-id", "filename": "book.epub", "total_chunks": 1})
+        rsp = self.fetch("/api/book/upload/complete", method="POST", body=body)
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "params.chunk_disabled")
+
+
+class TestUploadChunkGuestPermission(TestApp):
+    """默认关闭访客上传时，分片上传接口也应拒绝匿名用户"""
+
+    def test_chunk_upload_requires_login_by_default(self):
+        headers = {"Content-Type": "multipart/form-data; boundary=empty"}
+        rsp = self.fetch(
+            "/api/book/upload/chunk?upload_id=guest-id&chunk_index=0&total_chunks=1",
+            method="POST",
+            body=b"--empty--\r\n",
+            headers=headers,
+        )
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "user.need_login")
+
+    def test_complete_requires_login_by_default(self):
+        body = urllib.parse.urlencode({"upload_id": "guest-id", "filename": "book.epub", "total_chunks": 1})
+        rsp = self.fetch("/api/book/upload/complete", method="POST", body=body)
+        self.assertEqual(rsp.code, 200)
+        d = json.loads(rsp.body)
+        self.assertEqual(d["err"], "user.need_login")
 
 
 class TestCoverUploadSecurity(TestWithUserLogin):

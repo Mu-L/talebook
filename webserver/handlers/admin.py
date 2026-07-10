@@ -359,6 +359,44 @@ class AdminSettings(BaseHandler):
         if invite_mode and not invite_code:
             return {"err": "params.invite_code_required", "msg": _("访问码不能为空")}
 
+        # 验证：上传相关的大小类配置必须是合法的大小字符串（如 4MB），
+        # 否则会导致 /api/user/info 或 Tornado max_buffer_size 在解析时抛异常
+        for size_key in ("MAX_UPLOAD_SIZE", "UPLOAD_CHUNK_THRESHOLD", "UPLOAD_CHUNK_SIZE"):
+            if size_key in data:
+                try:
+                    if utils.parse_size(data[size_key]) <= 0:
+                        raise ValueError("size must be positive: %r" % data[size_key])
+                except (TypeError, ValueError):
+                    return {"err": "params.%s" % size_key.lower(), "msg": _("上传大小配置格式不合法，例如 4MB")}
+        # 最大分片数量必须是合法的正整数
+        if "MAX_CHUNK_COUNT" in data:
+            try:
+                if int(data["MAX_CHUNK_COUNT"]) <= 0:
+                    raise ValueError("chunk count must be positive")
+            except (TypeError, ValueError):
+                return {"err": "params.max_chunk_count", "msg": _("最大分片数量必须是正整数")}
+
+        # 大小关系约束：总大小上限 ≥ 分片触发阈值 ≥ 单个分片大小，
+        # 否则分片逻辑自相矛盾（如阈值小于单分片、或总大小小于阈值）
+        size_keys = ("MAX_UPLOAD_SIZE", "UPLOAD_CHUNK_THRESHOLD", "UPLOAD_CHUNK_SIZE")
+        if any(k in data for k in size_keys):
+
+            def _size(key):
+                raw = data.get(key, CONF.get(key, "0"))
+                try:
+                    return utils.parse_size(raw)
+                except (TypeError, ValueError):
+                    return 0
+
+            total = _size("MAX_UPLOAD_SIZE")
+            threshold = _size("UPLOAD_CHUNK_THRESHOLD")
+            chunk = _size("UPLOAD_CHUNK_SIZE")
+            if not (total >= threshold >= chunk):
+                return {
+                    "err": "params.upload_size_order",
+                    "msg": _("最大上传大小需不小于分片触发阈值，分片触发阈值需不小于单个分片大小"),
+                }
+
         KEYS = [
             "ALLOW_GUEST_DOWNLOAD",
             "ALLOW_GUEST_PUSH",
@@ -380,6 +418,10 @@ class AdminSettings(BaseHandler):
             "INVITE_MESSAGE",
             "INVITE_MODE",
             "MAX_UPLOAD_SIZE",
+            "UPLOAD_CHUNK_ENABLED",
+            "UPLOAD_CHUNK_THRESHOLD",
+            "UPLOAD_CHUNK_SIZE",
+            "MAX_CHUNK_COUNT",
             "RESET_MAIL_CONTENT",
             "RESET_MAIL_TITLE",
             "SIGNUP_MAIL_CONTENT",

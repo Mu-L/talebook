@@ -18,7 +18,7 @@
     <p class="doc-subtitle">把内部开发资料从 document 迁入 design，并建立清晰的归属与可追溯关系</p>
     <div class="doc-meta"><span>状态 · ACTIVE</span><span>日期 · 2026-07-13</span><span>范围 · 文档迁移</span></div>
   </header>
-  <div class="tldr"><div class="tldr-label">TL;DR</div>将 6 份日期目录中的内部方案由 Markdown 转为独立离线 HTML，并按主要代码归属迁入 <code>design/&lt;module&gt;/</code>。用户文档、开发者使用文档与书源截图继续留在 <code>document/</code>。迁移不改业务实现，也不把格式检查视为历史功能测试。</div>
+  <div class="tldr"><div class="tldr-label">TL;DR</div>将 7 组日期目录中的内部方案与设计截图转为独立离线 HTML，并按主要代码归属迁入 <code>design/&lt;module&gt;/</code>。用户文档与开发者使用文档继续留在 <code>document/</code>。迁移不改业务实现，也不把格式检查视为历史功能测试。</div>
 
   <section>
     <h2><span class="num">01</span>原始诉求</h2>
@@ -42,6 +42,7 @@
       <tbody>
         <tr><td><code>document/20260602/calibre-docker-merge.md</code></td><td><code>design/docker/20260602-calibre-docker-merge.active.html</code></td><td>基础镜像与 Docker 构建</td></tr>
         <tr><td><code>document/20260607/online_save_progress_plan.md</code></td><td><code>design/webserver/20260607-online-save-progress.active.html</code></td><td>后台任务与保存服务为主归属</td></tr>
+        <tr><td><code>document/20260609/booksource/</code></td><td><code>design/webserver/20260609-network-library-booksource.active.html</code></td><td>网络书库与书源管理设计</td></tr>
         <tr><td><code>document/20260611/legado_gap_analysis.md</code></td><td><code>design/webserver/20260611-legado-gap-analysis.active.html</code></td><td>书源解析引擎</td></tr>
         <tr><td><code>document/20260612/docker_base_image_slim.md</code></td><td><code>design/docker/20260612-docker-base-image-slim.active.html</code></td><td>基础镜像体积治理</td></tr>
         <tr><td><code>document/20260622/codex_actions.md</code></td><td><code>design/project/20260622-codex-actions.active.html</code></td><td>仓库级研发工作流</td></tr>
@@ -68,7 +69,7 @@
       <figcaption><span class="fig-num">FIG 1</span>迁移流程 · 分类先于格式转换</figcaption>
     </figure>
 
-    <div class="callout warn"><div class="callout-label">保留项</div><code>document/README.*</code>、<code>document/Development.*</code>、<code>document/screenshot.png</code> 与 <code>document/20260609/booksource/</code> 面向使用者或作为产品截图资产，本次不迁入内部设计目录。</div>
+    <div class="callout warn"><div class="callout-label">保留项</div><code>document/README.*</code>、<code>document/Development.*</code> 与 <code>document/screenshot.png</code> 面向使用者或作为产品展示资产，继续保留在对外文档目录。</div>
   </section>
 
   <section>
@@ -76,15 +77,15 @@
     <table>
       <thead><tr><th>检查</th><th>结果</th></tr></thead>
       <tbody>
-        <tr><td><code>make check-design</code></td><td>通过，8 份设计文档的路径、HTML 结构与离线资源均有效，无 WIP 文件。</td></tr>
-        <tr><td><code>python3 -m pytest tests/test_check_design_docs.py -q</code></td><td>22 项通过；仅有 2 条沙箱无法写入 <code>.pytest_cache</code> 的警告，不影响结果。</td></tr>
+        <tr><td><code>make check-design</code></td><td>通过，10 份设计文档的路径、HTML 结构与离线资源均有效，无 WIP 文件。</td></tr>
+        <tr><td><code>python3 -m pytest tests/test_check_design_docs.py -q</code></td><td>22 项通过。</td></tr>
         <tr><td><code>git diff --check</code></td><td>通过，无空白错误。</td></tr>
-        <tr><td>内容检查</td><td>6 份历史方案均包含原始诉求、目标、方案和测试结果，并包含表格或内联 SVG 图表。</td></tr>
-        <tr><td>Playwright 渲染</td><td>通过。抽查迁移总方案与最长的 Legado 兼容性分析，表格、SVG、状态颜色和长页面排版均正常。</td></tr>
-        <tr><td>迁移完整性</td><td>旧 Markdown 路径无残留引用；<code>document/</code> 只保留用户文档与截图资产。</td></tr>
+        <tr><td>内容检查</td><td>7 组历史内部资料均已转换；各实现文档包含原始诉求、目标、方案和测试结果，并使用表格、流程图或架构图。</td></tr>
+        <tr><td>Playwright 渲染</td><td>通过。审计总览桌面版、书源长文档桌面版和 Legado 移动版的表格、SVG、状态颜色、内嵌截图与长页面排版均正常。</td></tr>
+        <tr><td>迁移完整性</td><td>旧 Markdown 与书源 PNG 路径无残留；<code>document/</code> 只保留 4 份用户/开发者文档和 1 张产品截图。</td></tr>
       </tbody>
     </table>
-    <div class="callout warn"><div class="callout-label">验证边界</div>本次是文档迁移，没有重跑 6 个历史功能的业务测试。每份迁移文档均保留原有测试记录或明确标注历史测试结果缺失，未用格式检查替代功能验证。</div>
+    <div class="callout warn"><div class="callout-label">验证边界</div>本轮补跑书源规则引擎 60 项和数据模型 25 项测试；依赖 Calibre 的接口测试、前端 E2E、Docker 构建、真实书源抓取和 GitHub Actions 未执行。每份迁移文档均区分历史记录、代码核对与本轮实际测试，未用格式检查替代功能验证。</div>
   </section>
 
   <footer>迁移原则：受众决定顶层目录，主要代码所有权决定 module；历史文档状态统一为 ACTIVE。</footer>

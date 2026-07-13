@@ -9,7 +9,7 @@
 </head>
 <body><article class="doc">
   <header><div class="eyebrow">TALEBOOK · WEBSERVER DESIGN</div><h1>Legado 书源引擎兼容性差距分析</h1><p class="subtitle">以实际分页故障为入口，系统对比规则语法、URL、书源字段、工作流和 JS 扩展边界</p><div class="meta"><span>状态 · ACTIVE</span><span>原日期 · 2026-06-11</span><span>对比 · Legado 2026-05</span><span>迁移 · 2026-07-13</span></div></header>
-  <div class="tldr"><div class="label">TL;DR</div><code>m.jhsssd.com</code> 目录只得到约 25 章的根因是 <code>nextTocUrl: "option@value"</code> 的多 URL 语义不兼容：Legado 会逐个抓取全部分页 URL，Talebook 却把它们拼成一个无效 URL。P0 围绕列表分页、章节去重、索引语义和 URL 占位完成兼容；WebView、书源登录、网络类 JS 与非文本书源明确不移植。</div>
+  <div class="tldr"><div class="label">TL;DR</div><code>m.jhsssd.com</code> 目录只得到约 25 章的根因是 <code>nextTocUrl: "option@value"</code> 的多 URL 语义不兼容：Legado 会逐个抓取全部分页 URL，旧实现却把它们拼成一个无效 URL。列表分页、章节去重、索引语义和 URL 占位已经兼容；受限纯计算 <code>@js:</code> 已部分实现。目录引擎回退上限虽为 1000，但生产入口默认仍传 30，实际默认值尚未统一。</div>
   <section><h2><span class="num">01</span>原始诉求</h2><p>用户反馈某书源目录实际有 1600 余章，但 Talebook 只能读取约 25 章。需要定位直接故障，并以 Legado 2026-05 为参照，对 <code>webserver/services/booksource/</code> 的兼容性做全面盘点，给出本次实施范围与后续路线。</p></section>
   <section><h2><span class="num">02</span>目标</h2><ul><li>修复 <code>nextTocUrl</code> 与 <code>nextContentUrl</code> 的多 URL 列表语义。</li><li>按真实使用价值划分 P0、P1、P2，而不是追求对 Android 客户端的全量复刻。</li><li>明确服务端环境不能或不应承接的功能，尤其是 SSRF、登录态与浏览器内核风险。</li><li>保留可扩展接口，使纯计算 JS、规则切分和书源限速可按需继续兼容。</li></ul></section>
   <section><h2><span class="num">03</span>对比方法与根因</h2>
@@ -35,7 +35,7 @@
       <tr><td>A14</td><td><code>@put</code></td><td class="status partial">部分</td><td>仅支持整条规则形式，不支持任意位置与标准 JSON 全语义。</td></tr>
       <tr><td>A15</td><td><code>@get</code></td><td class="status ok">已支持</td><td>读取变量。</td></tr>
       <tr><td>A16</td><td>双花括号模板</td><td class="status partial">部分</td><td>变量与子规则已支持；JS 表达式和 JSON 模板不完整。</td></tr>
-      <tr><td>A17</td><td>规则级 JS 流水线</td><td class="status no">未支持</td><td>仅支持尾部单段 <code>@js:</code>，quickjs 受限执行。</td></tr>
+      <tr><td>A17</td><td>规则级 JS 流水线</td><td class="status partial">部分</td><td>支持尾部单段 <code>@js:</code> 的受限 quickjs 执行；不支持 <code>&lt;js&gt;</code> 块、双花括号 JS 与网络副作用。</td></tr>
       <tr><td>A18</td><td>HTML 实体反转义</td><td class="status partial">部分</td><td>BeautifulSoup 解析时已处理一部分。</td></tr>
       <tr><td>A19</td><td>html 提取剔除 script/style</td><td class="status no">未支持</td><td>影响较低。</td></tr>
     </tbody></table></div>
@@ -44,7 +44,7 @@
       <tr><td>B2</td><td>method / charset / headers / body</td><td class="status ok">已支持</td><td>核心请求选项。</td></tr>
       <tr><td>B3</td><td>分页占位</td><td class="status ok">本次支持</td><td><code>&lt;a,b,c&gt;</code> 按 page 选段。</td></tr>
       <tr><td>B4</td><td>retry</td><td class="status no">未支持</td><td>低成本，可后补。</td></tr>
-      <tr><td>B5</td><td>URL 后处理 JS</td><td class="status no">未支持</td><td>依赖 JS 运行时增强。</td></tr>
+      <tr><td>B5</td><td>URL 后处理 JS</td><td class="status partial">部分</td><td>支持整条 URL 规则以 <code>@js:</code> 开头并使用 baseUrl、key、page 等变量；不支持 options.js 与网络类 JS。</td></tr>
       <tr><td>B6</td><td>字节返回类型</td><td class="status no">未支持</td><td>文本书源不需要图片/字体字节流。</td></tr>
       <tr><td>B7</td><td>WebView / webJs / delay</td><td class="status no">不移植</td><td>服务端无浏览器内核。</td></tr>
       <tr><td>B8</td><td>POST 表单 / JSON / multipart</td><td class="status partial">部分</td><td>当前原样发送，多数站点可用。</td></tr>
@@ -52,7 +52,7 @@
       <tr><td>B10</td><td>书源自带 proxy</td><td class="status no">未支持</td><td>服务端代理应由全局策略管理。</td></tr>
       <tr><td>B11</td><td>按源并发率</td><td class="status no">未支持</td><td>当前只有全局超时。</td></tr>
       <tr><td>B12</td><td>CookieStore 持久化</td><td class="status partial">部分</td><td>Session 进程内保存，不落库。</td></tr>
-      <tr><td>B13</td><td>JS 生成 URL / result 引用</td><td class="status no">未支持</td><td>依赖规则级 JS。</td></tr>
+      <tr><td>B13</td><td>JS 生成 URL / result 引用</td><td class="status partial">部分</td><td>顶层 <code>@js:</code> 可生成 URL；完整流水线、<code>&lt;js&gt;</code> 和外部请求能力未支持。</td></tr>
       <tr><td>B14</td><td>data URI</td><td class="status no">未支持</td><td>主要用于图片。</td></tr>
     </tbody></table></div>
     <h3>C. 书源字段</h3><div class="table-wrap"><table><thead><tr><th>#</th><th>字段</th><th>状态</th><th>说明</th></tr></thead><tbody>
@@ -73,7 +73,7 @@
       <tr><td>D3</td><td>nextContentUrl 列表语义</td><td class="status ok">本次支持</td><td>复用 D1/D2 队列模型。</td></tr>
       <tr><td>D4</td><td>章节去重</td><td class="status ok">本次支持</td><td>保留靠后重复项，剔除页首“最新章节”块。</td></tr>
       <tr><td>D5</td><td>目录正序 / 倒序前缀</td><td class="status ok">本次支持</td><td><code>-</code> 与 <code>+</code>。</td></tr>
-      <tr><td>D6</td><td>目录页数上限</td><td class="status partial">调整</td><td>默认 30 提升到 1000，Legado 本身不设上限。</td></tr>
+      <tr><td>D6</td><td>目录页数上限</td><td class="status partial">配置错位</td><td>引擎无显式配置时回退 1000；HTTP 与保存入口仍以 30 作为配置默认值，因此生产实际默认仍是 30。</td></tr>
       <tr><td>D7</td><td>卷标与 URL 回退</td><td class="status no">未支持</td><td>影响有卷结构的保存排版。</td></tr>
       <tr><td>D8</td><td>isPay</td><td class="status no">未支持</td><td>当前只有 isVip。</td></tr>
       <tr><td>D9</td><td>formatJs</td><td class="status no">未支持</td><td>依赖 JS。</td></tr>
@@ -87,10 +87,11 @@
     <h3>E. JS 扩展</h3><div class="cards"><div class="card"><h4>纯计算类 · 可安全移植</h4><p>Base64 / hex、时间格式、URI 编码、HTML 格式化、章节数字、UUID、字节转换和简繁转换。</p></div><div class="card"><h4>网络类 · 默认不移植</h4><p>ajax、get/post/head、download、cookie 等会赋予导入书源访问服务器内网的能力，形成 SSRF。</p></div><div class="card"><h4>设备环境类 · 不移植</h4><p>WebView、浏览器、文件系统、字体反爬、toast、androidId 等属于 Android 客户端环境。</p></div></div>
   </section>
   <section><h2><span class="num">05</span>方案与长期边界</h2>
-    <h3>P0 已实施</h3><ol><li>D1/D2/D3：增加 <code>get_string_list()</code>，目录与正文改为队列翻页，兼容单链接与多链接，URL 去重防环。</li><li>D4：章节按 name 与 URL 去重，保留靠后出现项。</li><li>D5：支持 chapterList 的正序、倒序前缀。</li><li>D6：<code>BOOKSOURCE_MAX_TOC_PAGES</code> 默认从 30 提升到 1000。</li><li>A2：<code>text.XXX</code> 按自有文本筛选元素。</li><li>A5/A6/A7：支持排除、多索引、区间、步长和反向索引。</li><li>A13：支持 replaceFirst。</li><li>B3：支持 URL 分页占位。</li></ol>
+    <h3>P0 已实施</h3><ol><li>D1/D2/D3：增加 <code>get_string_list()</code>，目录与正文改为队列翻页，兼容单链接与多链接，URL 去重防环。</li><li>D4：章节按 name 与 URL 去重，保留靠后出现项。</li><li>D5：支持 chapterList 的正序、倒序前缀。</li><li>D6：引擎内部回退值已提升到 1000，但 <code>network_library.py</code> 与 <code>save_service.py</code> 的默认配置仍为 30，生产默认尚未完成统一。</li><li>A2：<code>text.XXX</code> 按自有文本筛选元素。</li><li>A5/A6/A7：支持排除、多索引、区间、步长和反向索引。</li><li>A13：支持 replaceFirst。</li><li>B3：支持 URL 分页占位。</li></ol>
     <h3>明确不移植</h3><table><thead><tr><th>项目</th><th>原因</th></tr></thead><tbody><tr><td>WebView 渲染</td><td>服务端无浏览器内核，引入 headless 浏览器的成本与攻击面不成比例。</td></tr><tr><td>书源登录</td><td>Talebook 是多用户服务端，书源级登录态属于单用户客户端模型。</td></tr><tr><td>网络类 JS</td><td>导入的书源 JSON 可在服务器内网发任意请求，构成 SSRF；未来若支持必须有 URL 白名单、禁内网、限流且默认关闭。</td></tr><tr><td>音频、图片、文件源</td><td>Talebook 网络书库定位为文本小说。</td></tr><tr><td>字体解密与付费购买</td><td>反爬军备和付费场景超出服务端书库职责。</td></tr></tbody></table>
-    <h3>后续路线</h3><p><strong>P1：</strong>A11 平衡切分、A16 纯计算 JS、E1 纯计算扩展、B4 retry、C8/D15 bookUrlPattern、C9 checkKeyWord、D7 卷标、D11 正文标题、D13 翻页停止条件。</p><p><strong>P2：</strong>A10 AllInOne 正则、A14 put 增强、B8/B9 编码细化、B11/C6 并发率、B12 cookie 落库，以及依赖 JS 运行时升级决策的 D9/D10。</p>
+    <h3>后续路线</h3><p><strong>P1：</strong>先统一 D6 的生产配置默认值，再处理 A11 平衡切分、A16 更完整的纯计算 JS、E1 纯计算扩展、B4 retry、C8/D15 bookUrlPattern、C9 checkKeyWord、D7 卷标、D11 正文标题和 D13 翻页停止条件。</p><p><strong>P2：</strong>A10 AllInOne 正则、A14 put 增强、B8/B9 编码细化、B11/C6 并发率、B12 cookie 落库，以及依赖 JS 运行时升级决策的 D9/D10。</p>
   </section>
-  <section><h2><span class="num">06</span>测试结果</h2><p>历史文档记录 P0 已于 2026-06-11 实施，但没有附具体测试命令和输出。本次迁移未重放 1600 余章书源抓取，也未重跑规则引擎测试；只验证迁移 HTML 的结构、离线资源、路径规则与 Git diff。功能层历史结论按原文保留，不补造测试结果。</p></section>
+  <section><h2><span class="num">06</span>当前实现核对</h2><table><thead><tr><th>核对项</th><th>结论</th></tr></thead><tbody><tr><td>分页、去重与顺序</td><td>引擎代码和 <code>tests/test_booksource_engine.py</code> 均覆盖多 URL、循环防护、章节去重、正倒序和可配置页数上限。</td></tr><tr><td>受限 JS</td><td><code>AnalyzeRule</code> 支持字段尾部 <code>@js:</code>；<code>AnalyzeUrl</code> 支持顶层 <code>@js:</code>。运行时限制 0.2 秒、8MB 内存，不暴露网络接口。</td></tr><tr><td>完整 Legado JS</td><td><code>&lt;js&gt;</code>、双花括号 JS、java.ajax、java.post、WebView 和设备环境仍不支持。</td></tr><tr><td>目录默认上限</td><td><code>engine.py</code> 为 1000；两个生产入口均以 30 读取配置。除非显式设置 <code>BOOKSOURCE_MAX_TOC_PAGES</code>，有效默认仍为 30。</td></tr></tbody></table></section>
+  <section><h2><span class="num">07</span>测试结果</h2><p><code>tests/test_booksource_engine.py</code> 本轮运行 60 项全部通过，覆盖受限 JS、URL 变量、多 URL 分页、去重、顺序和显式页数上限。测试没有断言两个生产入口的默认值，因此不能证明 D6 的生产默认已经统一。1600 余章真实站点抓取与外部网络兼容性未执行。</p></section>
   <footer>迁移来源：document/20260611/legado_gap_analysis.md · 对比基线为 gedoor/legado refs/pull/5804/head 完整源码树。</footer>
 </article></body></html>

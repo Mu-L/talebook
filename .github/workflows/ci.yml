@@ -11,6 +11,16 @@ on:
       - master
 
 jobs:
+  check-design:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate internal design documents
+        run: make check-design
+
   test-server:
     runs-on: ubuntu-latest
     container:
@@ -74,7 +84,7 @@ jobs:
 
   integration-test:
     runs-on: ubuntu-latest
-    needs: [test-server, test-ui]
+    needs: [check-design, test-server, test-ui]
 
     steps:
       - name: Checkout code

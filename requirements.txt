@@ -18,3 +18,6 @@ flake8
 bcrypt
 psutil
 requests-toolbelt
+
+# WebDAV service (mount the book library over WebDAV)
+WsgiDAV>=4.0.0

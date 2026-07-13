@@ -891,6 +891,19 @@ const cards = computed(() => [
         ],
     },
     {
+        key: 'webdavSettings',
+        title: t('admin.settings.section.webdavSettings'),
+        fields: [
+            { icon: 'mdi-cloud-sync', key: 'ENABLE_WEBDAV_SERVICE', label: t('admin.settings.label.webdavEnabled'), type: 'checkbox' },
+            { icon: 'mdi-cloud-upload', key: 'WEBDAV_SYNC_FOLDER', label: t('admin.settings.label.webdavSyncFolder'), type: 'checkbox' },
+        ],
+        tips: [
+            {
+                text: t('admin.settings.message.webdavInfo'),
+            }
+        ],
+    },
+    {
         key: 'captchaSettings',
         title: t('admin.settings.section.captchaSettings'),
         subtitle: t('admin.settings.message.captchaInfo'),

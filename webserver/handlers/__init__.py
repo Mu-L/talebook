@@ -4,6 +4,8 @@ import logging
 
 
 def routes():
+    from webserver.webdav import handler as webdav
+
     from . import admin, book, booksource_admin, captcha, files, meta, network_library, opds, scan, theme, user
 
     routes = []
@@ -19,5 +21,6 @@ def routes():
     routes += captcha_routes
     logging.info("CAPTCHA routes registered: %s", [r[0] for r in captcha_routes])
     routes += theme.routes()  # 必须在 files.routes() 之前，否则静态 catch-all 会拦截 /api/themes/*
+    routes += webdav.routes()  # 必须在 files.routes() 之前，否则静态 catch-all 会拦截 /books/*
     routes += files.routes()
     return routes

@@ -386,6 +386,7 @@ const navItems = computed(() => {
             { key: 'version', icon: 'mdi-history', href: '', text: t('messages.systemVersion'), count: store.sys.version },
             { key: 'users', icon: 'mdi-human', href: '', text: t('messages.userCount'), count: store.sys.users },
             { key: 'opds', icon: 'mdi-cellphone', href: '/opds-readme', text: t('messages.opdsIntroduction'), count: 'OPDS' },
+            { key: 'webdav', icon: 'mdi-cloud-sync', href: '/webdav-readme', text: t('messages.webdavIntroduction'), count: 'WebDAV' },
         );
     }
     return items;

@@ -1,0 +1,93 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>存量内部文档迁移方案</title>
+  <style>
+    :root{--paper:#f7f7f5;--paper-edge:#efefea;--ink:#1a1a1a;--ink-soft:#4a4a4a;--ink-faint:#7a7a7a;--rule:#d8d8d2;--rule-soft:#e8e8e2;--accent:#6f9bb8;--accent-soft:#d9e6f0;--accent-faint:#eef4f8;--warn:#b88a4a;--warn-soft:#f5ecdc;--danger:#a05050;--code-bg:#ececea}
+    *{box-sizing:border-box;margin:0;padding:0}html{font-size:16px}body{font-family:ui-serif,Charter,"Iowan Old Style",Georgia,"Songti SC","Source Han Serif SC",serif;background:var(--paper);color:var(--ink);line-height:1.65;padding:64px 24px 96px}.doc{max-width:900px;margin:0 auto}.doc-header{border-bottom:1px solid var(--rule);padding-bottom:28px;margin-bottom:48px}.doc-eyebrow,.doc-meta,th,code,pre,figcaption,.num,.callout-label{font-family:ui-monospace,"SF Mono",Menlo,"PingFang SC","Hiragino Sans GB",monospace}.doc-eyebrow{font-size:11px;letter-spacing:.12em;color:var(--ink-faint);margin-bottom:14px}.mascot{display:inline-block;width:8px;height:8px;background:var(--accent);margin-right:8px}.doc-title{font-size:34px;font-weight:600;line-height:1.2}.doc-subtitle{font-size:16px;color:var(--ink-soft);margin-top:10px;font-style:italic}.doc-meta{font-size:11px;color:var(--ink-faint);margin-top:18px;display:flex;gap:24px;flex-wrap:wrap}.tldr{background:var(--accent-faint);border-left:2px solid var(--accent);padding:20px 24px;margin-bottom:56px;font-size:15px}.tldr-label,.callout-label{font-size:10.5px;letter-spacing:.12em;color:var(--accent);margin-bottom:8px;font-weight:600}section{margin-bottom:56px}h2{font-size:22px;font-weight:600;margin-bottom:18px;padding-bottom:10px;border-bottom:1px solid var(--rule)}h2 .num{font-size:12px;color:var(--ink-faint);font-weight:500;margin-right:14px}h3{font-size:16px;margin:28px 0 10px}p{margin-bottom:14px}ul,ol{margin:8px 0 16px 22px}li{margin-bottom:6px}code{font-size:13px;background:var(--code-bg);padding:1px 5px;border-radius:2px}pre{font-size:12.5px;line-height:1.55;background:var(--code-bg);padding:14px 18px;margin:14px 0 18px;overflow:auto;border-left:2px solid var(--rule)}pre code{background:transparent;padding:0}table{width:100%;border-collapse:collapse;margin:14px 0 18px;font-size:14px}th,td{text-align:left;padding:10px 12px;border-bottom:1px solid var(--rule-soft);vertical-align:top}th{font-size:11px;letter-spacing:.06em;color:var(--ink-faint);border-bottom:1px solid var(--rule)}.callout{border:1px solid var(--rule);background:#fff;padding:16px 18px;margin:16px 0 20px}.callout.warn{border-color:#e6d4a8;background:var(--warn-soft)}.callout.warn .callout-label{color:var(--warn)}figure{margin:28px 0 32px;border:1px solid var(--rule);background:#fff}figure svg{display:block;width:100%;height:auto}figcaption{font-size:11px;letter-spacing:.08em;color:var(--ink-faint);padding:10px 16px;border-top:1px solid var(--rule-soft);background:var(--paper-edge)}.fig-num{color:var(--accent);margin-right:10px;font-weight:600}footer{margin-top:80px;padding-top:24px;border-top:1px solid var(--rule);font-size:12px;color:var(--ink-faint)}
+    @media(max-width:720px){body{padding:32px 16px 64px}.doc-title{font-size:26px}th,td{padding:8px 6px;font-size:12px}}
+  </style>
+</head>
+<body>
+<article class="doc">
+  <header class="doc-header">
+    <div class="doc-eyebrow"><span class="mascot"></span>TALEBOOK · PROJECT DESIGN</div>
+    <h1 class="doc-title">存量内部文档迁移方案</h1>
+    <p class="doc-subtitle">把内部开发资料从 document 迁入 design，并建立清晰的归属与可追溯关系</p>
+    <div class="doc-meta"><span>状态 · ACTIVE</span><span>日期 · 2026-07-13</span><span>范围 · 文档迁移</span></div>
+  </header>
+  <div class="tldr"><div class="tldr-label">TL;DR</div>将 6 份日期目录中的内部方案由 Markdown 转为独立离线 HTML，并按主要代码归属迁入 <code>design/&lt;module&gt;/</code>。用户文档、开发者使用文档与书源截图继续留在 <code>document/</code>。迁移不改业务实现，也不把格式检查视为历史功能测试。</div>
+
+  <section>
+    <h2><span class="num">01</span>原始诉求</h2>
+    <p><code>document/</code> 应只存放产品对外、面向使用者的文档；<code>design/</code> 存放内部开发文档。当前已有文档需要迁移，并遵循新确定的 HTML 路径、状态和内容规范。</p>
+  </section>
+
+  <section>
+    <h2><span class="num">02</span>目标</h2>
+    <ul>
+      <li><strong>边界清晰。</strong>读者从顶层目录即可判断文档受众。</li>
+      <li><strong>按归属检索。</strong>内部方案进入真实顶层模块；仓库级流程使用 <code>project</code>。</li>
+      <li><strong>历史信息不丢失。</strong>完整保留原方案中的决策、数据、风险和后续事项。</li>
+      <li><strong>结果可检查。</strong>所有迁移文件通过路径、HTML 结构、离线资源和 Git diff 检查。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2><span class="num">03</span>方案</h2>
+    <table>
+      <thead><tr><th>原路径</th><th>新路径</th><th>归属依据</th></tr></thead>
+      <tbody>
+        <tr><td><code>document/20260602/calibre-docker-merge.md</code></td><td><code>design/docker/20260602-calibre-docker-merge.active.html</code></td><td>基础镜像与 Docker 构建</td></tr>
+        <tr><td><code>document/20260607/online_save_progress_plan.md</code></td><td><code>design/webserver/20260607-online-save-progress.active.html</code></td><td>后台任务与保存服务为主归属</td></tr>
+        <tr><td><code>document/20260611/legado_gap_analysis.md</code></td><td><code>design/webserver/20260611-legado-gap-analysis.active.html</code></td><td>书源解析引擎</td></tr>
+        <tr><td><code>document/20260612/docker_base_image_slim.md</code></td><td><code>design/docker/20260612-docker-base-image-slim.active.html</code></td><td>基础镜像体积治理</td></tr>
+        <tr><td><code>document/20260622/codex_actions.md</code></td><td><code>design/project/20260622-codex-actions.active.html</code></td><td>仓库级研发工作流</td></tr>
+        <tr><td><code>document/20260629/shelf_feature.md</code></td><td><code>design/app/20260629-shelf-feature.active.html</code></td><td>书架页面与产品入口</td></tr>
+      </tbody>
+    </table>
+
+    <figure>
+      <svg width="100%" viewBox="0 0 680 300" role="img" xmlns="http://www.w3.org/2000/svg" font-family="Anthropic Sans, PingFang SC, system-ui, sans-serif">
+        <title>存量文档迁移流程</title><desc>从识别受众、判断代码归属、转换为独立 HTML，到检查后激活并删除旧文件的流程。</desc>
+        <defs><marker id="arrow-migration" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="6" markerHeight="6" orient="auto-start-reverse"><path d="M2 1L8 5L2 9" fill="none" stroke="context-stroke" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"/></marker></defs>
+        <rect width="680" height="300" fill="#fff"/>
+        <g font-size="12" text-anchor="middle">
+          <g><rect x="40" y="95" width="110" height="70" rx="8" fill="rgb(245,244,240)" stroke="rgb(180,177,168)" stroke-width="0.5"/><text x="95" y="124" fill="rgb(62,61,57)" font-weight="500">识别受众</text><text x="95" y="145" fill="rgb(115,114,108)">内部 / 对外</text></g>
+          <g><rect x="180" y="95" width="110" height="70" rx="8" fill="rgb(238,243,249)" stroke="rgb(126,154,196)" stroke-width="0.5"/><text x="235" y="124" fill="rgb(49,73,112)" font-weight="500">确定归属</text><text x="235" y="145" fill="rgb(115,114,108)">真实 module</text></g>
+          <g><rect x="320" y="95" width="110" height="70" rx="8" fill="rgb(239,246,242)" stroke="rgb(107,157,126)" stroke-width="0.5"/><text x="375" y="124" fill="rgb(47,91,64)" font-weight="500">转换 HTML</text><text x="375" y="145" fill="rgb(115,114,108)">保留原信息</text></g>
+          <g><rect x="460" y="95" width="80" height="70" rx="8" fill="rgb(250,244,232)" stroke="rgb(196,151,76)" stroke-width="0.5"/><text x="500" y="124" fill="rgb(115,78,26)" font-weight="500">检查</text><text x="500" y="145" fill="rgb(115,114,108)">结构 / 路径</text></g>
+          <g><rect x="570" y="95" width="70" height="70" rx="8" fill="rgb(244,238,248)" stroke="rgb(143,116,172)" stroke-width="0.5"/><text x="605" y="124" fill="rgb(82,57,105)" font-weight="500">激活</text><text x="605" y="145" fill="rgb(115,114,108)">删旧档</text></g>
+        </g>
+        <g fill="none" stroke="rgb(115,114,108)" stroke-width="1.5" marker-end="url(#arrow-migration)"><path d="M150 130H178"/><path d="M290 130H318"/><path d="M430 130H458"/><path d="M540 130H568"/></g>
+        <path d="M95 165V225H605V167" fill="none" stroke="rgba(31,30,29,.3)" stroke-width="1.5" stroke-dasharray="4,4" marker-end="url(#arrow-migration)"/>
+        <text x="350" y="248" font-family="Anthropic Sans, PingFang SC, system-ui, sans-serif" font-size="12" text-anchor="middle" fill="rgb(115,114,108)">检查失败则回到分类或内容转换步骤修正</text>
+      </svg>
+      <figcaption><span class="fig-num">FIG 1</span>迁移流程 · 分类先于格式转换</figcaption>
+    </figure>
+
+    <div class="callout warn"><div class="callout-label">保留项</div><code>document/README.*</code>、<code>document/Development.*</code>、<code>document/screenshot.png</code> 与 <code>document/20260609/booksource/</code> 面向使用者或作为产品截图资产，本次不迁入内部设计目录。</div>
+  </section>
+
+  <section>
+    <h2><span class="num">04</span>测试结果</h2>
+    <table>
+      <thead><tr><th>检查</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td><code>make check-design</code></td><td>通过，8 份设计文档的路径、HTML 结构与离线资源均有效，无 WIP 文件。</td></tr>
+        <tr><td><code>python3 -m pytest tests/test_check_design_docs.py -q</code></td><td>22 项通过；仅有 2 条沙箱无法写入 <code>.pytest_cache</code> 的警告，不影响结果。</td></tr>
+        <tr><td><code>git diff --check</code></td><td>通过，无空白错误。</td></tr>
+        <tr><td>内容检查</td><td>6 份历史方案均包含原始诉求、目标、方案和测试结果，并包含表格或内联 SVG 图表。</td></tr>
+        <tr><td>Playwright 渲染</td><td>通过。抽查迁移总方案与最长的 Legado 兼容性分析，表格、SVG、状态颜色和长页面排版均正常。</td></tr>
+        <tr><td>迁移完整性</td><td>旧 Markdown 路径无残留引用；<code>document/</code> 只保留用户文档与截图资产。</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn"><div class="callout-label">验证边界</div>本次是文档迁移，没有重跑 6 个历史功能的业务测试。每份迁移文档均保留原有测试记录或明确标注历史测试结果缺失，未用格式检查替代功能验证。</div>
+  </section>
+
+  <footer>迁移原则：受众决定顶层目录，主要代码所有权决定 module；历史文档状态统一为 ACTIVE。</footer>
+</article>
+</body>
+</html>

@@ -1,4 +1,4 @@
-.PHONY: all build push test build-base push-base
+.PHONY: all build push test build-base push-base check-design
 
 VER := $(shell git branch --show-current | tr '/' '-')
 IMAGE := talebook/talebook:$(VER)
@@ -65,6 +65,9 @@ lint-py-fix:
 check-i18n:
 	uv run check_i18n_translation_missing.py
 	uv run check_i18n_translation_useless.py
+
+check-design:
+	python3 scripts/check_design_docs.py
 
 pytest:
 	pytest tests -v --cov=webserver --cov-report=term-missing

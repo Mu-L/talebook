@@ -31,13 +31,18 @@ jobs:
       build_args: ${{ steps.prep.outputs.build_args }}
       safe_ref_name: ${{ steps.prep.outputs.safe_ref_name }}
     steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
       - name: Prepare build args and safe ref name
         id: prep
         run: |
           if [[ $GITHUB_REF == refs/tags/* ]]; then
             VERSION=${GITHUB_REF#refs/tags/}
           else
-            VERSION=${GITHUB_SHA::8}
+            VERSION=$(git describe --tags --always --match 'v[0-9]*')
           fi
           SAFE_REF_NAME=${GITHUB_REF_NAME//\//-}
           echo "build_args=GIT_VERSION=$VERSION" >> $GITHUB_OUTPUT

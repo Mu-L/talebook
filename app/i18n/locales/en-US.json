@@ -679,6 +679,12 @@
         "updateCheck": "Check for Updates",
         "databaseManagement": "Database Management"
       },
+      "group": {
+        "site": "Site",
+        "access": "Access & Users",
+        "services": "Services & Integrations",
+        "system": "System"
+      },
       "button": {
         "saveSettings": "Save Settings",
         "testEmail": "Test Email",
@@ -691,6 +697,7 @@
         "forceMigrateDb": "Force Migrate"
       },
       "label": {
+        "navSection": "Section",
         "siteTitle": "Site Title",
         "siteAnnouncement": "Site Announcement",
         "siteFooter": "Site Footer",

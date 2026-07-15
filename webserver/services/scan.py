@@ -186,8 +186,12 @@ class ScanService(AsyncService):
                 mi.authors = [utils.super_strip(s) for s in mi.authors]
 
                 # 非结构化的格式，calibre无法识别准确的信息，直接从文件名提取
+                # 作者也需要强制置为“佚名”，与do_import()保持一致，
+                # 否则本步骤的查重会用文件原始（不可靠）的作者信息比对，
+                # 与实际入库时使用的“佚名”作者不一致，导致已入库文件永远无法被判定为重复
                 if fmt in ["txt", "pdf"]:
                     mi.title = os.path.splitext(fname)[0]
+                    mi.authors = [_("佚名")]
 
                 row.title = mi.title
                 # 使用mi.authors列表而不是mi.author_sort，避免作者信息丢失

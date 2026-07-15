@@ -33,6 +33,14 @@ class TestUpdateCheckerVersionCompare(unittest.TestCase):
         self.assertFalse(update_checker._compare_versions("26.06.29", "v26.06.28"))
         self.assertFalse(update_checker._compare_versions("26.06.29", "26.06.29"))
 
+    def test_compare_versions_handles_git_describe_dev_version(self):
+        # 非 tag 构建使用 git describe 格式：最近 tag + 距离 + 短 hash。
+        dev = "v26.07.13-5-g5295717"
+        # 更新的 release 应被识别为“有更新”。
+        self.assertTrue(update_checker._compare_versions(dev, "v26.07.20"))
+        # 领先于 release 的开发版不应误报“有更新”。
+        self.assertFalse(update_checker._compare_versions(dev, "v26.07.13"))
+
 
 class TestUpdateChecker(unittest.TestCase):
     def setUp(self):

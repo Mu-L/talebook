@@ -1,6 +1,7 @@
 .PHONY: all build push test build-base push-base check-design
 
 VER := $(shell git branch --show-current | tr '/' '-')
+GIT_VER := $(shell git describe --tags --always --match 'v[0-9]*' 2>/dev/null || git rev-parse --short HEAD)
 IMAGE := talebook/talebook:$(VER)
 REPO1 := talebook/talebook:latest
 REPO2 := talebook/calibre-webserver:latest
@@ -29,11 +30,11 @@ push-base:
 	docker buildx build -f Dockerfile.base --build-arg BUILD_COUNTRY=CN --platform $(BASE_PLATFORMS) -t $(BASE):latest -t $(BASE):$(BASE_VER) --push .
 
 build-spa:
-	docker build --no-cache=false --build-arg BUILD_COUNTRY=CN --build-arg GIT_VERSION=$(VER) \
+	docker build --no-cache=false --build-arg BUILD_COUNTRY=CN --build-arg GIT_VERSION=$(GIT_VER) \
 		-f Dockerfile -t $(IMAGE) -t $(REPO1) --target production -t $(REPO2) .
 
 build-ssr:
-	docker build --no-cache=false --build-arg BUILD_COUNTRY=CN --build-arg GIT_VERSION=$(VER) \
+	docker build --no-cache=false --build-arg BUILD_COUNTRY=CN --build-arg GIT_VERSION=$(GIT_VER) \
 		-f Dockerfile -t $(TAG1) -t $(TAG2) --target production-ssr .
 
 build-dev:

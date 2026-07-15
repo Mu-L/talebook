@@ -96,7 +96,7 @@ def check_syncdb():
 
 
 def check_migrate():
-    cmd = ["gosu", "%s:%s" % (RUN_USER, RUN_USER), os.path.join(SERVER_DIR, "webserver", "migrate_db.py")]
+    cmd = ["gosu", "%s:%s" % (RUN_USER, RUN_USER), "python3", os.path.join(SERVER_DIR, "webserver", "migrate_db.py")]
     return (True, None) if run(cmd) else (False, "migrate_failed")
 
 

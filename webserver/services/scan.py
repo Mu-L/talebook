@@ -222,9 +222,11 @@ class ScanService(AsyncService):
                             break
 
                 # 如果是同名不同作者，不标记为已存在，允许导入
-            if row.status == ScanFile.EXIST:
-                continue
+            # 无论是否已存在（EXIST），都必须先落库，否则book_id/status变更会在
+            # 会话关闭时被回滚，导致扫描列表仍显示为可导入
             if not self.save_or_rollback(row):
+                continue
+            if row.status == ScanFile.EXIST:
                 continue
 
     @AsyncService.register_service

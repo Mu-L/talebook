@@ -42,12 +42,14 @@
             </template>
 
             <v-app-bar-nav-icon @click.stop="sidebar = !sidebar" />
-            <v-toolbar-title
-                class="ml-2 mr-4 align-center"
-                style="cursor: pointer"
-                @click="router.push('/')"
-            >
-                {{ store.sys.title }}
+            <v-toolbar-title class="ml-2 mr-4 align-center">
+                <span
+                    class="site-title"
+                    style="cursor: pointer"
+                    @click="router.push('/')"
+                >
+                    {{ store.sys.title }}
+                </span>
             </v-toolbar-title>
 
             <template v-if="display.smAndUp.value">

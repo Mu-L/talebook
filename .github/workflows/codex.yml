@@ -47,7 +47,7 @@ jobs:
       )
     runs-on: ubuntu-latest
     env:
-      CODEX_VERSION: "0.144.0"
+      CODEX_VERSION: "0.144.4"
     steps:
       - id: context
         name: Resolve request context

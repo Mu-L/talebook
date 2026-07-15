@@ -578,10 +578,13 @@ function toggleTheme() {
 </script>
 
 <style scoped>
+.v-app-bar :deep(.v-toolbar__content) {
+    position: relative;
+}
 .search-wrapper {
-    flex: 0 1 600px;
-    margin-left: auto;
-    margin-right: 12px;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     width: 40vw;
     max-width: 600px;
     min-width: 250px;

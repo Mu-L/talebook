@@ -709,6 +709,12 @@
         "updateCheck": "检查更新",
         "databaseManagement": "数据库管理"
       },
+      "group": {
+        "site": "站点",
+        "access": "访问与用户",
+        "services": "服务与集成",
+        "system": "系统"
+      },
       "button": {
         "saveSettings": "保存配置",
         "testEmail": "测试邮件",
@@ -721,6 +727,7 @@
         "forceMigrateDb": "强制迁移"
       },
       "label": {
+        "navSection": "配置分类",
         "siteTitle": "网站标题",
         "siteAnnouncement": "网站公告",
         "siteFooter": "网站脚注",

@@ -223,6 +223,27 @@ router.post('/api/admin/testmail', eventHandler(() => ({
   msg: 'Test email sent'
 })));
 
+router.get('/api/admin/trash/size', eventHandler(() => ({
+  err: 'ok',
+  sizes: { trash: 0, upload: 0 },
+  trash_path: '/tmp/trash',
+  upload_path: '/tmp/upload'
+})));
+
+router.get('/api/admin/update', eventHandler(() => ({
+  err: 'ok',
+  status: {
+    current_version: 'mock-1.0.0',
+    latest_version: '',
+    has_update: false,
+    latest_release_url: '',
+    latest_release_name: '',
+    latest_release_body: '',
+    check_error: null,
+    last_check_time: null
+  }
+})));
+
 // Admin Users - Use app.use to handle query params
 app.use('/api/admin/users', eventHandler((event) => {
   if (event.method === 'GET') {

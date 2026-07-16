@@ -378,6 +378,47 @@ class TestScanPDFTitle(TestWithUserLogin):
             self.session.commit()
 
 
+class TestScanMetadataParseFailure(TestWithUserLogin):
+    """元数据解析失败时，do_scan()应与do_import()的兜底逻辑保持一致（PR #861 review反馈）
+
+    do_import()解析失败时用文件名+“佚名”构造兜底metadata并照常查重；
+    do_scan()此前解析失败会直接用"Unknown"作者跳过查重，导致已入库、
+    但物理文件解析失败的书籍重扫时仍被判定为可导入。
+    """
+
+    def setUp(self):
+        self.session = self.get_app().settings["ScopedSession"]
+        self.session.rollback()
+        return super().setUp()
+
+    @mock.patch("calibre.db.legacy.LibraryDatabase.get_data_as_dict")
+    @mock.patch("calibre.db.legacy.LibraryDatabase.books_with_same_title")
+    @mock.patch("calibre.ebooks.metadata.meta.get_metadata")
+    def test_parse_failure_scan_marks_existing_book_as_exist(self, mock_get_metadata, mock_same_title, mock_get_data):
+        mock_get_metadata.side_effect = Exception("failed to parse PDF metadata")
+
+        mock_same_title.return_value = {1}
+        mock_get_data.return_value = [{"id": 1, "authors": ["佚名"], "available_formats": "PDF"}]
+
+        with tempfile.TemporaryDirectory() as tmpdir:
+            pdf_path = os.path.join(tmpdir, "broken_but_imported.pdf")
+            with open(pdf_path, "wb") as f:
+                f.write(b"%PDF-1.4 minimal pdf")
+
+            ScanService().do_scan(tmpdir)
+
+            self.session.rollback()
+            row = self.session.query(ScanFile).filter(ScanFile.path == pdf_path).first()
+            self.assertIsNotNone(row, "应当创建ScanFile记录")
+            self.assertEqual(row.status, ScanFile.EXIST, "解析失败但已入库的文件重新扫描应标记为EXIST")
+            self.assertEqual(row.book_id, 1)
+            self.assertEqual(row.title, "broken_but_imported")
+            self.assertEqual(row.author, "佚名")
+
+            self.session.delete(row)
+            self.session.commit()
+
+
 class TestScanDuplicateDetection(TestWithUserLogin):
     """已入库的PDF/TXT再次扫描应被识别为重复（issue #855）
 

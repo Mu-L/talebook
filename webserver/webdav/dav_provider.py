@@ -543,14 +543,17 @@ class MyBooksDavProvider(DAVProvider):
             return None
 
     def _get_other_private_book_ids(self, user_id):
-        """Return set of book_ids that are private and owned by other users."""
+        """Return private book ids invisible to the current WebDAV user."""
         if not self.get_session_func:
             return set()
-        from webserver.models import Item
+        from webserver.models import Item, Reader
 
         session = self.get_session_func()
         try:
             if user_id:
+                user = session.get(Reader, user_id)
+                if user and user.is_admin():
+                    return set()
                 items = session.query(Item).filter(Item.scope == "private", Item.collector_id != user_id).all()
             else:
                 items = session.query(Item).filter(Item.scope == "private").all()

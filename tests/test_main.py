@@ -3,6 +3,7 @@
 
 import asyncio
 import base64
+import contextlib
 import json
 import logging
 import os
@@ -103,6 +104,43 @@ def Q(s):
     if not isinstance(s, str):
         s = str(s)
     return urllib.parse.quote(s.encode("UTF-8"))
+
+
+@contextlib.contextmanager
+def temporary_static_host(host):
+    original_static_host = main.CONF["static_host"]
+    main.CONF["static_host"] = host
+    try:
+        yield
+    finally:
+        main.CONF["static_host"] = original_static_host
+
+
+@contextlib.contextmanager
+def temporary_book_scope(book_id, scope, collector_id=1):
+    session = get_db()
+    item = session.query(models.Item).filter(models.Item.book_id == book_id).first()
+    created = item is None
+    if created:
+        item = models.Item(book_id=book_id)
+        session.add(item)
+    original_scope = item.scope
+    original_collector_id = item.collector_id
+    item.scope = scope
+    item.collector_id = collector_id
+    session.commit()
+
+    try:
+        yield
+    finally:
+        session = get_db()
+        item = session.query(models.Item).filter(models.Item.book_id == book_id).first()
+        if created:
+            session.delete(item)
+        else:
+            item.scope = original_scope
+            item.collector_id = original_collector_id
+        session.commit()
 
 
 class FakeHandler(BaseHandler):
@@ -984,93 +1022,122 @@ class TestInviteMode(TestApp):
 class TestBookDetailScope(TestApp):
     """私有书籍详情页访问权限测试"""
 
-    def _set_book_scope(self, book_id, scope, collector_id=1):
-        from webserver.models import Item
-
-        session = get_db()
-        item = session.query(Item).filter(Item.book_id == book_id).first()
-        if item is None:
-            item = Item()
-            item.book_id = book_id
-            session.add(item)
-        item.scope = scope
-        item.collector_id = collector_id
-        session.commit()
-
-    def _clear_book_scope(self, book_id):
-        from webserver.models import Item
-
-        session = get_db()
-        item = session.query(Item).filter(Item.book_id == book_id).first()
-        if item:
-            item.scope = "public"
-            session.commit()
-
     def test_guest_cannot_access_private_book(self):
-        self._set_book_scope(BID_EPUB, "private", collector_id=1)
-        try:
+        with temporary_book_scope(BID_EPUB, "private", collector_id=1):
             d = self.json("/api/book/%d" % BID_EPUB)
-            self.assertNotEqual(d["err"], "ok")
-        finally:
-            self._clear_book_scope(BID_EPUB)
+            self.assertEqual(d["err"], "book.not_found")
 
     def test_owner_can_access_private_book(self):
-        self._set_book_scope(BID_EPUB, "private", collector_id=1)
-        try:
+        with temporary_book_scope(BID_EPUB, "private", collector_id=1):
             with mock.patch.object(BaseHandler, "user_id", return_value=1):
                 d = self.json("/api/book/%d" % BID_EPUB)
                 self.assertEqual(d["err"], "ok")
-        finally:
-            self._clear_book_scope(BID_EPUB)
 
     def test_other_user_cannot_access_private_book(self):
-        self._set_book_scope(BID_EPUB, "private", collector_id=1)
-        try:
+        with temporary_book_scope(BID_EPUB, "private", collector_id=1):
             with mock.patch.object(BaseHandler, "user_id", return_value=2):
                 d = self.json("/api/book/%d" % BID_EPUB)
-                self.assertNotEqual(d["err"], "ok")
-        finally:
-            self._clear_book_scope(BID_EPUB)
+                self.assertEqual(d["err"], "book.not_found")
+
+    def test_admin_can_access_private_book_owned_by_other_user(self):
+        with temporary_book_scope(BID_EPUB, "private", collector_id=2):
+            with mock.patch.object(BaseHandler, "user_id", return_value=1):
+                d = self.json("/api/book/%d" % BID_EPUB)
+                self.assertEqual(d["err"], "ok")
+
+    def test_private_book_resources_use_authenticated_origin_when_static_host_is_set(self):
+        with temporary_book_scope(BID_EPUB, "private", collector_id=2):
+            with temporary_static_host("cdn.example"):
+                with mock.patch.object(BaseHandler, "user_id", return_value=1):
+                    d = self.json(
+                        "/api/book/%d" % BID_EPUB,
+                        headers={"X-Forwarded-Host": "books.example"},
+                    )
+            self.assertEqual(urllib.parse.urlsplit(d["book"]["img"]).netloc, "books.example")
+            self.assertEqual(urllib.parse.urlsplit(d["book"]["thumb"]).netloc, "books.example")
+            self.assertTrue(d["book"]["files"])
+            for item in d["book"]["files"]:
+                self.assertEqual(urllib.parse.urlsplit(item["href"]).netloc, "books.example")
+
+    def test_public_book_resources_keep_using_static_host(self):
+        with temporary_book_scope(BID_EPUB, "public", collector_id=1):
+            with temporary_static_host("cdn.example"):
+                d = self.json(
+                    "/api/book/%d" % BID_EPUB,
+                    headers={"X-Forwarded-Host": "books.example"},
+                )
+            self.assertEqual(urllib.parse.urlsplit(d["book"]["img"]).netloc, "cdn.example")
+            self.assertEqual(urllib.parse.urlsplit(d["book"]["thumb"]).netloc, "cdn.example")
+            self.assertTrue(d["book"]["files"])
+            for item in d["book"]["files"]:
+                self.assertEqual(urllib.parse.urlsplit(item["href"]).netloc, "cdn.example")
 
     def test_guest_can_access_public_book(self):
-        self._set_book_scope(BID_EPUB, "public", collector_id=1)
-        try:
+        with temporary_book_scope(BID_EPUB, "public", collector_id=1):
             d = self.json("/api/book/%d" % BID_EPUB)
             self.assertEqual(d["err"], "ok")
-        finally:
-            self._clear_book_scope(BID_EPUB)
 
     def test_library_hides_private_book_from_guest(self):
-        self._set_book_scope(BID_EPUB, "private", collector_id=1)
-        try:
+        with temporary_book_scope(BID_EPUB, "private", collector_id=1):
             d = self.json("/api/library")
             self.assertEqual(d["err"], "ok")
             ids = [b["id"] for b in d["books"]]
             self.assertNotIn(BID_EPUB, ids)
-        finally:
-            self._clear_book_scope(BID_EPUB)
 
     def test_library_shows_private_book_to_owner(self):
-        self._set_book_scope(BID_EPUB, "private", collector_id=1)
-        try:
+        with temporary_book_scope(BID_EPUB, "private", collector_id=1):
             with mock.patch.object(BaseHandler, "user_id", return_value=1):
                 d = self.json("/api/library")
                 self.assertEqual(d["err"], "ok")
                 ids = [b["id"] for b in d["books"]]
                 self.assertIn(BID_EPUB, ids)
-        finally:
-            self._clear_book_scope(BID_EPUB)
 
     def test_library_hides_private_book_from_other_user(self):
-        self._set_book_scope(BID_EPUB, "private", collector_id=1)
-        try:
+        with temporary_book_scope(BID_EPUB, "private", collector_id=1):
             with mock.patch.object(BaseHandler, "user_id", return_value=2):
                 d = self.json("/api/library")
                 self.assertEqual(d["err"], "ok")
                 ids = [b["id"] for b in d["books"]]
                 self.assertNotIn(BID_EPUB, ids)
-        finally:
-            self._clear_book_scope(BID_EPUB)
+
+    def test_admin_search_shows_private_book_owned_by_other_user(self):
+        with temporary_book_scope(BID_EPUB, "private", collector_id=2):
+            with mock.patch.object(BaseHandler, "user_id", return_value=1):
+                d = self.json("/api/search?name=A")
+                self.assertEqual(d["err"], "ok")
+                ids = [book["id"] for book in d["books"]]
+                self.assertIn(BID_EPUB, ids)
+
+    def test_other_user_cannot_download_private_book_by_direct_url(self):
+        with temporary_book_scope(BID_EPUB, "private", collector_id=1):
+            with mock.patch.object(BaseHandler, "user_id", return_value=2):
+                rsp = self.fetch("/api/book/%d.epub" % BID_EPUB)
+                self.assertEqual(rsp.code, 404)
+
+    def test_admin_can_download_private_book_owned_by_other_user(self):
+        with temporary_book_scope(BID_EPUB, "private", collector_id=2):
+            with mock.patch.object(BaseHandler, "user_id", return_value=1):
+                rsp = self.fetch("/api/book/%d.epub" % BID_EPUB)
+                self.assertEqual(rsp.code, 200)
+                self.assertGreater(len(rsp.body), 0)
+                self.assertNotEqual(rsp.headers.get("Content-Type"), "application/json; charset=UTF-8")
+
+    def test_other_user_cannot_read_private_book_by_direct_url(self):
+        with temporary_book_scope(BID_EPUB, "private", collector_id=1):
+            with mock.patch.object(BaseHandler, "user_id", return_value=2):
+                rsp = self.fetch("/read/%d" % BID_EPUB)
+                self.assertEqual(rsp.code, 404)
+
+    def test_other_user_cannot_read_private_epub_content_by_direct_url(self):
+        with temporary_book_scope(BID_EPUB, "private", collector_id=1):
+            with mock.patch.object(BaseHandler, "user_id", return_value=2):
+                rsp = self.fetch("/get/extract/%d/content.opf" % BID_EPUB)
+                self.assertEqual(rsp.code, 404)
+
+    def test_guest_cannot_get_private_book_cover_by_direct_url(self):
+        with temporary_book_scope(BID_EPUB, "private", collector_id=1):
+            rsp = self.fetch("/get/cover/%d.jpg" % BID_EPUB)
+            self.assertEqual(rsp.code, 404)
 
 
 def setUpModule():

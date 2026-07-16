@@ -56,12 +56,17 @@ def get_title_sort(title):
         return title
 
 
+def _book_resource_url(book, cdn_url, api_url):
+    """私藏资源需要携带应用域名的认证 Cookie，公开资源可继续使用 CDN。"""
+    return api_url if book.get("scope") == "private" else cdn_url
+
+
 class SimpleBookFormatter:
     """格式化calibre book的字段"""
 
-    def __init__(self, calibre_book_item, cdn_url):
-        self.cdn_url = cdn_url
+    def __init__(self, calibre_book_item, cdn_url, api_url):
         self.book = calibre_book_item
+        self.resource_url = _book_resource_url(calibre_book_item, cdn_url, api_url)
 
     def get_collector(self):
         collector = self.book.get("collector", None)
@@ -98,8 +103,8 @@ class SimpleBookFormatter:
             "series": self.val("series", None),
             "language": self.val("language", None),
             "isbn": self.val("isbn", None),
-            "img": self.cdn_url + "/get/cover/%(id)s.jpg?t=%(ts)s" % b,
-            "thumb": self.cdn_url + "/get/thumb_60x80/%(id)s.jpg?t=%(ts)s" % b,
+            "img": self.resource_url + "/get/cover/%(id)s.jpg?t=%(ts)s" % b,
+            "thumb": self.resource_url + "/get/thumb_60x80/%(id)s.jpg?t=%(ts)s" % b,
             # 额外填充的字段
             "collector": self.get_collector(),
             "count_visit": self.val("count_visit", 0),
@@ -118,6 +123,7 @@ class BookFormatter:
     def get_files(self):
         files = []
         book_id = self.book["id"]
+        resource_url = _book_resource_url(self.book, self.cdn_url, self.api_url)
         for fmt in self.book.get("available_formats", []):
             try:
                 filesize = self.db.sizeof_format(book_id, fmt, index_is_id=True)
@@ -126,7 +132,7 @@ class BookFormatter:
             item = {
                 "format": fmt,
                 "size": filesize,
-                "href": self.cdn_url + "/api/book/%s.%s" % (book_id, fmt),
+                "href": resource_url + "/api/book/%s.%s" % (book_id, fmt),
             }
             files.append(item)
         return files
@@ -141,7 +147,7 @@ class BookFormatter:
         }
 
     def format(self, with_files=False, with_perms=False):
-        f = SimpleBookFormatter(self.book, self.cdn_url)
+        f = SimpleBookFormatter(self.book, self.cdn_url, self.api_url)
         data = f.format()
         data.update(
             {

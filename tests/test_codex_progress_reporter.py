@@ -26,7 +26,7 @@ def test_plan_is_rendered_without_markdown_injection_or_mentions():
                 "id": "plan-1",
                 "type": "todo_list",
                 "items": [
-                    {"text": "Inspect @maintainer and [unsafe](https://example.com)", "completed": True},
+                    {"text": "Inspect @maintainer and [unsafe](destination)", "completed": True},
                     {"text": "Implement `<script>` safely", "completed": False},
                     {"text": "Run tests", "completed": False},
                 ],
@@ -40,7 +40,7 @@ def test_plan_is_rendered_without_markdown_injection_or_mentions():
     assert "### 执行计划" in body
     assert "- [x] Inspect @\u200bmaintainer" in body
     assert "\\[unsafe\\]" in body
-    assert "https://example.com" in body
+    assert "destination" in body
     assert "&lt;script&gt;" in body
     assert "🔄 Implement" in body
 

@@ -20,7 +20,7 @@
     .subtitle { max-width:780px; color:var(--muted); font-size:18px; }
     .meta { display:flex; flex-wrap:wrap; gap:9px; margin-top:20px; font-size:12px; }
     .tag { padding:5px 9px; border:1px solid var(--line); border-radius:999px; background:var(--panel); }
-    .active { color:var(--green); border-color:#a8c6b2; background:var(--green-soft); }
+    .superseded { color:var(--amber); border-color:#d7b77f; background:var(--amber-soft); }
     .summary,.callout { margin:24px 0; padding:18px 20px; border:1px solid var(--line); background:var(--panel); }
     .summary { border-left:4px solid var(--blue); background:var(--blue-soft); }
     .good { border-color:#a8c6b2; background:var(--green-soft); }
@@ -42,7 +42,7 @@
     <h1>Codex 实时进度评论</h1>
     <p class="subtitle">把 Codex 的中文计划与阶段进度持续暴露给发起者，同时维持单评论、低噪声和凭据隔离。</p>
     <div class="meta">
-      <span class="tag active">状态 · ACTIVE</span>
+      <span class="tag superseded">状态 · SUPERSEDED</span>
       <span class="tag">创建日期 · 2026-07-16</span>
       <span class="tag">所属模块 · project</span>
       <span class="tag">需求来源 · PR #870 后续反馈</span>
@@ -136,7 +136,7 @@
     </table>
   </section>
 
-  <footer>替代：design/project/20260716-codex-digital-employee-review-fixes.superseded.html 。本方案继承既有安全与发布门禁，并新增中文实时进度评论。</footer>
+  <footer>历史上替代：design/project/20260716-codex-digital-employee-review-fixes.superseded.html 。后续由 design/project/20260716-codex-review-hardening.active.html 替代，以修复 sandbox、PR 上下文、受信任资源版本和 CI 问题。</footer>
 </main>
 </body>
 </html>

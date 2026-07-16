@@ -1,0 +1,283 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex 数字员工工作流方案</title>
+  <style>
+    :root {
+      --paper: #f6f5f1;
+      --panel: #fffef9;
+      --ink: #20211f;
+      --muted: #666861;
+      --line: #d8d8cf;
+      --blue: #305f75;
+      --blue-soft: #e7f0f4;
+      --green: #32624a;
+      --green-soft: #e8f2eb;
+      --amber: #8a6026;
+      --amber-soft: #f6eddb;
+      --red: #8a4038;
+      --red-soft: #f7e9e5;
+      --code: #ecece6;
+    }
+    * { box-sizing: border-box; }
+    body {
+      margin: 0;
+      padding: 56px 22px 88px;
+      color: var(--ink);
+      background: var(--paper);
+      font: 16px/1.68 ui-serif, Charter, Georgia, "Songti SC", "Noto Serif CJK SC", serif;
+    }
+    main { max-width: 980px; margin: 0 auto; }
+    header { padding-bottom: 28px; border-bottom: 1px solid var(--line); }
+    .eyebrow, .meta, .tag, code, pre, th, figcaption {
+      font-family: ui-monospace, SFMono-Regular, Menlo, "PingFang SC", monospace;
+    }
+    .eyebrow { color: var(--blue); font-size: 11px; letter-spacing: .14em; }
+    h1 { margin: 14px 0 8px; font-size: clamp(30px, 5vw, 46px); line-height: 1.12; }
+    .subtitle { max-width: 760px; margin: 0; color: var(--muted); font-size: 18px; }
+    .meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; font-size: 12px; }
+    .tag { padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
+    .tag.active { color: var(--green); border-color: #a8c6b2; background: var(--green-soft); }
+    .summary {
+      margin: 34px 0 48px;
+      padding: 22px 24px;
+      border-left: 4px solid var(--blue);
+      background: var(--blue-soft);
+    }
+    section { margin: 48px 0; }
+    h2 { margin: 0 0 18px; padding-bottom: 9px; border-bottom: 1px solid var(--line); font-size: 24px; }
+    h3 { margin: 28px 0 10px; font-size: 18px; }
+    p { margin: 0 0 14px; }
+    ul, ol { margin: 10px 0 18px; padding-left: 24px; }
+    li { margin: 7px 0; }
+    code { padding: 1px 5px; border-radius: 3px; background: var(--code); font-size: .86em; }
+    pre { overflow: auto; padding: 16px 18px; border: 1px solid var(--line); background: var(--code); font-size: 13px; }
+    pre code { padding: 0; background: transparent; }
+    table { width: 100%; margin: 18px 0; border-collapse: collapse; font-size: 14px; }
+    th, td { padding: 11px 12px; border-bottom: 1px solid var(--line); text-align: left; vertical-align: top; }
+    th { color: var(--muted); font-size: 11px; letter-spacing: .04em; }
+    .callout { margin: 20px 0; padding: 16px 18px; border: 1px solid var(--line); background: var(--panel); }
+    .callout strong { display: block; margin-bottom: 5px; }
+    .callout.warn { border-color: #dfc38d; background: var(--amber-soft); }
+    .callout.danger { border-color: #dfaca3; background: var(--red-soft); }
+    .callout.good { border-color: #a8c6b2; background: var(--green-soft); }
+    figure { margin: 24px 0; border: 1px solid var(--line); background: #fff; }
+    figure svg { display: block; width: 100%; height: auto; }
+    figcaption { padding: 10px 14px; border-top: 1px solid var(--line); color: var(--muted); background: #f0f0eb; font-size: 11px; }
+    .steps { counter-reset: step; display: grid; gap: 12px; }
+    .step { position: relative; padding: 15px 16px 15px 54px; border: 1px solid var(--line); background: var(--panel); }
+    .step::before {
+      counter-increment: step;
+      content: counter(step, decimal-leading-zero);
+      position: absolute;
+      top: 15px;
+      left: 16px;
+      color: var(--blue);
+      font: 12px/1 ui-monospace, Menlo, monospace;
+    }
+    footer { margin-top: 62px; padding-top: 18px; border-top: 1px solid var(--line); color: var(--muted); font-size: 12px; }
+    @media (max-width: 720px) {
+      body { padding: 30px 14px 60px; }
+      .subtitle { font-size: 16px; }
+      table { display: block; overflow-x: auto; white-space: nowrap; }
+      th, td { min-width: 150px; }
+      .summary { padding: 18px; }
+    }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">TALEBOOK · PROJECT DESIGN</div>
+    <h1>Codex 数字员工工作流</h1>
+    <p class="subtitle">将评论触发的 patch-only 助手升级为可联网、可验证、可向当前 PR 或 issue 工作分支提交代码的仓库数字员工。</p>
+    <div class="meta">
+      <span class="tag active">状态 · ACTIVE</span>
+      <span class="tag">创建日期 · 2026-07-16</span>
+      <span class="tag">所属模块 · project</span>
+      <span class="tag">需求来源 · 维护者对话</span>
+      <span class="tag">影响范围 · GitHub Actions / Codex prompt / tests</span>
+    </div>
+  </header>
+
+  <div class="summary">
+    <strong>结论摘要</strong>
+    <p>停用官方 <code>chatgpt-codex-connector</code> 后，仓库内 <code>.github/workflows/codex.yml</code> 成为唯一入口。Codex 在 20 分钟上限内获得公共出站网络、本机测试回环地址和目标分支工作区，但 permission profile 默认拒绝读取工作区外文件，因此无法读取 runner 临时目录中的登录文件、GitHub 发布令牌或仓库 Secrets；发布由后置受控步骤使用专用 GitHub App 短期 token 完成。成功任务直接推送，失败任务评论原因并保留 patch artifact。</p>
+  </div>
+
+  <section>
+    <h2>01 · 原始诉求与现状</h2>
+    <p>维护者希望在 issue 或 PR 中评论 <code>@codex</code> 后，机器人像数字员工一样完成修改、联网查询或安装依赖、执行验证，并把代码真正更新到对应分支。现有实现固定 checkout <code>master</code>、关闭 agent 网络、隐藏 Git 凭据，并且只上传 diff artifact，因此无法满足交付闭环。</p>
+    <p>此前官方 Connector 与仓库自建 Actions 同时监听 <code>@codex</code>，造成重复回复；官方回复中的本地 commit 也没有实际移动远端 PR head。本次以自建 Actions 为唯一自动化实现，官方 Connector 的卸载属于仓库外管理操作。</p>
+  </section>
+
+  <section>
+    <h2>02 · 目标与非目标</h2>
+    <table>
+      <thead><tr><th>类别</th><th>内容</th></tr></thead>
+      <tbody>
+        <tr><td>目标</td><td>同仓库 PR 直接追加一个可追溯提交；普通 issue 创建或复用长期 Codex 分支及 Draft PR。</td></tr>
+        <tr><td>目标</td><td>允许 agent 使用完整出站网络完成文档查询、依赖安装和测试，同时隔离发布 token 与 Secrets。</td></tr>
+        <tr><td>目标</td><td>用权限校验、串行队列、fast-forward、发布门禁和 20 分钟超时限制自动化风险。</td></tr>
+        <tr><td>非目标</td><td>不向 fork PR 推送，不允许 force-push，不允许 agent 修改 <code>.github/workflows/</code>。</td></tr>
+        <tr><td>非目标</td><td>不让 Codex 自行调用带写权限的 <code>gh</code>，不自动合并 PR，不自动无限重试。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>03 · 核心架构与信任边界</h2>
+    <figure>
+      <svg viewBox="0 0 920 540" role="img" xmlns="http://www.w3.org/2000/svg">
+        <title>Codex 数字员工的执行与发布边界</title>
+        <desc>维护者评论经过双重权限校验后进入目标分支，Codex 可联网修改和测试但拿不到发布令牌，发布门禁通过后由独立步骤生成 GitHub App token 并 fast-forward 推送。</desc>
+        <defs>
+          <marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto-start-reverse"><path d="M1 1L9 5L1 9" fill="none" stroke="#62645e" stroke-width="1.5"/></marker>
+        </defs>
+        <rect width="920" height="540" fill="#fff"/>
+        <g font-family="ui-monospace, Menlo, PingFang SC, monospace" font-size="13">
+          <rect x="45" y="45" width="190" height="76" rx="9" fill="#e7f0f4" stroke="#86a9b9"/>
+          <text x="65" y="76" fill="#305f75" font-weight="700">评论触发</text><text x="65" y="100" fill="#666861">@codex / /codex</text>
+          <rect x="365" y="45" width="190" height="76" rx="9" fill="#f6eddb" stroke="#c8a56b"/>
+          <text x="385" y="76" fill="#8a6026" font-weight="700">双重授权</text><text x="385" y="100" fill="#666861">association + API 权限</text>
+          <rect x="685" y="45" width="190" height="76" rx="9" fill="#e8f2eb" stroke="#8eb39c"/>
+          <text x="705" y="76" fill="#32624a" font-weight="700">目标工作区</text><text x="705" y="100" fill="#666861">PR head / issue branch</text>
+          <rect x="90" y="210" width="270" height="112" rx="9" fill="#eef0ec" stroke="#aeb0a8"/>
+          <text x="112" y="244" fill="#20211f" font-weight="700">Codex agent</text>
+          <text x="112" y="270" fill="#666861">workspace-only · 公共网络开启</text>
+          <text x="112" y="296" fill="#8a4038">无 GitHub token / 无 Secrets</text>
+          <rect x="560" y="210" width="270" height="112" rx="9" fill="#f6eddb" stroke="#c8a56b"/>
+          <text x="582" y="244" fill="#8a6026" font-weight="700">发布门禁</text>
+          <text x="582" y="270" fill="#666861">result.json / tests / no WIP</text>
+          <text x="582" y="296" fill="#666861">no workflows / diff-check</text>
+          <rect x="325" y="414" width="270" height="82" rx="9" fill="#e8f2eb" stroke="#8eb39c"/>
+          <text x="347" y="447" fill="#32624a" font-weight="700">受控发布步骤</text>
+          <text x="347" y="473" fill="#666861">App 短期 token · commit · FF push</text>
+        </g>
+        <g fill="none" stroke="#62645e" stroke-width="1.6" marker-end="url(#arrow)">
+          <path d="M235 83H363"/><path d="M555 83H683"/><path d="M780 121V168H225V208"/>
+          <path d="M360 266H558"/><path d="M695 322V370H460V412"/>
+        </g>
+        <path d="M225 322V370H460" fill="none" stroke="#8a4038" stroke-width="1.4" stroke-dasharray="6 5"/>
+        <text x="250" y="359" fill="#8a4038" font-family="ui-monospace, Menlo, monospace" font-size="11">令牌只在 agent 结束后创建</text>
+      </svg>
+      <figcaption>FIG 1 · agent 的联网能力与仓库发布能力分离；GitHub App token 不进入 Codex 进程。</figcaption>
+    </figure>
+
+    <h3>GitHub App 配置</h3>
+    <table>
+      <thead><tr><th>配置</th><th>值</th><th>说明</th></tr></thead>
+      <tbody>
+        <tr><td>Secret</td><td><code>CODEX_APP_CLIENT_ID</code></td><td>GitHub App Client ID；本仓库统一按 Secret 配置，v3 action 使用该输入。</td></tr>
+        <tr><td>Secret</td><td><code>CODEX_APP_PRIVATE_KEY</code></td><td>完整 PEM 私钥，仅传给 token 生成 action。</td></tr>
+        <tr><td>Secret</td><td><code>CODEX_AUTH_JSON</code></td><td>现有 Codex 登录态，继续放在 runner 临时目录；agent 权限配置禁止读取该目录。</td></tr>
+        <tr><td>权限</td><td>Contents / Issues / Pull requests：write</td><td>App 仅安装到 <code>talebook/talebook</code>；不授予 Workflows write。</td></tr>
+        <tr><td>Webhook</td><td>关闭</td><td>无需服务器、Callback URL 或 Setup URL。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>04 · 触发、分支与生命周期</h2>
+    <table>
+      <thead><tr><th>上下文</th><th>检出与交付</th><th>异常处理</th></tr></thead>
+      <tbody>
+        <tr><td>同仓库 PR</td><td>按 API 返回的 head SHA 检出 PR head；成功后向原 head ref fast-forward push。</td><td>head 在运行中移动或 push 非 fast-forward 时停止并评论；不 rebase、不强推。</td></tr>
+        <tr><td>fork PR</td><td>不运行可写任务，不跨仓库推送。</td><td>直接评论说明不支持自动更新 fork 分支。</td></tr>
+        <tr><td>普通 issue，首次</td><td>从默认分支开始；由 Codex 生成英文 kebab-case feature，发布到 <code>codex/issue-&lt;id&gt;-&lt;feature&gt;</code> 并创建 Draft PR。</td><td>feature 必须通过严格格式校验；否则不发布。</td></tr>
+        <tr><td>普通 issue，后续</td><td>查找唯一的 <code>codex/issue-&lt;id&gt;-*</code> 远端分支并继续提交到已有 Draft PR。</td><td>零个匹配视为首次；多个匹配、历史 PR 已关闭但分支仍存在时要求人工处理。</td></tr>
+      </tbody>
+    </table>
+    <p>同一 PR 或 issue 使用 concurrency group 串行排队，<code>cancel-in-progress: false</code>；不同编号可以并行。Bot 评论不会再次触发任务。若首次运行已推送 issue 分支、但 Draft PR 创建失败，下一次调用在结构化契约有效且没有新 diff 时会补建缺失的 Draft PR；补建失败仍以失败状态结束。</p>
+  </section>
+
+  <section>
+    <h2>05 · Agent 输出契约与发布门禁</h2>
+    <p>Prompt 要求 Codex 在普通最终回复之外写入工作区根目录的 <code>.codex-result.json</code>。workflow 通过 <code>.git/info/exclude</code> 排除该运行产物，并将文件视为不可信输出，只接受固定字段、类型、长度和枚举值。结果文件不放入 <code>.codex/</code>，因为内置 workspace profile 会保护该目录为只读。</p>
+    <pre><code>{
+  "ready_to_publish": true,
+  "feature": "sidebar-submenu-indent",
+  "commit_message": "fix(app): 调整二级菜单缩进",
+  "summary": "已将管理二级菜单缩进调整为 36px。",
+  "tests": [
+    {"command": "cd app &amp;&amp; npm test -- AppHeader", "result": "passed"}
+  ]
+}</code></pre>
+    <table>
+      <thead><tr><th>门禁</th><th>规则</th></tr></thead>
+      <tbody>
+        <tr><td>执行状态</td><td><code>codex exec</code> 必须成功，且 <code>ready_to_publish</code> 必须为 true。</td></tr>
+        <tr><td>测试与方案</td><td>相关测试通过或合理记录未执行原因；仓库内不存在 <code>.wip.html</code>。</td></tr>
+        <tr><td>保护路径</td><td>变更集中不得出现 <code>.github/workflows/</code>。</td></tr>
+        <tr><td>Git 完整性</td><td>必须有真实文件变化，<code>git diff --check</code> 通过；忽略 <code>.codex/tmp</code> 运行产物。</td></tr>
+        <tr><td>发布动作</td><td>每次调用最多一个 Conventional Commit；Bot 为 author/committer；只执行 fast-forward push。</td></tr>
+      </tbody>
+    </table>
+    <div class="callout warn"><strong>失败交付</strong>任何门禁失败、超时或冲突都不推送。workflow 回复清晰原因，并把当前修改保存为 7 天 patch artifact，便于维护者恢复；成功路径不上传 patch。</div>
+  </section>
+
+  <section>
+    <h2>06 · 网络、超时与命令边界</h2>
+    <ul>
+      <li>使用 Codex 0.144.4 permission profile：继承 <code>:workspace</code>，再以 <code>:root = deny</code> 默认拒绝读取整个宿主文件系统，仅给 <code>:minimal</code> 运行时 read，并给 <code>:workspace_roots</code> write；其中 <code>.github/workflows</code> 额外降为 read-only，发布门禁再做二次检查。</li>
+      <li>拒绝 <code>:tmpdir</code> 和 <code>:slash_tmp</code>；为工具设置工作区内的专用 TMPDIR。由 workflow 写入 runner 临时目录的 <code>CODEX_HOME</code>、认证文件和请求上下文不可被 agent shell 读取。</li>
+      <li>显式启用 Codex network proxy；permission profile 开启网络并允许公共域名全局规则，同时显式保持 <code>allow_local_binding = false</code>，仅额外允许字面量 <code>localhost</code> 与 <code>127.0.0.1</code> 供本机渲染和服务测试使用；不开放 Docker 等 Unix socket，也不放开其他私网地址。</li>
+      <li><code>GITHUB_TOKEN</code>、<code>GH_TOKEN</code>、<code>CODEX_AUTH_JSON</code>、<code>CODEX_HOME</code> 和常见 token/secret/key 环境变量继续从 agent shell 排除。</li>
+      <li>依赖安装必须写入工作区；需要 Docker socket 或宿主机额外写目录的测试记录为未执行并说明原因。</li>
+      <li>job 的 <code>timeout-minutes</code> 为 20，<code>codex exec</code> 子进程限制为 15 分钟，为失败评论、恢复 patch 和发布收尾预留时间；超时不提交、不重试。</li>
+      <li>验证过程中启动的临时服务应在任务结束前关闭，不把长期进程作为交付结果。</li>
+    </ul>
+    <div class="callout danger"><strong>接受的风险</strong>公共出站网络意味着仓库内容和测试数据可能被任务命令发送到外部服务。通过仅允许 write/maintain/admin 触发、默认拒绝工作区外读取、不给 agent 任何 GitHub 写 token 或 Secrets、拒绝 fork PR、限制 20 分钟来降低风险，但无法把联网任务视为零外泄环境。</div>
+  </section>
+
+  <section>
+    <h2>07 · 实施步骤</h2>
+    <div class="steps">
+      <div class="step">扩展上下文解析：记录 issue 标题、默认分支、head ref/SHA、同仓库判定和 issue 分支匹配状态。</div>
+      <div class="step">按 PR head 或 issue 分支检出，继续关闭 checkout 凭据持久化；fork PR 在 agent 前短路。</div>
+      <div class="step">开启 agent 网络，更新 prompt 和结构化结果契约，保持 Secrets 与 GitHub token 隔离。</div>
+      <div class="step">实现门禁校验、保护路径检查、失败 artifact、GitHub App 短期 token、单提交和 fast-forward push。</div>
+      <div class="step">普通 issue 首次成功后创建 Draft PR；所有上下文回写包含提交 SHA、分支、PR 和实际测试结果的评论。</div>
+      <div class="step">新增 workflow 静态回归测试，完成本地校验后激活本方案，并将旧 Codex Actions 方案标记 SUPERSEDED。</div>
+    </div>
+  </section>
+
+  <section>
+    <h2>08 · 发布、停用官方 Connector 与回滚</h2>
+    <ol>
+      <li>先合并 workflow、prompt、测试和本方案；配置并安装仓库专用 GitHub App。</li>
+      <li>用测试 issue 验证分支创建、Draft PR、CI 触发和评论；再用同仓库测试 PR 验证追加提交。</li>
+      <li>确认自建流程可用后，在 OpenAI/Codex GitHub 集成或 GitHub Installed Apps 中停用官方 <code>chatgpt-codex-connector</code>，避免双回复。</li>
+      <li>回滚时禁用 <code>Codex</code> workflow 或撤销 GitHub App 安装；删除/轮换 App 私钥即可立即切断发布能力。</li>
+      <li>若要恢复 patch-only 行为，需以新 WIP 方案替代本方案，不直接改写 ACTIVE 核心决策。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>09 · 测试结果</h2>
+    <div class="callout good"><strong>状态：本地验证通过</strong>实现、结构化契约和静态语义检查均已完成。真实 GitHub App、分支推送、Draft PR 与后续 CI 仍需在合并并配置仓库变量/Secrets 后做冒烟验证。</div>
+    <table>
+      <thead><tr><th>命令或状态</th><th>验证内容</th><th>实际结果</th></tr></thead>
+      <tbody>
+        <tr><td><code>python3 -m pytest tests/test_codex_workflow.py tests/test_check_design_docs.py -q</code></td><td>触发授权、目标 ref、permission profile、网络与 secret 隔离、门禁、App token、FF push、Draft PR 恢复路径与设计检查器回归。</td><td>PASS，34 passed</td></tr>
+        <tr><td><code>ruff check tests/test_codex_workflow.py --no-cache</code><br><code>ruff format --check tests/test_codex_workflow.py</code></td><td>新增 Python 契约测试的静态检查与格式。</td><td>PASS</td></tr>
+        <tr><td><code>go run ... actionlint@latest -ignore '&lt;v3 client-id metadata false positive&gt;' .github/workflows/codex.yml</code></td><td>GitHub Actions 表达式、action 输入和 shell 语义；仅忽略 actionlint 1.7.12 尚未同步 v3 <code>client-id</code> 的两条元数据误报。</td><td>PASS；官方 v3 <code>action.yml</code> 已交叉确认 <code>client-id</code> 受支持且为推荐项</td></tr>
+        <tr><td><code>codex exec --strict-config --oss --local-provider ollama ...</code></td><td>Codex 0.144.4 对 permission profile、网络代理、私网保护和只读 workflow 路径配置的严格解析。</td><td>配置解析通过；随后因本机未运行 Ollama 按预期停止，未发起模型任务</td></tr>
+        <tr><td><code>jq -e &lt;publish-contract-filter&gt;</code></td><td>结构化结果契约正反样例。</td><td>PASS；合法样例返回 true，非法 feature/提交信息/失败测试组合返回 false</td></tr>
+        <tr><td><code>make check-design</code></td><td>方案路径、状态、HTML 结构、单文件资源与 WIP 门禁。</td><td>PASS</td></tr>
+        <tr><td><code>python3 -c 'import yaml; ...'</code><br><code>git diff --check</code></td><td>YAML 基本解析、补丁空白与格式完整性。</td><td>PASS</td></tr>
+        <tr><td>真实 GitHub Actions：普通 issue</td><td>App token、分支创建、Draft PR 与后续 CI。</td><td>需合并并配置 Secrets 后验证</td></tr>
+        <tr><td>真实 GitHub Actions：同仓库 PR</td><td>追加提交、并发队列、head 移动冲突和 FF push。</td><td>需合并并配置 Secrets 后验证</td></tr>
+        <tr><td>官方 Connector 停用</td><td>同一评论只产生一个 Bot 回复。</td><td>仓库外人工操作，待切换验证</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>
+    替代：design/project/20260622-codex-actions.superseded.html 。旧 patch-only 方案已由本方案取代。
+  </footer>
+</main>
+</body>
+</html>

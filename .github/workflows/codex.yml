@@ -9,13 +9,17 @@ on:
     types: [submitted]
 
 permissions:
-  contents: write
+  contents: read
   issues: write
   pull-requests: write
 
 jobs:
   codex:
     name: Respond to maintainer request
+    timeout-minutes: 20
+    concurrency:
+      group: codex-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     if: |
       github.actor != 'github-actions[bot]' &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association) &&
@@ -61,27 +65,34 @@ jobs:
             const payload = context.payload;
             const runnerTemp = process.env.RUNNER_TEMP;
             const codexHome = `${runnerTemp}/codex-home`;
-            const codexPrDiff = `${runnerTemp}/codex-pr.diff`;
-            const codexPrFilesJson = `${runnerTemp}/codex-pr-files.json`;
+            const codexPromptTemplate = `${runnerTemp}/codex-comment-response.md`;
             const codexRequestJson = `${runnerTemp}/codex-request.json`;
 
             core.exportVariable("CODEX_HOME", codexHome);
-            core.exportVariable("CODEX_PR_DIFF", codexPrDiff);
-            core.exportVariable("CODEX_PR_FILES_JSON", codexPrFilesJson);
+            core.exportVariable("CODEX_PROMPT_TEMPLATE", codexPromptTemplate);
             core.exportVariable("CODEX_REQUEST_JSON", codexRequestJson);
 
             let body = "";
             let actor = context.actor;
             let issueNumber = "";
+            let issueTitle = "";
             let pr = null;
             let requestKind = eventName;
             let triggerIssueCommentId = "";
             let triggerReviewCommentId = "";
+            let supportedTarget = false;
+            let blockReason = "";
+            let targetRef = "";
+            let targetSha = "";
+            let existingIssueBranch = "";
+            let existingIssuePrNumber = "";
+            const defaultBranch = payload.repository.default_branch;
 
             if (eventName === "issue_comment") {
               body = payload.comment.body || "";
               actor = payload.comment.user.login;
               issueNumber = String(payload.issue.number);
+              issueTitle = payload.issue.title || "";
               requestKind = payload.issue.pull_request ? "pull_request_comment" : "issue_comment";
               triggerIssueCommentId = String(payload.comment.id);
 
@@ -104,6 +115,7 @@ jobs:
               });
               pr = result.data;
               issueNumber = String(pr.number);
+              issueTitle = pr.title || "";
               requestKind = "pull_request_review_comment";
             } else if (eventName === "pull_request_review") {
               body = payload.review.body || "";
@@ -115,6 +127,7 @@ jobs:
               });
               pr = result.data;
               issueNumber = String(pr.number);
+              issueTitle = pr.title || "";
               requestKind = "pull_request_review";
             }
 
@@ -134,6 +147,23 @@ jobs:
 
             if (!authorized) {
               core.warning(`Skipping Codex request from ${actor}; repository permission is ${permission}.`);
+            }
+
+            if (authorized) {
+              const promptResult = await github.rest.repos.getContent({
+                owner,
+                repo,
+                path: ".github/codex/prompts/comment-response.md",
+                ref: defaultBranch,
+              });
+              if (Array.isArray(promptResult.data) || !promptResult.data.content) {
+                throw new Error("Trusted Codex prompt is missing from the default branch.");
+              }
+              fs.writeFileSync(
+                codexPromptTemplate,
+                Buffer.from(promptResult.data.content, "base64"),
+                { mode: 0o600 },
+              );
             }
 
             if (authorized) {
@@ -165,38 +195,56 @@ jobs:
             }
 
             if (authorized && pr) {
-              const files = await github.paginate(github.rest.pulls.listFiles, {
+              if (pr.head.repo.full_name !== `${owner}/${repo}`) {
+                blockReason = "Fork pull requests cannot be updated automatically by this workflow.";
+              } else if (pr.state !== "open") {
+                blockReason = "The pull request is no longer open.";
+              } else {
+                supportedTarget = true;
+                targetRef = pr.head.ref;
+                targetSha = pr.head.sha;
+              }
+            } else if (authorized && requestKind === "issue_comment") {
+              const refPrefix = `heads/codex/issue-${issueNumber}-`;
+              const refs = await github.paginate(github.rest.git.listMatchingRefs, {
                 owner,
                 repo,
-                pull_number: pr.number,
+                ref: refPrefix,
                 per_page: 100,
               });
-              fs.writeFileSync(
-                codexPrFilesJson,
-                `${JSON.stringify(files.map((file) => ({
-                  filename: file.filename,
-                  status: file.status,
-                  additions: file.additions,
-                  deletions: file.deletions,
-                  changes: file.changes,
-                  patch: file.patch || null,
-                })), null, 2)}\n`,
-                { mode: 0o600 },
-              );
 
-              const diff = await github.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
-                owner,
-                repo,
-                pull_number: pr.number,
-                headers: {
-                  accept: "application/vnd.github.v3.diff",
-                },
-              });
-              fs.writeFileSync(
-                codexPrDiff,
-                typeof diff.data === "string" ? diff.data : JSON.stringify(diff.data, null, 2),
-                { mode: 0o600 },
-              );
+              if (refs.length > 1) {
+                blockReason = `Multiple Codex branches already exist for issue #${issueNumber}; resolve them before retrying.`;
+              } else if (refs.length === 1) {
+                existingIssueBranch = refs[0].ref.replace(/^refs\/heads\//, "");
+                const pulls = await github.paginate(github.rest.pulls.list, {
+                  owner,
+                  repo,
+                  state: "all",
+                  head: `${owner}:${existingIssueBranch}`,
+                  per_page: 100,
+                });
+                const closedPull = pulls.find((pull) => pull.state !== "open");
+                const openPull = pulls.find((pull) => pull.state === "open");
+
+                if (closedPull) {
+                  blockReason = `Branch ${existingIssueBranch} belongs to a closed or merged pull request; remove or rename it before retrying.`;
+                } else {
+                  supportedTarget = true;
+                  targetRef = existingIssueBranch;
+                  targetSha = refs[0].object.sha;
+                  existingIssuePrNumber = openPull ? String(openPull.number) : "";
+                }
+              } else {
+                const branch = await github.rest.repos.getBranch({
+                  owner,
+                  repo,
+                  branch: defaultBranch,
+                });
+                supportedTarget = true;
+                targetRef = defaultBranch;
+                targetSha = branch.data.commit.sha;
+              }
             }
 
             const request = {
@@ -206,7 +254,17 @@ jobs:
               actor,
               actorPermission: permission,
               issueNumber,
+              issueTitle,
               body,
+              target: {
+                supported: supportedTarget,
+                blockReason,
+                defaultBranch,
+                ref: targetRef,
+                sha: targetSha,
+                existingIssueBranch,
+                existingIssuePrNumber,
+              },
               pullRequest: pr ? {
                 number: pr.number,
                 title: pr.title,
@@ -232,24 +290,44 @@ jobs:
             core.setOutput("pr_number", pr ? String(pr.number) : "");
             core.setOutput("base_ref", pr ? pr.base.ref : "");
             core.setOutput("same_repository", pr && pr.head.repo.full_name === `${owner}/${repo}` ? "true" : "false");
+            core.setOutput("supported_target", supportedTarget ? "true" : "false");
+            core.setOutput("block_reason", blockReason);
+            core.setOutput("target_ref", targetRef);
+            core.setOutput("target_sha", targetSha);
+            core.setOutput("existing_issue_branch", existingIssueBranch);
+            core.setOutput("existing_issue_pr_number", existingIssuePrNumber);
+            core.setOutput("default_branch", defaultBranch);
+            core.setOutput("issue_title", issueTitle);
+
+      - name: Explain unsupported target
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target != 'true'
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ steps.context.outputs.issue_number }}
+          BLOCK_REASON: ${{ steps.context.outputs.block_reason }}
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(process.env.ISSUE_NUMBER),
+              body: process.env.BLOCK_REASON || "Codex cannot safely update this target.",
+            });
 
       - name: Checkout repository
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         uses: actions/checkout@v4
         with:
-          # This workflow runs with repository secrets on comment events. Never
-          # checkout PR head or merge refs here; PR contents are passed as data
-          # through CODEX_PR_DIFF instead.
-          ref: master
+          ref: ${{ steps.context.outputs.target_sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Install Codex CLI
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         run: npm install -g "@openai/codex@${CODEX_VERSION}"
 
       - name: Setup bubblewrap and AppArmor for sandbox
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         run: |
           set -euo pipefail
           
@@ -300,7 +378,7 @@ jobs:
           echo "::endgroup::"
 
       - name: Restore Codex ChatGPT auth
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         env:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
         run: |
@@ -320,15 +398,43 @@ jobs:
             exit 1
           fi
 
-          cat > "$CODEX_HOME/config.toml" <<'EOF'
+          mkdir -p "$GITHUB_WORKSPACE/.codex-runtime"
+          printf '%s\n' '.codex-runtime/' '.codex-result.json' '.codex/tmp/' >> "$GITHUB_WORKSPACE/.git/info/exclude"
+
+          cat > "$CODEX_HOME/config.toml" <<EOF
           cli_auth_credentials_store = "file"
           approval_policy = "never"
-          sandbox_mode = "workspace-write"
+          default_permissions = "codex-employee"
           model = "gpt-5.6-sol"
           model_reasoning_effort = "xhigh"
 
-          [sandbox_workspace_write]
-          network_access = false
+          [features]
+          network_proxy = true
+
+          [permissions.codex-employee]
+          description = "Talebook digital employee with workspace-only files and public network access."
+          extends = ":workspace"
+
+          [permissions.codex-employee.filesystem]
+          ":root" = "deny"
+          ":minimal" = "read"
+          ":tmpdir" = "deny"
+          ":slash_tmp" = "deny"
+
+          [permissions.codex-employee.filesystem.":workspace_roots"]
+          "." = "write"
+          ".github/workflows" = "read"
+          ".codex" = "read"
+          ".git" = "read"
+
+          [permissions.codex-employee.network]
+          enabled = true
+          allow_local_binding = false
+
+          [permissions.codex-employee.network.domains]
+          "*" = "allow"
+          "localhost" = "allow"
+          "127.0.0.1" = "allow"
 
           [shell_environment_policy]
           inherit = "core"
@@ -343,53 +449,282 @@ jobs:
             "*SECRET*",
             "*KEY*",
           ]
+
+          [shell_environment_policy.set]
+          TMPDIR = "$GITHUB_WORKSPACE/.codex-runtime"
           EOF
 
       - name: Build Codex prompt
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         run: |
           set -euo pipefail
           mkdir -p .codex/tmp
           {
-            cat .github/codex/prompts/comment-response.md
+            cat "$CODEX_PROMPT_TEMPLATE"
             printf '\n## GitHub Request Context\n\n'
             jq . "$CODEX_REQUEST_JSON"
-            if [ -s "$CODEX_PR_FILES_JSON" ]; then
-              printf '\n## Pull Request Files\n\n```json\n'
-              jq . "$CODEX_PR_FILES_JSON"
-              printf '\n```\n'
-            fi
-            if [ -s "$CODEX_PR_DIFF" ]; then
-              printf '\n## Pull Request Diff\n\n```diff\n'
-              cat "$CODEX_PR_DIFF"
-              printf '\n```\n'
-            fi
           } > .codex/tmp/codex-prompt.md
 
       - id: run_codex
         name: Run Codex
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         continue-on-error: true
         run: |
           set -euo pipefail
-          codex exec \
+          timeout --signal=TERM --kill-after=30s 15m codex exec \
+            --strict-config \
             --skip-git-repo-check \
             --cd "$GITHUB_WORKSPACE" \
             --output-last-message .codex/tmp/codex-final.md \
             --ephemeral \
-            --sandbox workspace-write \
             < .codex/tmp/codex-prompt.md
+
+      - id: publish_gate
+        name: Validate Codex publish contract
+        if: always() && steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
+        env:
+          CODEX_OUTCOME: ${{ steps.run_codex.outcome }}
+          TARGET_SHA: ${{ steps.context.outputs.target_sha }}
+          TARGET_REF: ${{ steps.context.outputs.target_ref }}
+          IS_PR: ${{ steps.context.outputs.is_pr }}
+          ISSUE_NUMBER: ${{ steps.context.outputs.issue_number }}
+          EXISTING_ISSUE_BRANCH: ${{ steps.context.outputs.existing_issue_branch }}
+          RESULT_FILE: .codex-result.json
+        run: |
+          set -uo pipefail
+
+          ready=false
+          contract_valid=false
+          no_changes=false
+          reason=""
+          feature=""
+          commit_message=""
+          publish_branch=""
+
+          reject() {
+            if [ -z "$reason" ]; then
+              reason="$1"
+            fi
+          }
+
+          if [ "$CODEX_OUTCOME" != "success" ]; then
+            reject "Codex execution failed or exceeded the 15-minute execution window."
+          elif [ ! -f "$RESULT_FILE" ]; then
+            reject "Codex did not produce .codex-result.json."
+          elif ! jq -e '
+            type == "object" and
+            (keys | sort) == ["commit_message", "feature", "ready_to_publish", "summary", "tests"] and
+            (.ready_to_publish | type == "boolean") and
+            (.feature | type == "string") and
+            (.feature | length >= 3 and length <= 48 and test("^[a-z0-9]+(-[a-z0-9]+)*$")) and
+            (.commit_message | type == "string") and
+            (.commit_message | length >= 1 and length <= 120 and (test("[\\r\\n]") | not)) and
+            (.commit_message | test("^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\\([a-z0-9._/-]+\\))?!?: .+")) and
+            (.summary | type == "string") and
+            (.summary | length >= 1 and length <= 1000) and
+            (.tests | type == "array") and
+            (.tests | length >= 1) and
+            ([.tests[] |
+              (.command | type == "string") and
+              (.command | length >= 1) and
+              (.result == "passed" or .result == "failed" or .result == "not_run") and
+              (if .result == "not_run" then (.details | type == "string" and length >= 1) else true end)
+            ] | all) and
+            (if .ready_to_publish then ([.tests[] | select(.result == "failed")] | length == 0) else true end)
+          ' "$RESULT_FILE" >/dev/null; then
+            reject "Codex result does not satisfy the documented publish contract or Conventional Commit rules."
+          elif ! jq -e '.ready_to_publish == true' "$RESULT_FILE" >/dev/null; then
+            reject "Codex marked the task as not ready to publish."
+          fi
+
+          current_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+          if [ -z "$reason" ] && [ "$current_sha" != "$TARGET_SHA" ]; then
+            reject "Codex changed local Git history; only workflow-created commits are allowed."
+          fi
+
+          if [ -z "$reason" ] && ! git add -A; then
+            reject "Git could not stage the proposed changes."
+          fi
+
+          if [ -z "$reason" ]; then
+            contract_valid=true
+            feature="$(jq -r '.feature' "$RESULT_FILE")"
+            commit_message="$(jq -r '.commit_message' "$RESULT_FILE")"
+            if [ "$IS_PR" = "true" ]; then
+              publish_branch="$TARGET_REF"
+            elif [ -n "$EXISTING_ISSUE_BRANCH" ]; then
+              publish_branch="$EXISTING_ISSUE_BRANCH"
+            else
+              publish_branch="codex/issue-${ISSUE_NUMBER}-${feature}"
+            fi
+          fi
+
+          if [ -z "$reason" ] && git diff --cached --quiet; then
+            no_changes=true
+            reject "No repository changes were produced."
+          fi
+
+          if [ -z "$reason" ]; then
+            while IFS= read -r -d '' path; do
+              if [[ "$path" =~ ^\.github/workflows/ ]]; then
+                reject "Changes under .github/workflows/ are not allowed for the digital employee."
+                break
+              fi
+            done < <(git diff --cached --name-only -z)
+          fi
+
+          if [ -z "$reason" ] && find design -type f -name '*.wip.html' -print -quit | grep -q .; then
+            reject "A WIP design document remains in the repository."
+          fi
+
+          if [ -z "$reason" ] && ! git diff --cached --check; then
+            reject "git diff --cached --check failed."
+          fi
+
+          if [ -z "$reason" ]; then
+            ready=true
+          fi
+
+          if [ "$ready" = "true" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$contract_valid" = "true" ]; then
+            echo "contract_valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "contract_valid=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "no_changes=$no_changes" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "feature=$feature" >> "$GITHUB_OUTPUT"
+          echo "commit_message=$commit_message" >> "$GITHUB_OUTPUT"
+          echo "publish_branch=$publish_branch" >> "$GITHUB_OUTPUT"
+
+      - id: app_token
+        name: Create short-lived publisher token
+        if: |
+          steps.publish_gate.outputs.ready == 'true' ||
+          (
+            steps.publish_gate.outputs.contract_valid == 'true' &&
+            steps.publish_gate.outputs.no_changes == 'true' &&
+            steps.context.outputs.is_pr != 'true' &&
+            steps.context.outputs.existing_issue_branch != '' &&
+            steps.context.outputs.existing_issue_pr_number == ''
+          )
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.CODEX_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CODEX_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
+      - id: publish
+        name: Commit and fast-forward push
+        if: steps.publish_gate.outputs.ready == 'true' && steps.app_token.outcome == 'success'
+        env:
+          APP_TOKEN: ${{ steps.app_token.outputs.token }}
+          APP_SLUG: ${{ steps.app_token.outputs.app-slug }}
+          TARGET_SHA: ${{ steps.context.outputs.target_sha }}
+          IS_PR: ${{ steps.context.outputs.is_pr }}
+          EXISTING_ISSUE_BRANCH: ${{ steps.context.outputs.existing_issue_branch }}
+          PUBLISH_BRANCH: ${{ steps.publish_gate.outputs.publish_branch }}
+          COMMIT_MESSAGE: ${{ steps.publish_gate.outputs.commit_message }}
+        run: |
+          set -euo pipefail
+
+          authenticated_remote="https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          remote_sha="$TARGET_SHA"
+
+          if [ "$IS_PR" = "true" ] || [ -n "$EXISTING_ISSUE_BRANCH" ]; then
+            git fetch --no-tags "$authenticated_remote" "refs/heads/$PUBLISH_BRANCH"
+            remote_sha="$(git rev-parse FETCH_HEAD)"
+            if [ "$remote_sha" != "$TARGET_SHA" ]; then
+              echo "::error::Remote branch moved while Codex was running; refusing a non-fast-forward update."
+              exit 1
+            fi
+          else
+            remote_sha="$(git ls-remote "$authenticated_remote" "refs/heads/$PUBLISH_BRANCH" | awk 'NR == 1 {print $1}')"
+            if [ -n "$remote_sha" ]; then
+              echo "::error::The planned issue branch was created concurrently; refusing to overwrite it."
+              exit 1
+            fi
+          fi
+
+          bot_user="${APP_SLUG}[bot]"
+          bot_id="$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $APP_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/users/${APP_SLUG}%5Bbot%5D" | jq -r '.id')"
+          if ! [[ "$bot_id" =~ ^[0-9]+$ ]]; then
+            echo "::error::Could not resolve the GitHub App bot user ID."
+            exit 1
+          fi
+
+          git config user.name "$bot_user"
+          git config user.email "${bot_id}+${bot_user}@users.noreply.github.com"
+          git commit -m "$COMMIT_MESSAGE"
+          git push "$authenticated_remote" "HEAD:refs/heads/$PUBLISH_BRANCH"
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - id: create_issue_pr
+        name: Create Draft PR for issue work
+        if: |
+          steps.app_token.outcome == 'success' &&
+          steps.context.outputs.is_pr != 'true' &&
+          steps.context.outputs.existing_issue_pr_number == '' &&
+          (
+            steps.publish.outcome == 'success' ||
+            (
+              steps.publish_gate.outputs.contract_valid == 'true' &&
+              steps.publish_gate.outputs.no_changes == 'true' &&
+              steps.context.outputs.existing_issue_branch != ''
+            )
+          )
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ steps.context.outputs.issue_number }}
+          ISSUE_TITLE: ${{ steps.context.outputs.issue_title }}
+          DEFAULT_BRANCH: ${{ steps.context.outputs.default_branch }}
+          PUBLISH_BRANCH: ${{ steps.publish_gate.outputs.publish_branch }}
+        with:
+          github-token: ${{ steps.app_token.outputs.token }}
+          script: |
+            const title = `codex: ${process.env.ISSUE_TITLE}`.slice(0, 256);
+            const result = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              head: process.env.PUBLISH_BRANCH,
+              base: process.env.DEFAULT_BRANCH,
+              body: `Automated implementation for issue #${process.env.ISSUE_NUMBER}.\n\nCloses #${process.env.ISSUE_NUMBER}`,
+              draft: true,
+            });
+            core.setOutput("pull_request_number", String(result.data.number));
+            core.setOutput("pull_request_url", result.data.html_url);
 
       - id: diff
         name: Capture Codex patch
-        if: always() && steps.context.outputs.authorized == 'true'
+        if: always() && steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
+        env:
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          TARGET_SHA: ${{ steps.context.outputs.target_sha }}
         run: |
           set -euo pipefail
           mkdir -p .codex/tmp
-          if git diff --quiet; then
+
+          if [ "$PUBLISH_OUTCOME" = "success" ]; then
+            echo "has_patch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git add -A
+          if git diff --cached --quiet "$TARGET_SHA"; then
             echo "has_patch=false" >> "$GITHUB_OUTPUT"
           else
-            git diff --binary > .codex/tmp/codex.patch
+            git diff --cached --binary "$TARGET_SHA" > .codex/tmp/codex.patch
             echo "has_patch=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -402,11 +737,23 @@ jobs:
           retention-days: 7
 
       - name: Post Codex response
-        if: always() && steps.context.outputs.authorized == 'true' && steps.context.outputs.issue_number != ''
+        if: always() && steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true' && steps.context.outputs.issue_number != ''
         uses: actions/github-script@v7
         env:
           CODEX_FINAL_MESSAGE: .codex/tmp/codex-final.md
           CODEX_RUN_OUTCOME: ${{ steps.run_codex.outcome }}
+          CODEX_GATE_READY: ${{ steps.publish_gate.outputs.ready }}
+          CODEX_GATE_REASON: ${{ steps.publish_gate.outputs.reason }}
+          CODEX_NO_CHANGES: ${{ steps.publish_gate.outputs.no_changes }}
+          CODEX_APP_TOKEN_OUTCOME: ${{ steps.app_token.outcome }}
+          CODEX_PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          CODEX_PUBLISH_BRANCH: ${{ steps.publish_gate.outputs.publish_branch }}
+          CODEX_COMMIT_SHA: ${{ steps.publish.outputs.commit_sha }}
+          IS_PR: ${{ steps.context.outputs.is_pr }}
+          EXISTING_ISSUE_BRANCH: ${{ steps.context.outputs.existing_issue_branch }}
+          EXISTING_PR_NUMBER: ${{ steps.context.outputs.existing_issue_pr_number }}
+          CREATED_PR_OUTCOME: ${{ steps.create_issue_pr.outcome }}
+          CREATED_PR_URL: ${{ steps.create_issue_pr.outputs.pull_request_url }}
           CODEX_HAS_PATCH: ${{ steps.diff.outputs.has_patch }}
           CODEX_ARTIFACT_NAME: codex-patch-${{ github.run_id }}
           ISSUE_NUMBER: ${{ steps.context.outputs.issue_number }}
@@ -427,8 +774,43 @@ jobs:
               body = `Codex could not complete this request. Partial output:\n\n${body}`;
             }
 
+            if (process.env.CODEX_PUBLISH_OUTCOME === "success") {
+              const shortSha = process.env.CODEX_COMMIT_SHA.slice(0, 7);
+              const commitUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${process.env.CODEX_COMMIT_SHA}`;
+              body += `\n\n---\nPublished commit [\`${shortSha}\`](${commitUrl}) to \`${process.env.CODEX_PUBLISH_BRANCH}\`.`;
+
+              if (process.env.IS_PR !== "true") {
+                if (process.env.CREATED_PR_URL) {
+                  body += ` Created Draft PR: ${process.env.CREATED_PR_URL}`;
+                } else if (process.env.EXISTING_PR_NUMBER) {
+                  const prUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/pull/${process.env.EXISTING_PR_NUMBER}`;
+                  body += ` Updated existing Draft PR: ${prUrl}`;
+                } else if (process.env.CREATED_PR_OUTCOME !== "success") {
+                  body += " The branch was pushed, but Draft PR creation failed; check the workflow logs.";
+                }
+              }
+            } else if (process.env.CODEX_NO_CHANGES === "true") {
+              if (process.env.IS_PR !== "true" && process.env.EXISTING_ISSUE_BRANCH && !process.env.EXISTING_PR_NUMBER) {
+                if (process.env.CREATED_PR_URL) {
+                  body += `\n\n---\nNo repository changes were required. Created the missing Draft PR: ${process.env.CREATED_PR_URL}`;
+                } else {
+                  body += "\n\n---\nNot published: Draft PR creation failed for the existing issue branch; check the workflow logs.";
+                }
+              } else {
+                body += "\n\n---\nNo repository changes were required; nothing was committed.";
+              }
+            } else {
+              let reason = process.env.CODEX_GATE_REASON;
+              if (process.env.CODEX_GATE_READY === "true" && process.env.CODEX_APP_TOKEN_OUTCOME !== "success") {
+                reason = "GitHub App token creation failed. Check CODEX_APP_CLIENT_ID and CODEX_APP_PRIVATE_KEY.";
+              } else if (process.env.CODEX_GATE_READY === "true" && process.env.CODEX_PUBLISH_OUTCOME !== "success") {
+                reason = "The controlled commit or fast-forward push failed; check the workflow logs.";
+              }
+              body += `\n\n---\nNot published: ${reason || "the publish gate did not pass."}`;
+            }
+
             if (process.env.CODEX_HAS_PATCH === "true") {
-              body += `\n\n---\nCodex produced local file changes. Download the \`${process.env.CODEX_ARTIFACT_NAME}\` workflow artifact to inspect the patch.`;
+              body += `\nRecovery patch: download the \`${process.env.CODEX_ARTIFACT_NAME}\` workflow artifact.`;
             }
 
             if (body.length > 64000) {
@@ -442,6 +824,41 @@ jobs:
               body,
             });
 
-      - name: Fail if Codex failed
-        if: steps.context.outputs.authorized == 'true' && steps.run_codex.outcome == 'failure'
-        run: exit 1
+      - id: final_status
+        name: Fail closed when delivery is incomplete
+        if: always() && steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
+        env:
+          CODEX_OUTCOME: ${{ steps.run_codex.outcome }}
+          GATE_READY: ${{ steps.publish_gate.outputs.ready }}
+          GATE_NO_CHANGES: ${{ steps.publish_gate.outputs.no_changes }}
+          APP_TOKEN_OUTCOME: ${{ steps.app_token.outcome }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          IS_PR: ${{ steps.context.outputs.is_pr }}
+          EXISTING_ISSUE_BRANCH: ${{ steps.context.outputs.existing_issue_branch }}
+          EXISTING_PR_NUMBER: ${{ steps.context.outputs.existing_issue_pr_number }}
+          CREATED_PR_OUTCOME: ${{ steps.create_issue_pr.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$CODEX_OUTCOME" != "success" ]; then
+            exit 1
+          fi
+          if [ "$GATE_NO_CHANGES" = "true" ]; then
+            if [ "$IS_PR" != "true" ] && [ -n "$EXISTING_ISSUE_BRANCH" ] && [ -z "$EXISTING_PR_NUMBER" ]; then
+              if [ "$APP_TOKEN_OUTCOME" != "success" ] || [ "$CREATED_PR_OUTCOME" != "success" ]; then
+                exit 1
+              fi
+            fi
+            exit 0
+          fi
+          if [ "$GATE_READY" != "true" ]; then
+            exit 1
+          fi
+          if [ "$APP_TOKEN_OUTCOME" != "success" ]; then
+            exit 1
+          fi
+          if [ "$PUBLISH_OUTCOME" != "success" ]; then
+            exit 1
+          fi
+          if [ "$IS_PR" != "true" ] && [ -z "$EXISTING_PR_NUMBER" ] && [ "$CREATED_PR_OUTCOME" != "success" ]; then
+            exit 1
+          fi

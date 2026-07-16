@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>Codex 数字员工评审修复方案</title>
+  <title>Codex 数字员工评审修复方案（已替代）</title>
   <style>
     :root { --paper:#f5f4ef; --panel:#fffef9; --ink:#20211f; --muted:#666861; --line:#d7d7cf; --blue:#315f73; --blue-soft:#e7f0f4; --amber:#8b6024; --amber-soft:#f7eddb; --red:#86433b; --red-soft:#f7e9e5; --green:#35654c; --green-soft:#e8f2eb; --code:#ecece6; }
     * { box-sizing:border-box; }
@@ -44,13 +44,15 @@
     <h1>Codex 数字员工评审修复</h1>
     <p class="subtitle">补齐本地前端服务验证、无变化发布门禁和结构化测试回报，确保自动交付既可执行又可审计。</p>
     <div class="meta">
-      <span class="tag active">状态 · ACTIVE</span>
+      <span class="tag">状态 · SUPERSEDED</span>
       <span class="tag">创建日期 · 2026-07-16</span>
       <span class="tag">所属模块 · project</span>
       <span class="tag">需求来源 · PR #870 评审</span>
       <span class="tag">影响范围 · GitHub Actions / tests / security</span>
     </div>
   </header>
+
+  <div class="callout"><strong>替代说明</strong>本方案已由 <code>design/project/20260716-codex-live-progress.active.html</code> 替代。后续方案继承本方案的 loopback、门禁顺序和结构化评论决策，并增加中文实时进度评论。</div>
 
   <div class="summary"><strong>结论摘要</strong><p>开启 loopback binding 以允许 agent 启动 Nuxt 和 Mock API；把仓库级 WIP 门禁前移到“无变化”判定之前；GitHub 回复以门禁验证过的 <code>.codex-result.json</code> 为事实来源。安全上继续隔离所有凭据和 Unix socket，并拒绝常见云元数据目标。</p></div>
 
@@ -135,7 +137,7 @@
     </table>
   </section>
 
-  <footer>替代：design/project/20260716-codex-digital-employee.superseded.html 。原方案的 loopback、门禁顺序和评论数据源决策已由本方案修正。</footer>
+  <footer>历史上替代：design/project/20260716-codex-digital-employee.superseded.html 。后续由 design/project/20260716-codex-live-progress.active.html 替代。</footer>
 </main>
 </body>
 </html>

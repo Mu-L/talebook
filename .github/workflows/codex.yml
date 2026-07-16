@@ -66,10 +66,12 @@ jobs:
             const runnerTemp = process.env.RUNNER_TEMP;
             const codexHome = `${runnerTemp}/codex-home`;
             const codexPromptTemplate = `${runnerTemp}/codex-comment-response.md`;
+            const codexProgressReporter = `${runnerTemp}/codex-progress-reporter.py`;
             const codexRequestJson = `${runnerTemp}/codex-request.json`;
 
             core.exportVariable("CODEX_HOME", codexHome);
             core.exportVariable("CODEX_PROMPT_TEMPLATE", codexPromptTemplate);
+            core.exportVariable("CODEX_PROGRESS_REPORTER", codexProgressReporter);
             core.exportVariable("CODEX_REQUEST_JSON", codexRequestJson);
 
             let body = "";
@@ -162,6 +164,21 @@ jobs:
               fs.writeFileSync(
                 codexPromptTemplate,
                 Buffer.from(promptResult.data.content, "base64"),
+                { mode: 0o600 },
+              );
+
+              const progressReporterResult = await github.rest.repos.getContent({
+                owner,
+                repo,
+                path: ".github/codex/scripts/codex_progress_reporter.py",
+                ref: defaultBranch,
+              });
+              if (Array.isArray(progressReporterResult.data) || !progressReporterResult.data.content) {
+                throw new Error("Trusted Codex progress reporter is missing from the default branch.");
+              }
+              fs.writeFileSync(
+                codexProgressReporter,
+                Buffer.from(progressReporterResult.data.content, "base64"),
                 { mode: 0o600 },
               );
             }
@@ -284,6 +301,33 @@ jobs:
               { mode: 0o600 },
             );
 
+            let progressCommentId = "";
+            if (authorized && supportedTarget && issueNumber) {
+              try {
+                const progressComment = await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: Number(issueNumber),
+                  body: [
+                    "<!-- codex-live-progress -->",
+                    "## Codex 正在处理",
+                    "",
+                    "已接收请求，正在准备执行环境。",
+                    "",
+                    "- [x] 已接收请求",
+                    "- [ ] 分析并制定计划",
+                    "- [ ] 执行修改",
+                    "- [ ] 验证并发布",
+                    "",
+                    "<sub>该评论会持续更新，任务完成后将替换为最终结果。</sub>",
+                  ].join("\n"),
+                });
+                progressCommentId = String(progressComment.data.id);
+              } catch (error) {
+                core.warning(`Could not create the Codex progress comment: ${error.message}`);
+              }
+            }
+
             core.setOutput("authorized", authorized ? "true" : "false");
             core.setOutput("is_pr", pr ? "true" : "false");
             core.setOutput("issue_number", issueNumber);
@@ -298,6 +342,7 @@ jobs:
             core.setOutput("existing_issue_pr_number", existingIssuePrNumber);
             core.setOutput("default_branch", defaultBranch);
             core.setOutput("issue_title", issueTitle);
+            core.setOutput("progress_comment_id", progressCommentId);
 
       - name: Explain unsupported target
         if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target != 'true'
@@ -471,15 +516,22 @@ jobs:
         name: Run Codex
         if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         continue-on-error: true
+        env:
+          CODEX_PROGRESS_COMMENT_ID: ${{ steps.context.outputs.progress_comment_id }}
+          CODEX_PROGRESS_TOKEN: ${{ github.token }}
+          GITHUB_API_URL: ${{ github.api_url }}
         run: |
           set -euo pipefail
-          timeout --signal=TERM --kill-after=30s 15m codex exec \
+          timeout --signal=TERM --kill-after=30s 15m env -u CODEX_PROGRESS_TOKEN codex exec \
             --strict-config \
             --skip-git-repo-check \
             --cd "$GITHUB_WORKSPACE" \
             --output-last-message .codex/tmp/codex-final.md \
+            --json \
             --ephemeral \
-            < .codex/tmp/codex-prompt.md
+            < .codex/tmp/codex-prompt.md \
+            | tee .codex/tmp/codex-events.jsonl \
+            | python3 "$CODEX_PROGRESS_REPORTER"
 
       - id: publish_gate
         name: Validate Codex publish contract
@@ -761,6 +813,7 @@ jobs:
           CODEX_HAS_PATCH: ${{ steps.diff.outputs.has_patch }}
           CODEX_ARTIFACT_NAME: codex-patch-${{ github.run_id }}
           ISSUE_NUMBER: ${{ steps.context.outputs.issue_number }}
+          CODEX_PROGRESS_COMMENT_ID: ${{ steps.context.outputs.progress_comment_id }}
         with:
           script: |
             const fs = require("fs");
@@ -851,12 +904,30 @@ jobs:
               body = `${body.slice(0, 63500)}\n\n...[truncated; see workflow logs for full output]`;
             }
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: Number(process.env.ISSUE_NUMBER),
-              body,
-            });
+            const progressCommentId = Number(process.env.CODEX_PROGRESS_COMMENT_ID);
+            let responseUpdated = false;
+            if (Number.isSafeInteger(progressCommentId) && progressCommentId > 0) {
+              try {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: progressCommentId,
+                  body,
+                });
+                responseUpdated = true;
+              } catch (error) {
+                core.warning(`Could not replace the Codex progress comment: ${error.message}`);
+              }
+            }
+
+            if (!responseUpdated) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: Number(process.env.ISSUE_NUMBER),
+                body,
+              });
+            }
 
       - id: final_status
         name: Fail closed when delivery is incomplete

@@ -4,6 +4,7 @@ from pathlib import Path
 ROOT = Path(__file__).parents[1]
 WORKFLOW = ROOT / ".github" / "workflows" / "codex.yml"
 PROMPT = ROOT / ".github" / "codex" / "prompts" / "comment-response.md"
+PROGRESS_REPORTER = ROOT / ".github" / "codex" / "scripts" / "codex_progress_reporter.py"
 
 
 def workflow_text():
@@ -12,6 +13,10 @@ def workflow_text():
 
 def prompt_text():
     return PROMPT.read_text(encoding="utf-8")
+
+
+def progress_reporter_text():
+    return PROGRESS_REPORTER.read_text(encoding="utf-8")
 
 
 def test_employee_job_is_bounded_and_serialized_per_request_target():
@@ -78,6 +83,16 @@ def test_agent_prompt_is_loaded_from_the_trusted_default_branch():
     assert "cat .github/codex/prompts/comment-response.md" not in workflow
 
 
+def test_progress_reporter_is_loaded_from_the_trusted_default_branch():
+    workflow = workflow_text()
+
+    assert 'path: ".github/codex/scripts/codex_progress_reporter.py"' in workflow
+    assert "const codexProgressReporter = `${runnerTemp}/codex-progress-reporter.py`;" in workflow
+    assert 'core.exportVariable("CODEX_PROGRESS_REPORTER", codexProgressReporter)' in workflow
+    assert 'python3 "$CODEX_PROGRESS_REPORTER"' in workflow
+    assert "python3 .github/codex/scripts/codex_progress_reporter.py" not in workflow
+
+
 def test_request_context_selects_a_writable_pr_or_issue_target():
     workflow = workflow_text()
 
@@ -101,7 +116,9 @@ def test_agent_contract_requires_a_validated_publish_decision():
     workflow = workflow_text()
     prompt = prompt_text()
 
-    assert "timeout --signal=TERM --kill-after=30s 15m codex exec" in workflow
+    assert "timeout --signal=TERM --kill-after=30s 15m env -u CODEX_PROGRESS_TOKEN codex exec" in workflow
+    assert "--json" in workflow
+    assert "tee .codex/tmp/codex-events.jsonl" in workflow
     assert ".codex-result.json" in prompt
     assert '"ready_to_publish"' in prompt
     assert '"feature"' in prompt
@@ -109,9 +126,21 @@ def test_agent_contract_requires_a_validated_publish_decision():
     assert '"summary"' in prompt
     assert '"tests"' in prompt
     assert ".github/workflows/" in prompt
-    assert "Do not commit or push" in prompt
-    assert "pull request head" in prompt
+    assert "不得自行 commit 或 push" in prompt
+    assert "当前 PR head" in prompt
     assert "patch artifact" not in prompt
+
+
+def test_agent_prompt_and_maintainer_facing_output_are_in_chinese():
+    prompt = prompt_text()
+
+    assert "Talebook Codex 维护者请求" in prompt
+    assert "必须使用中文" in prompt
+    assert "执行计划、进度说明、结构化摘要和最终答复" in prompt
+    assert "必须先使用计划工具创建中文执行计划" in prompt
+    assert "及时更新计划状态" in prompt
+    assert "feature" in prompt
+    assert "commit_message" in prompt
 
 
 def test_publish_gate_rejects_incomplete_or_unsafe_changes():
@@ -225,3 +254,19 @@ def test_comment_uses_validated_summary_and_test_metadata():
     assert "### Validation" in workflow
     assert "test.command" in workflow
     assert "test.result" in workflow
+
+
+def test_one_progress_comment_is_created_then_updated_throughout_the_run():
+    workflow = workflow_text()
+    reporter = progress_reporter_text()
+
+    assert 'core.setOutput("progress_comment_id"' in workflow
+    assert "Codex 正在处理" in workflow
+    assert "CODEX_PROGRESS_COMMENT_ID: ${{ steps.context.outputs.progress_comment_id }}" in workflow
+    assert "CODEX_PROGRESS_TOKEN: ${{ github.token }}" in workflow
+    assert "env -u CODEX_PROGRESS_TOKEN codex exec" in workflow
+    assert "github.rest.issues.updateComment" in workflow
+    assert "comment_id: progressCommentId" in workflow
+    assert "todo_list" in reporter
+    assert "UPDATE_INTERVAL_SECONDS = 60" in reporter
+    assert "reasoning" not in reporter

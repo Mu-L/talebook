@@ -1,0 +1,142 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex 实时进度评论方案</title>
+  <style>
+    :root { --paper:#f4f3ee; --panel:#fffef9; --ink:#20231f; --muted:#666a62; --line:#d5d8cf; --blue:#315f73; --blue-soft:#e6f0f4; --amber:#8b6024; --amber-soft:#f7eddb; --green:#35654c; --green-soft:#e8f2eb; --code:#ecece6; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:52px 20px 84px; color:var(--ink); background:var(--paper); font:16px/1.68 ui-serif, Georgia, "Songti SC", serif; }
+    main { max-width:960px; margin:auto; }
+    header { padding-bottom:26px; border-bottom:1px solid var(--line); }
+    h1 { margin:12px 0 8px; font-size:clamp(30px,5vw,44px); line-height:1.15; }
+    h2 { margin:42px 0 16px; padding-bottom:8px; border-bottom:1px solid var(--line); font-size:23px; }
+    p { margin:0 0 14px; }
+    ul,ol { padding-left:24px; }
+    li { margin:7px 0; }
+    .eyebrow,.meta,code,th,figcaption { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .eyebrow { color:var(--blue); font-size:11px; letter-spacing:.14em; }
+    .subtitle { max-width:780px; color:var(--muted); font-size:18px; }
+    .meta { display:flex; flex-wrap:wrap; gap:9px; margin-top:20px; font-size:12px; }
+    .tag { padding:5px 9px; border:1px solid var(--line); border-radius:999px; background:var(--panel); }
+    .active { color:var(--green); border-color:#a8c6b2; background:var(--green-soft); }
+    .summary,.callout { margin:24px 0; padding:18px 20px; border:1px solid var(--line); background:var(--panel); }
+    .summary { border-left:4px solid var(--blue); background:var(--blue-soft); }
+    .good { border-color:#a8c6b2; background:var(--green-soft); }
+    code { padding:1px 5px; border-radius:3px; background:var(--code); font-size:.86em; }
+    table { width:100%; margin:16px 0; border-collapse:collapse; font-size:14px; }
+    th,td { padding:11px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:var(--muted); font-size:11px; }
+    figure { margin:22px 0; border:1px solid var(--line); background:#fff; }
+    svg { display:block; width:100%; height:auto; }
+    figcaption { padding:10px 13px; color:var(--muted); background:#f0f0eb; font-size:11px; }
+    footer { margin-top:56px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+    @media (max-width:700px) { body { padding:28px 13px 58px; } table { display:block; overflow-x:auto; } .subtitle { font-size:16px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">TALEBOOK · PROJECT DESIGN</div>
+    <h1>Codex 实时进度评论</h1>
+    <p class="subtitle">把 Codex 的中文计划与阶段进度持续暴露给发起者，同时维持单评论、低噪声和凭据隔离。</p>
+    <div class="meta">
+      <span class="tag active">状态 · ACTIVE</span>
+      <span class="tag">创建日期 · 2026-07-16</span>
+      <span class="tag">所属模块 · project</span>
+      <span class="tag">需求来源 · PR #870 后续反馈</span>
+      <span class="tag">影响范围 · GitHub Actions / Codex CLI / tests / security</span>
+    </div>
+  </header>
+
+  <div class="summary"><strong>需求复述</strong><p>现有工作流仅在接单时添加 🚀 reaction，并在全部工作结束后新建一次结果评论。用户需要在任务处理中看到 Codex 已接单、已经形成的计划、当前执行阶段和验证/发布状态，而不必打开 Actions 日志等待最多 20 分钟；同时，Codex 的受信任提示词和面向维护者的答复需要统一使用中文。</p></div>
+
+  <section>
+    <h2>01 · 目标、约束与已确认决策</h2>
+    <table>
+      <thead><tr><th>维度</th><th>决策</th><th>验收标准</th></tr></thead>
+      <tbody>
+        <tr><td>评论模型</td><td>保留 🚀，另创建一条状态评论并持续更新；最终结果覆盖同一条评论。</td><td>一次请求最多产生一条 Codex 时间线评论，不因阶段变化刷屏。</td></tr>
+        <tr><td>计划可见性</td><td>使用 <code>codex exec --json</code> 消费 JSONL 中的 <code>todo_list</code> 计划事件。</td><td>首次计划和后续完成状态无需等待任务结束即可显示。</td></tr>
+        <tr><td>回复语言</td><td>受信任 Prompt 改为中文，并要求计划、进度文本、结构化摘要和最终答复使用中文；命令、路径、字段名和 Conventional Commit 保持既定格式。</td><td>GitHub 进度及最终结果默认中文，机器契约保持兼容。</td></tr>
+        <tr><td>更新频率</td><td>计划变化和阶段切换立即更新；普通命令、文件、搜索活动最多每 60 秒汇总一次。</td><td>用户能看到持续进展，同时避免 GitHub secondary rate limit。</td></tr>
+        <tr><td>信息边界</td><td>展示计划文本、阶段和活动计数；不展示 reasoning、原始命令、命令输出、文件内容或环境变量。</td><td>评论中不泄露凭据、内部推理或不必要的执行细节。</td></tr>
+        <tr><td>失败降级</td><td>实时更新失败不终止编码任务；最终步骤仍尝试更新原评论，找不到时退化为新建评论。</td><td>GitHub API 短暂失败不丢失代码结果，最终交付仍可见。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>02 · 数据流与安全边界</h2>
+    <figure>
+      <svg viewBox="0 0 920 390" role="img" xmlns="http://www.w3.org/2000/svg">
+        <title>Codex JSONL 事件经过受信任桥接器更新同一条 GitHub 评论</title>
+        <desc>Workflow 创建评论后运行 Codex，事件流分流到本地日志和进度桥接器；桥接器只输出安全摘要并更新评论，最终发布步骤再覆盖为交付结果。</desc>
+        <defs><marker id="arrow" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="#666a62" stroke-width="1.5"/></marker></defs>
+        <rect width="920" height="390" fill="#fff"/>
+        <g font-family="ui-monospace, Menlo, monospace" font-size="13">
+          <rect x="35" y="45" width="175" height="72" rx="8" fill="#e6f0f4" stroke="#86a9b9"/><text x="55" y="74" fill="#315f73" font-weight="700">接单评论</text><text x="55" y="97" fill="#666a62">保存 comment id</text>
+          <rect x="285" y="45" width="175" height="72" rx="8" fill="#f7eddb" stroke="#c8a56b"/><text x="305" y="74" fill="#8b6024" font-weight="700">Codex --json</text><text x="305" y="97" fill="#666a62">无 GitHub token</text>
+          <rect x="535" y="45" width="180" height="72" rx="8" fill="#e6f0f4" stroke="#86a9b9"/><text x="555" y="74" fill="#315f73" font-weight="700">进度桥接器</text><text x="555" y="97" fill="#666a62">过滤 / 节流 / PATCH</text>
+          <rect x="535" y="250" width="180" height="72" rx="8" fill="#e8f2eb" stroke="#8eb39c"/><text x="555" y="279" fill="#35654c" font-weight="700">同一条评论</text><text x="555" y="302" fill="#666a62">计划 + 阶段 + 计数</text>
+          <rect x="35" y="250" width="175" height="72" rx="8" fill="#e8f2eb" stroke="#8eb39c"/><text x="55" y="279" fill="#35654c" font-weight="700">受控发布</text><text x="55" y="302" fill="#666a62">最终结果覆盖</text>
+        </g>
+        <g fill="none" stroke="#666a62" stroke-width="1.5" marker-end="url(#arrow)"><path d="M210 81H283"/><path d="M460 81H533"/><path d="M625 117V248"/><path d="M535 286H212"/></g>
+      </svg>
+      <figcaption>FIG 1 · Codex 子进程通过 <code>env -u CODEX_PROGRESS_TOKEN</code> 显式移除评论凭据；只有从默认分支获取的受信任桥接器持有短期 <code>GITHUB_TOKEN</code>。</figcaption>
+    </figure>
+    <ul>
+      <li>Prompt 与进度桥接器都从默认分支读取到 Runner 临时目录，不执行 PR head 中可被修改的桥接代码。</li>
+      <li>桥接器转义 Markdown、打断用户 mention、限制计划项数量和长度，并忽略 reasoning 与原始工具载荷。</li>
+      <li>JSONL 同时保存在被 Git 排除的 <code>.codex/tmp/</code>，仅供最终阶段和故障诊断使用。</li>
+      <li>实时更新使用现有 <code>issues: write</code>/<code>pull-requests: write</code>，不提升顶层 <code>contents: read</code>。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>03 · 状态与失败语义</h2>
+    <ol>
+      <li><strong>已接收：</strong>目标与权限确认后立即创建状态评论。</li>
+      <li><strong>分析/计划：</strong><code>turn.started</code> 后显示分析中；<code>todo_list</code> 到达后立即呈现计划。</li>
+      <li><strong>执行：</strong>首次命令、文件修改或搜索事件触发阶段切换；计划完成状态随事件更新。</li>
+      <li><strong>验证：</strong><code>turn.completed</code> 后显示正在验证并准备发布。</li>
+      <li><strong>完成：</strong>现有 publish gate、commit、push、Draft PR 流程结束后，用结构化结果覆盖状态评论。</li>
+    </ol>
+    <p>桥接器异常只写入 Actions warning/stderr，不影响 Codex 管道退出码；Codex、门禁或发布失败仍由原有 fail-closed 逻辑决定最终状态。</p>
+  </section>
+
+  <section>
+    <h2>04 · 实施与回滚</h2>
+    <ol>
+      <li>新增受信任的 Python 进度桥接器及纯逻辑测试，覆盖计划渲染、脱敏、节流信号和 GitHub PATCH。</li>
+      <li>把受信任 Prompt 改为中文，并增加中文计划、摘要和最终答复约束。</li>
+      <li>扩展上下文步骤：从默认分支取桥接器、创建初始评论并输出 comment id。</li>
+      <li>将 Codex 改为 <code>--json</code>，用管道把事件复制到本地并交给桥接器，同时显式移除 token。</li>
+      <li>最终评论优先更新 comment id，API 更新失败或 id 缺失时回退到创建新评论。</li>
+      <li>回滚时恢复单次最终评论与非 JSON 输出；新建替代方案，不改写生效文档。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>05 · 测试计划与当前结果</h2>
+    <div class="callout good"><strong>状态：本地验证通过</strong>进度事件解析、同评论更新、中文 Prompt、凭据隔离、Actions 语义和设计门禁均已验证；真实 GitHub 评论更新需在新 workflow 进入默认分支后通过维护者评论触发。</div>
+    <table>
+      <thead><tr><th>计划命令</th><th>验证内容</th><th>当前结果</th></tr></thead>
+      <tbody>
+        <tr><td><code>python3 -m pytest tests/test_codex_progress_reporter.py tests/test_codex_workflow.py tests/test_check_design_docs.py -q</code></td><td>事件解析、计划渲染、敏感内容过滤、同评论更新、中文 Prompt 和 workflow/方案契约。</td><td>PASS，42 passed</td></tr>
+        <tr><td><code>ruff check .github/codex/scripts/codex_progress_reporter.py tests/test_codex_progress_reporter.py tests/test_codex_workflow.py --no-cache</code></td><td>Python 静态检查。</td><td>PASS</td></tr>
+        <tr><td><code>ruff format --check .github/codex/scripts/codex_progress_reporter.py tests/test_codex_progress_reporter.py tests/test_codex_workflow.py</code></td><td>Python 格式。</td><td>PASS，3 files already formatted</td></tr>
+        <tr><td><code>go run github.com/rhysd/actionlint/cmd/actionlint@latest -ignore 'missing input &quot;app-id&quot;' -ignore 'input &quot;client-id&quot; is not defined' .github/workflows/codex.yml</code></td><td>Actions 表达式、shell 和步骤输出；仅忽略已由官方 v3 metadata 交叉确认的 <code>client-id</code> 误报。</td><td>PASS</td></tr>
+        <tr><td><code>codex exec --help</code> 与本机 Codex 0.144.4 二进制 schema 检查</td><td>确认 <code>--json</code>、<code>--output-last-message</code> 以及 <code>todo_list</code> item 类型存在。</td><td>PASS</td></tr>
+        <tr><td><code>python3 -c 'import pathlib, yaml; ...'</code><br><code>git diff --check</code></td><td>YAML 基本解析、补丁空白和换行。</td><td>PASS</td></tr>
+        <tr><td><code>make check-design</code></td><td>方案路径、状态、HTML 和单文件约束。</td><td>PASS，15 design documents passed</td></tr>
+        <tr><td>真实 Actions 冒烟</td><td>初始评论、计划即时出现、持续 PATCH、最终覆盖和失败降级。</td><td>未执行：<code>issue_comment</code> 使用默认分支 workflow，新版本合并前无法真实触发。剩余风险限于 GitHub API/事件时序；由单元测试、actionlint、Token 权限和最终评论降级路径覆盖。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>替代：design/project/20260716-codex-digital-employee-review-fixes.superseded.html 。本方案继承既有安全与发布门禁，并新增中文实时进度评论。</footer>
+</main>
+</body>
+</html>

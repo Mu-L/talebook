@@ -248,10 +248,26 @@ class TestAppWithoutLogin(TestApp):
         self.assertEqual(d["user"]["is_login"], False)
         self.assertEqual(d["user"]["is_admin"], False)
         self.assertEqual(d["sys"]["books"], 13)
+        self.assertEqual(d["sys"]["upload"]["chunk_enabled"], True)
+        self.assertEqual(d["sys"]["upload"]["chunk_threshold"], 8 * 1024 * 1024)
+        self.assertEqual(d["sys"]["upload"]["chunk_size"], 4 * 1024 * 1024)
 
         d = self.json("/api/user/info?detail=1")
         self.assertEqual(d["user"]["is_login"], False)
         self.assertEqual(d["sys"], {})
+
+    def test_user_info_reflects_custom_chunk_settings(self):
+        prev_enabled = main.CONF.get("UPLOAD_CHUNK_ENABLED", True)
+        prev_threshold = main.CONF.get("UPLOAD_CHUNK_THRESHOLD", "8MB")
+        try:
+            main.CONF["UPLOAD_CHUNK_ENABLED"] = False
+            main.CONF["UPLOAD_CHUNK_THRESHOLD"] = "16MB"
+            d = self.json("/api/user/info")
+            self.assertEqual(d["sys"]["upload"]["chunk_enabled"], False)
+            self.assertEqual(d["sys"]["upload"]["chunk_threshold"], 16 * 1024 * 1024)
+        finally:
+            main.CONF["UPLOAD_CHUNK_ENABLED"] = prev_enabled
+            main.CONF["UPLOAD_CHUNK_THRESHOLD"] = prev_threshold
 
     def test_book(self):
         d = self.json("/api/book/1")
@@ -796,6 +812,31 @@ class TestAdmin(TestWithAdminUser):
             self.assertEqual(d["rsp"]["site_title"], "abc")
             self.assertTrue("not_work" not in d["rsp"])
 
+    def test_admin_settings_rejects_inconsistent_chunk_sizes(self):
+        """分片大小配置必须满足 总大小 ≥ 触发阈值 ≥ 单分片大小，否则保存被拒"""
+        with mock.patch.object(loader.SettingsLoader, "set_store_path", return_value="/tmp/"):
+            # 单分片大小大于触发阈值，违反约束，应返回 params.upload_size_order
+            req = {
+                "UPLOAD_CHUNK_ENABLED": True,
+                "UPLOAD_CHUNK_THRESHOLD": "8MB",
+                "UPLOAD_CHUNK_SIZE": "50MB",
+                "MAX_UPLOAD_SIZE": "100MB",
+            }
+            d = self.json("/api/admin/settings", method="POST", body=json.dumps(req))
+            self.assertEqual(d["err"], "params.upload_size_order")
+
+    def test_admin_settings_accepts_consistent_chunk_sizes(self):
+        """总大小 ≥ 阈值 ≥ 单分片 的合法配置应保存成功"""
+        with mock.patch.object(loader.SettingsLoader, "set_store_path", return_value="/tmp/"):
+            req = {
+                "UPLOAD_CHUNK_ENABLED": True,
+                "UPLOAD_CHUNK_THRESHOLD": "8MB",
+                "UPLOAD_CHUNK_SIZE": "4MB",
+                "MAX_UPLOAD_SIZE": "100MB",
+            }
+            d = self.json("/api/admin/settings", method="POST", body=json.dumps(req))
+            self.assertEqual(d["err"], "ok")
+
 
 class TestOpds(TestWithUserLogin):
     def parse_xml(self, text):
@@ -1038,6 +1079,29 @@ def setUpModule():
     setup_mock_user()
     setup_mock_sendmail()
     setup_mock_service()
+
+
+class TestGetUploadSize(unittest.TestCase):
+    """Tornado max_buffer_size 是单请求（单分片）上限：
+    分片关闭时取 MAX_UPLOAD_SIZE（整体即单请求），开启时取 UPLOAD_CHUNK_SIZE"""
+
+    def test_chunk_disabled_uses_max_upload_size(self):
+        from webserver import main
+        from webserver.handlers.book import CONF
+
+        with mock.patch.dict(CONF, {"UPLOAD_CHUNK_ENABLED": False, "MAX_UPLOAD_SIZE": "100MB"}):
+            self.assertEqual(main.get_upload_size(), 100 * 1024 * 1024)
+
+    def test_chunk_enabled_uses_chunk_size(self):
+        from webserver import main
+        from webserver.handlers.book import CONF
+
+        # 分片开启时单请求上限取单分片大小，MAX_UPLOAD_SIZE 此时作为总文件上限
+        with mock.patch.dict(
+            CONF,
+            {"UPLOAD_CHUNK_ENABLED": True, "MAX_UPLOAD_SIZE": "100MB", "UPLOAD_CHUNK_SIZE": "50MB"},
+        ):
+            self.assertEqual(main.get_upload_size(), 50 * 1024 * 1024)
 
 
 if __name__ == "__main__":

@@ -23,9 +23,10 @@ const builtinThemes = [
   {
     id: 'builtin-brass',
     name: 'brass',
+    display_name: '黄铜主题',
     version: '1.0.0',
     author: 'Talebook',
-    description: '黄铜风格',
+    description: '暖褐炭灰打底，一线黄铜勾勒轮廓，衬线书名沉静内敛——像台灯下摊开的一册旧书，最宜夜里慢读细品。',
     installed_at: null,
     builtin: true,
     components: {
@@ -36,9 +37,10 @@ const builtinThemes = [
   {
     id: 'builtin-graphite',
     name: 'graphite',
+    display_name: '石墨主题',
     version: '1.0.0',
     author: 'Talebook',
-    description: '石墨风格',
+    description: '冷调蓝灰如石墨般沉着，墨蓝作唯一亮色，选中项亮起一道细边——信息井然有序，久看不觉刺眼。',
     installed_at: null,
     builtin: true,
     components: {
@@ -49,9 +51,10 @@ const builtinThemes = [
   {
     id: 'builtin-light-gray',
     name: 'light-gray',
+    display_name: '浅灰主题',
     version: '1.0.0',
     author: 'Talebook',
-    description: '浅灰风格',
+    description: '通透的高级浅灰，低饱和配色搭紧凑侧栏，清爽而不喧宾夺主——日常打理书库，久对屏幕也轻松。',
     installed_at: null,
     builtin: true,
     components: {
@@ -62,9 +65,10 @@ const builtinThemes = [
   {
     id: 'builtin-warm-red',
     name: 'warm-red',
+    display_name: '暖红主题',
     version: '1.0.0',
     author: 'Talebook',
-    description: '暖红风格',
+    description: '微黄纸感的明亮底色，牛血红点题，侧栏以虚线分行如旧时图书馆的索引卡——带着纸页与目录的温度。',
     installed_at: null,
     builtin: true,
     components: {
@@ -75,9 +79,10 @@ const builtinThemes = [
   {
     id: 'builtin-minimal',
     name: 'minimal',
+    display_name: '极简主题',
     version: '1.0.0',
     author: 'Talebook',
-    description: '极简紧凑风格',
+    description: '去尽多余装饰，只留文字与留白，小字号、高密度——明暗两色皆为一目十行的快速浏览而生。',
     installed_at: null,
     builtin: true,
     components: {
@@ -149,7 +154,8 @@ router.get('/api/user/info', eventHandler(() => ({
     version: '1.0.0',
     users: 5,
     friends: [],
-    allow: { register: true, download: true, push: true, read: true }
+    allow: { register: true, download: true, push: true, read: true },
+    upload: { chunk_enabled: true, chunk_threshold: 8 * 1024 * 1024, chunk_size: 4 * 1024 * 1024 }
   },
   user: {
     is_login: true,
@@ -215,6 +221,27 @@ router.post('/api/admin/settings', eventHandler(() => ({
 router.post('/api/admin/testmail', eventHandler(() => ({
   err: 'ok',
   msg: 'Test email sent'
+})));
+
+router.get('/api/admin/trash/size', eventHandler(() => ({
+  err: 'ok',
+  sizes: { trash: 0, upload: 0 },
+  trash_path: '/tmp/trash',
+  upload_path: '/tmp/upload'
+})));
+
+router.get('/api/admin/update', eventHandler(() => ({
+  err: 'ok',
+  status: {
+    current_version: 'mock-1.0.0',
+    latest_version: '',
+    has_update: false,
+    latest_release_url: '',
+    latest_release_name: '',
+    latest_release_body: '',
+    check_error: null,
+    last_check_time: null
+  }
 })));
 
 // Admin Users - Use app.use to handle query params

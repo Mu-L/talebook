@@ -436,7 +436,9 @@
     "certFileError": "证书文件 (.crt) 异常，文件内容不是 PEM 格式",
     "keyFileError": "私钥文件 (.key) 异常，文件内容不是 PEM 格式",
     "uploadSuccess": "上传成功！",
-    "uploadNotice": "受限于服务器能力，请勿上传超过 100MB 的大文件。",
+    "uploadNotice": "大文件将自动分片上传，请保持网络连接稳定。",
+    "uploadProgress": "正在上传... {percent}%",
+    "uploadMerging": "分片上传完成，正在合并文件...",
     "selectEbook": "请选择要上传的电子书",
     "uploadBooks": "上传书籍",
     "activateSuccess": "激活成功",
@@ -707,6 +709,12 @@
         "updateCheck": "检查更新",
         "databaseManagement": "数据库管理"
       },
+      "group": {
+        "site": "站点",
+        "access": "访问与用户",
+        "services": "服务与集成",
+        "system": "系统"
+      },
       "button": {
         "saveSettings": "保存配置",
         "testEmail": "测试邮件",
@@ -719,6 +727,7 @@
         "forceMigrateDb": "强制迁移"
       },
       "label": {
+        "navSection": "配置分类",
         "siteTitle": "网站标题",
         "siteAnnouncement": "网站公告",
         "siteFooter": "网站脚注",
@@ -739,6 +748,7 @@
         "name": "名称",
         "link": "链接",
         "autoFillMeta": "自动从互联网拉取新书的书籍信息",
+        "autoFillKeepCover": "自动拉取书籍信息时，仅修改书籍信息",
         "metaSelectedSource": "选择启用的元数据源",
         "doubanBaseurl": "豆瓣插件 API 地址 (例如 http://10.0.0.1:8080 )",
         "doubanApiKey": "豆瓣 API Key",
@@ -747,7 +757,11 @@
         "bookNamesFormat": "目录和文件名模式",
         "epubViewer": "EPUB 阅读器",
         "avatarService": "可使用 www.gravatar.com 或 cravatar.cn 头像服务",
-        "maxUploadSize": "文件上传字节数限制 (例如 100MB 或 100KB）",
+        "maxUploadSize": "允许上传的最大文件大小；开启分片后作为分片合并后的总大小上限 (例如 100MB)",
+        "uploadChunkEnabled": "启用超大文件分片上传（绕过反代单请求体积限制）",
+        "uploadChunkThreshold": "触发分片上传的文件大小阈值 (例如 8MB)",
+        "uploadChunkSize": "每个分片的大小 (例如 4MB)",
+        "maxChunkCount": "分片上传允许的最大分片数量 (例如 4096)",
         "cookieSecret": "COOKIE 随机密钥",
         "scanUploadPath": "批量导入扫描目录",
         "pushTitle": "邮件推送的标题",

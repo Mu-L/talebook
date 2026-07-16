@@ -56,8 +56,19 @@ settings = {
         "pool_recycle": 3600,
     },
 
-    # 100MB, tornado default max_buffer_size value
+    # 允许上传的最大文件大小。分片关闭时限制单文件（整体上传）；
+    # 分片开启时限制分片合并后的总文件大小（单分片大小由 UPLOAD_CHUNK_SIZE 控制）
     "MAX_UPLOAD_SIZE": "100MB",
+
+    # 分片上传：允许的最大分片数量
+    "MAX_CHUNK_COUNT": 4096,
+    # 分片目录过期时间（秒），超过该时间未完成的分片上传会在后续请求中被自动清理
+    "UPLOAD_CHUNK_TTL_SECONDS": 24 * 3600,
+
+    # 分片上传功能开关，及前端触发分片的文件大小阈值、单个分片大小（均可在管理后台调整）
+    "UPLOAD_CHUNK_ENABLED": True,
+    "UPLOAD_CHUNK_THRESHOLD": "8MB",
+    "UPLOAD_CHUNK_SIZE": "4MB",
 
     "CANDLE_READER_SERVER": "https://brs.talebook.org",
     "EPUB_VIEWER": "creader.html",
@@ -94,6 +105,7 @@ settings = {
     'douban_baseurl'    : "https://api.douban.com",
     'douban_max_count'  : 2,
     'auto_fill_meta'    : False,
+    'auto_fill_keep_cover': True,
     'META_SELECTED_SOURCES': ["douban", "baidu", "google", "amazon", "xinhua"],
     'ai_api_url'        : "https://api.openai.com/v1/chat/completions",
     'ai_api_key'        : "",

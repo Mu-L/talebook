@@ -7,7 +7,7 @@ import datetime
 import tornado.escape
 
 from webserver import loader
-from webserver.handlers.base import BaseHandler, auth, js
+from webserver.handlers.base import ListHandler, auth, js
 from webserver.i18n import _
 from webserver.models import BookSourceModel, OnlineBookMeta
 from webserver.services.booksource import BookSource, BookSourceEngine, JsRuleUnsupported
@@ -27,7 +27,7 @@ def engine_config():
     }
 
 
-class NetworkBaseHandler(BaseHandler):
+class NetworkBaseHandler(ListHandler):
     def get_source(self, source_id):
         if not source_id:
             return None

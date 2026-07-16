@@ -421,7 +421,9 @@
     "certFileError": "Certificate file (.crt) is invalid; not PEM format",
     "keyFileError": "Private key file (.key) is invalid; not PEM format",
     "uploadSuccess": "Upload succeeded!",
-    "uploadNotice": "Due to server limits, avoid uploading files larger than 100MB.",
+    "uploadNotice": "Large files are uploaded automatically in chunks, please keep your network connection stable.",
+    "uploadProgress": "Uploading... {percent}%",
+    "uploadMerging": "Chunks uploaded, merging file...",
     "selectEbook": "Please select an ebook to upload",
     "uploadBooks": "Upload Books",
     "activateSuccess": "Activation Successful",
@@ -677,6 +679,12 @@
         "updateCheck": "Check for Updates",
         "databaseManagement": "Database Management"
       },
+      "group": {
+        "site": "Site",
+        "access": "Access & Users",
+        "services": "Services & Integrations",
+        "system": "System"
+      },
       "button": {
         "saveSettings": "Save Settings",
         "testEmail": "Test Email",
@@ -689,6 +697,7 @@
         "forceMigrateDb": "Force Migrate"
       },
       "label": {
+        "navSection": "Section",
         "siteTitle": "Site Title",
         "siteAnnouncement": "Site Announcement",
         "siteFooter": "Site Footer",
@@ -709,6 +718,7 @@
         "name": "Name",
         "link": "Link",
         "autoFillMeta": "Auto fill book info",
+        "autoFillKeepCover": "Only update book info when auto-filling",
         "metaSelectedSource": "Select enabled metadata sources",
         "doubanBaseurl": "Douban API URL",
         "doubanApiKey": "Douban API Key",
@@ -717,7 +727,11 @@
         "bookNamesFormat": "Directory naming format",
         "epubViewer": "EPUB Reader",
         "avatarService": "Avatar service",
-        "maxUploadSize": "Max upload size",
+        "maxUploadSize": "Max file size allowed to upload; when chunking is enabled this is the total merged size limit (e.g. 100MB)",
+        "uploadChunkEnabled": "Enable chunked upload for large files (bypasses reverse proxy request size limits)",
+        "uploadChunkThreshold": "File size threshold that triggers chunked upload (e.g. 8MB)",
+        "uploadChunkSize": "Size of each upload chunk (e.g. 4MB)",
+        "maxChunkCount": "Max number of chunks allowed per upload (e.g. 4096)",
         "cookieSecret": "Cookie secret",
         "scanUploadPath": "Scan path",
         "pushTitle": "Push email title",

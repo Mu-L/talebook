@@ -1,28 +1,74 @@
 
 <template>
-    <div>
-        <v-card
-            v-for="card in cards"
-            :key="card.key"
-            class="my-2 elevation-4"
-        >
-            <v-card-title
-                class="cursor-pointer py-4 pl-2"
-                @click="cardShows[card.key] = !cardShows[card.key]"
+    <div class="settings-page">
+        <!-- 悬浮固定标题栏：左标题 + 右保存 -->
+        <div class="settings-titlebar">
+            <h1 class="settings-page-title">
+                {{ t('admin.settings.title') }}
+            </h1>
+            <v-btn
+                color="primary"
+                @click="save_settings"
             >
-                <v-btn
-                    icon
-                    variant="text"
-                    size="small"
-                    class="mr-1"
+                {{ t('admin.settings.button.saveSettings') }}
+            </v-btn>
+        </div>
+
+        <!-- 窄屏：顶部下拉跳转 -->
+        <v-select
+            v-if="display.smAndDown.value"
+            :model-value="activeKey"
+            :items="navSelectItems"
+            :label="t('admin.settings.label.navSection')"
+            variant="outlined"
+            density="compact"
+            hide-details
+            item-title="title"
+            item-value="key"
+            class="mt-3 mb-4"
+            @update:model-value="scrollToSection"
+        />
+
+        <div class="settings-body">
+            <!-- 左侧导航 -->
+            <nav
+                v-if="!display.smAndDown.value"
+                class="settings-nav"
+            >
+                <template
+                    v-for="grp in navGroups"
+                    :key="grp.key"
                 >
-                    <v-icon>{{ cardShows[card.key] ? 'mdi-chevron-down' : 'mdi-chevron-up' }}</v-icon>
-                </v-btn>
-                {{ card.title }}
-            </v-card-title>
-            <v-expand-transition>
-                <div v-show="cardShows[card.key]">
-                    <v-card-text style="padding: 0 16px 16px">
+                    <div class="settings-nav-group">
+                        {{ grp.title }}
+                    </div>
+                    <button
+                        v-for="item in grp.items"
+                        :key="item.key"
+                        type="button"
+                        class="settings-nav-item"
+                        :class="{ active: activeKey === item.key }"
+                        :data-navkey="item.key"
+                        @click="scrollToSection(item.key)"
+                    >
+                        {{ item.title }}
+                    </button>
+                </template>
+            </nav>
+
+            <!-- 右侧内容 -->
+            <div class="settings-content">
+                <section
+                    v-for="card in orderedCards"
+                    :id="'sec-' + card.key"
+                    :key="card.key"
+                    :data-key="card.key"
+                    class="settings-section"
+                >
+                    <h2 class="settings-section-title">
+                        {{ card.title }}
+                    </h2>
+                    <div class="settings-section-body">
                         <p
                             v-if="card.subtitle"
                             class="mb-4 text-medium-emphasis"
@@ -47,66 +93,73 @@
                             v-for="f in card.fields"
                             :key="f.key"
                         >
-                            <v-checkbox
-                                v-if="f.type === 'checkbox' "
-                                v-model="settings[f.key]"
-                                density="compact"
-                                hide-details
-                                :prepend-icon="f.icon"
-                                :label="f.label"
-                                color="primary"
-                            />
-                            <v-textarea
-                                v-else-if="f.type === 'textarea' "
-                                v-model="settings[f.key]"
-                                variant="outlined"
-                                :prepend-icon="f.icon"
-                                :label="f.label"
-                                rows="3"
-                            />
-                            <v-select
-                                v-else-if="f.type === 'select' "
-                                v-model="settings[f.key]"
-                                :prepend-icon="f.icon"
-                                :items="f.items"
-                                :label="f.label"
-                                hide-details
-                                class="mb-4"
-                                item-title="text"
-                                item-value="value"
-                            />
-                            <template
-                                v-else-if="f.type === 'meta_sources'"
-                            >
-                                <v-select
-                                    v-model="settings['META_SELECTED_SOURCES']"
-                                    :items="metaSourceItems"
-                                    :label="f.label"
+                            <template v-if="!f.show_when || f.show_when()">
+                                <v-checkbox
+                                    v-if="f.type === 'checkbox' "
+                                    v-model="settings[f.key]"
+                                    density="compact"
+                                    hide-details
                                     :prepend-icon="f.icon"
-                                    multiple
-                                    chips
-                                    closable-chips
+                                    :label="f.label"
+                                    color="primary"
+                                />
+                                <v-textarea
+                                    v-else-if="f.type === 'textarea' "
+                                    v-model="settings[f.key]"
+                                    variant="outlined"
+                                    density="compact"
+                                    :prepend-icon="f.icon"
+                                    :label="f.label"
+                                    rows="3"
+                                />
+                                <v-select
+                                    v-else-if="f.type === 'select' "
+                                    v-model="settings[f.key]"
+                                    :prepend-icon="f.icon"
+                                    :items="f.items"
+                                    :label="f.label"
+                                    density="compact"
+                                    hide-details
+                                    class="mb-4"
                                     item-title="text"
                                     item-value="value"
+                                />
+                                <template
+                                    v-else-if="f.type === 'meta_sources'"
                                 >
-                                </v-select>
+                                    <v-select
+                                        v-model="settings['META_SELECTED_SOURCES']"
+                                        :items="metaSourceItems"
+                                        :label="f.label"
+                                        :prepend-icon="f.icon"
+                                        density="compact"
+                                        multiple
+                                        chips
+                                        closable-chips
+                                        item-title="text"
+                                        item-value="value"
+                                    >
+                                    </v-select>
+                                </template>
+                                <v-text-field
+                                    v-else-if="f.type === 'number'"
+                                    v-model.number="settings[f.key]"
+                                    :prepend-icon="f.icon"
+                                    :label="f.label"
+                                    density="compact"
+                                    type="number"
+                                />
+                                <v-text-field
+                                    v-else
+                                    v-model="settings[f.key]"
+                                    :prepend-icon="f.icon"
+                                    :label="f.label"
+                                    density="compact"
+                                    type="text"
+                                />
                             </template>
-                            <v-text-field
-                                v-else-if="f.type === 'number'"
-                                v-model.number="settings[f.key]"
-                                :prepend-icon="f.icon"
-                                :label="f.label"
-                                type="number"
-                            />
-                            <v-text-field
-                                v-else
-                                v-model="settings[f.key]"
-                                :prepend-icon="f.icon"
-                                :label="f.label"
-                                type="text"
-                            />
                         </template>
-                
+
                         <div
                             v-if="card.buttons && card.buttons.length"
                             class="mt-2 mb-2"
@@ -151,6 +204,7 @@
                                         v-if="f.type === 'textarea' "
                                         v-model="settings[f.key]"
                                         variant="outlined"
+                                        density="compact"
                                         :prepend-icon="f.icon"
                                         :label="f.label"
                                         rows="3"
@@ -160,6 +214,7 @@
                                         v-model="settings[f.key]"
                                         :prepend-icon="f.icon"
                                         :label="f.label"
+                                        density="compact"
                                         type="text"
                                     />
                                 </template>
@@ -375,19 +430,19 @@
                             <p class="mb-4">
                                 {{ t('admin.settings.message.socialLoginInfo') }}
                             </p>
-                            <v-combobox 
-                                v-model="settings.SOCIALS" 
-                                :items="sns_items" 
-                                :label="t('admin.settings.label.selectSocialAccounts')" 
-                                hide-selected 
-                                multiple 
-                                chips 
+                            <v-combobox
+                                v-model="settings.SOCIALS"
+                                :items="sns_items"
+                                :label="t('admin.settings.label.selectSocialAccounts')"
+                                hide-selected
+                                multiple
+                                chips
                                 closable-chips
                                 item-title="text"
                                 item-value="value"
                                 return-object
                             />
-                       
+
                             <div
                                 v-for="s in settings.SOCIALS"
                                 :key="'social-'+s.value"
@@ -454,6 +509,7 @@
                                     :items="dbTypeOptions"
                                     item-title="text"
                                     item-value="value"
+                                    density="compact"
                                     hide-details
                                     class="mb-4"
                                 />
@@ -592,20 +648,9 @@
                                 </v-btn>
                             </div>
                         </template>
-                    </v-card-text>
-                </div>
-            </v-expand-transition>
-        </v-card>
-
-        <br>
-        <div class="text-center mb-8">
-            <v-btn
-                color="primary"
-                size="large"
-                @click="save_settings"
-            >
-                {{ t('admin.settings.button.saveSettings') }}
-            </v-btn>
+                    </div>
+                </section>
+            </div>
         </div>
 
         <v-dialog v-model="trashConfirmDialog" max-width="400" persistent>
@@ -655,16 +700,18 @@
 </template>
 
 <script setup>
-import { ref, onMounted, computed } from 'vue';
+import { ref, onMounted, onBeforeUnmount, computed, nextTick, watch } from 'vue';
 import { marked } from 'marked';
 marked.setOptions({ breaks: true, gfm: true });
 import { useI18n } from 'vue-i18n';
+import { useDisplay } from 'vuetify';
 import SSLManager from '~/components/SSLManager.vue';
 import { useMainStore } from '@/stores/main';
 
 const store = useMainStore();
 const { $backend, $alert } = useNuxtApp();
 const { t } = useI18n();
+const display = useDisplay();
 
 store.setNavbar(true);
 
@@ -696,25 +743,6 @@ const updateInfo = ref({
     last_check_time: null,
 });
 const updateChecking = ref(false);
-
-// Store card expand/collapse states separately from computed cards
-const cardShows = ref({
-    basicInfo: false,
-    userSettings: false,
-    socialLogin: false,
-    emailService: false,
-    bookCategories: false,
-    friendshipLinks: false,
-    deviceManagement: false,
-    bookInfoSources: false,
-    advancedSettings: false,
-    sslManagement: false,
-    opdsSettings: false,
-    captchaSettings: false,
-    trashManagement: false,
-    updateCheck: false,
-    databaseManagement: false,
-});
 
 // Database management state
 const dbNewType = ref('mysql');
@@ -854,7 +882,8 @@ const cards = computed(() => [
         subtitle: t('admin.settings.message.bookInfoSourcesInfo'),
         fields: [
             { icon: '', key: 'auto_fill_meta', label: t('admin.settings.label.autoFillMeta'), type: 'checkbox' },
-            { 
+            { icon: '', key: 'auto_fill_keep_cover', label: t('admin.settings.label.autoFillKeepCover'), type: 'checkbox' },
+            {
                 icon: 'mdi-source-branch',
                 key: 'META_SELECTED_SOURCES',
                 label: t('admin.settings.label.metaSelectedSource'),
@@ -953,6 +982,10 @@ const cards = computed(() => [
             },
             { icon: 'mdi-information', key: 'avatar_service', label: t('admin.settings.label.avatarService') },
             { icon: 'mdi-information', key: 'MAX_UPLOAD_SIZE', label: t('admin.settings.label.maxUploadSize') },
+            { icon: '', key: 'UPLOAD_CHUNK_ENABLED', label: t('admin.settings.label.uploadChunkEnabled'), type: 'checkbox' },
+            { icon: 'mdi-information', key: 'UPLOAD_CHUNK_THRESHOLD', label: t('admin.settings.label.uploadChunkThreshold'), show_when: () => settings.value.UPLOAD_CHUNK_ENABLED },
+            { icon: 'mdi-information', key: 'UPLOAD_CHUNK_SIZE', label: t('admin.settings.label.uploadChunkSize'), show_when: () => settings.value.UPLOAD_CHUNK_ENABLED },
+            { icon: 'mdi-information', key: 'MAX_CHUNK_COUNT', label: t('admin.settings.label.maxChunkCount'), show_when: () => settings.value.UPLOAD_CHUNK_ENABLED },
             { icon: 'mdi-lock', key: 'cookie_secret', label: t('admin.settings.label.cookieSecret') },
             { icon: 'mdi-folder', key: 'scan_upload_path', label: t('admin.settings.label.scanUploadPath') },
             { icon: 'mdi-information', key: 'push_title', label: t('admin.settings.label.pushTitle') },
@@ -994,6 +1027,107 @@ const cards = computed(() => [
     },
 ]);
 
+// 左侧导航分组：定义分组内包含的分类 key 及其顺序
+const navGroupDefs = [
+    { key: 'site', titleKey: 'admin.settings.group.site', keys: ['basicInfo', 'bookCategories', 'friendshipLinks'] },
+    { key: 'access', titleKey: 'admin.settings.group.access', keys: ['userSettings', 'socialLogin', 'captchaSettings'] },
+    { key: 'services', titleKey: 'admin.settings.group.services', keys: ['emailService', 'deviceManagement', 'bookInfoSources', 'opdsSettings', 'webdavSettings'] },
+    { key: 'system', titleKey: 'admin.settings.group.system', keys: ['advancedSettings', 'databaseManagement', 'sslManagement', 'trashManagement', 'updateCheck'] },
+];
+
+// section 渲染顺序（与导航顺序一致，供 scroll-spy 判定使用）
+const sectionOrder = navGroupDefs.flatMap((g) => g.keys);
+
+const cardsByKey = computed(() => {
+    const m = {};
+    cards.value.forEach((c) => { m[c.key] = c; });
+    return m;
+});
+
+const orderedCards = computed(() => sectionOrder.map((k) => cardsByKey.value[k]).filter(Boolean));
+
+const navGroups = computed(() => navGroupDefs.map((g) => ({
+    key: g.key,
+    title: t(g.titleKey),
+    items: g.keys
+        .map((k) => cardsByKey.value[k])
+        .filter(Boolean)
+        .map((c) => ({ key: c.key, title: c.title })),
+})));
+
+const navSelectItems = computed(() => orderedCards.value.map((c) => ({ key: c.key, title: c.title })));
+
+// scroll-spy 状态
+const activeKey = ref(sectionOrder[0]);
+let spyLocked = false;
+let spyLockTimer = null;
+let scrollRaf = 0;
+
+const HEADER_OFFSET = 104; // app-bar(48) + 悬浮标题栏(约 56)
+const ACTIVE_LINE = HEADER_OFFSET + 12; // 判定基准线：分类上缘越过该线即视为当前分类
+
+// 取上缘已越过基准线的最后一个分类；滚动到底部时直接激活最后一个分类
+const computeActiveKey = () => {
+    if (!import.meta.client) return;
+    const innerH = window.innerHeight;
+    const docH = document.documentElement.scrollHeight;
+    const scrollable = docH - innerH > 4;
+    // 页面确有滚动空间且已滚到底部时，激活最后一个分类（末尾分类无法上移到判定线）
+    if (scrollable && window.scrollY > 0 && window.scrollY + innerH >= docH - 4) {
+        activeKey.value = sectionOrder[sectionOrder.length - 1];
+        return;
+    }
+    let current = sectionOrder[0];
+    for (const k of sectionOrder) {
+        const el = document.getElementById('sec-' + k);
+        if (!el) continue;
+        if (el.getBoundingClientRect().top <= ACTIVE_LINE) current = k;
+        else break;
+    }
+    activeKey.value = current;
+};
+
+const onScroll = () => {
+    if (spyLocked || scrollRaf) return;
+    scrollRaf = requestAnimationFrame(() => {
+        scrollRaf = 0;
+        computeActiveKey();
+    });
+};
+
+const scrollToSection = (key) => {
+    if (!key) return;
+    activeKey.value = key;
+    // 点击跳转期间锁定 spy，避免平滑滚动过程中的抖动
+    spyLocked = true;
+    if (spyLockTimer) clearTimeout(spyLockTimer);
+    spyLockTimer = setTimeout(() => { spyLocked = false; computeActiveKey(); }, 700);
+    if (import.meta.client) {
+        const el = document.getElementById('sec-' + key);
+        if (el) el.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }
+};
+
+const setupSpy = () => {
+    if (!import.meta.client) return;
+    // 页面加载时停在顶部，默认激活第一个分类；此后仅随用户滚动重新计算
+    window.addEventListener('scroll', onScroll, { passive: true });
+};
+
+// 导航项过多导致侧栏内部滚动时，保持当前项可见（仅滚动侧栏本身，不影响页面滚动）
+watch(activeKey, (key) => {
+    if (!import.meta.client) return;
+    nextTick(() => {
+        const btn = document.querySelector(`.settings-nav-item[data-navkey="${key}"]`);
+        const nav = btn && btn.closest('.settings-nav');
+        if (!btn || !nav) return;
+        const br = btn.getBoundingClientRect();
+        const nr = nav.getBoundingClientRect();
+        if (br.bottom > nr.bottom) nav.scrollTop += br.bottom - nr.bottom + 8;
+        else if (br.top < nr.top) nav.scrollTop -= nr.top - br.top + 8;
+    });
+});
+
 // 元数据源选项
 const metaSourceItems = computed(() => {
     const allSources = settings.value['META_ALL_SOURCES'] || [
@@ -1025,7 +1159,7 @@ onMounted(() => {
         rsp.sns.forEach(function(ele){
             m[ele.value] = ele;
         });
-        
+
         // Populate link info for selected socials if available
         if (settings.value.SOCIALS) {
             settings.value.SOCIALS.forEach(function(ele){
@@ -1037,7 +1171,7 @@ onMounted(() => {
         } else {
             settings.value.SOCIALS = [];
         }
-        
+
         if (!settings.value.FRIENDS) {
             settings.value.FRIENDS = [];
         }
@@ -1045,9 +1179,17 @@ onMounted(() => {
             settings.value.DEVICES = [];
         }
     });
-    
+
     fetchTrashSize();
     fetchUpdateStatus();
+
+    nextTick(setupSpy);
+});
+
+onBeforeUnmount(() => {
+    if (spyLockTimer) clearTimeout(spyLockTimer);
+    if (import.meta.client) window.removeEventListener('scroll', onScroll);
+    if (scrollRaf) cancelAnimationFrame(scrollRaf);
 });
 
 const save_settings = () => {
@@ -1076,7 +1218,7 @@ const test_email = () => {
     data.append('smtp_username', settings.value['smtp_username']);
     data.append('smtp_password', settings.value['smtp_password']);
     data.append('smtp_encryption', settings.value['smtp_encryption']);
-    
+
     $backend('/admin/testmail', {
         method: 'POST',
         body: data,
@@ -1228,4 +1370,119 @@ useHead(() => ({
 .border-left {
     border-left: 2px solid #eee;
 }
+
+/* 悬浮固定标题栏（贴在应用顶栏下方） */
+.settings-titlebar {
+    position: sticky;
+    top: 48px;
+    z-index: 4;
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    gap: 16px;
+    padding: 8px 0;
+    margin-bottom: 24px;
+    background: rgb(var(--v-theme-surface));
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+.settings-page-title {
+    font-size: 20px;
+    font-weight: 600;
+    line-height: 1.4;
+}
+
+.settings-body {
+    display: flex;
+    align-items: flex-start;
+    gap: 0;
+    /* 导航菜单放在右侧，配置内容在左侧 */
+    flex-direction: row-reverse;
+}
+
+/* 右侧导航 */
+.settings-nav {
+    position: sticky;
+    top: 108px;
+    flex: 0 0 172px;
+    width: 172px;
+    max-height: calc(100vh - 140px);
+    overflow-y: auto;
+    padding-left: 24px;
+}
+.settings-nav-group {
+    font-size: 12px;
+    font-weight: 800;
+    text-transform: uppercase;
+    letter-spacing: 0.04em;
+    color: rgb(var(--v-theme-on-surface));
+    opacity: 0.8;
+    /* 块与块之间留更多空白 */
+    margin: 28px 0 8px;
+    padding: 0 10px 6px;
+    /* 横线放在小标题下方 */
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+.settings-nav-group:first-child {
+    margin-top: 0;
+}
+.settings-nav-item {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 5px 10px;
+    margin-bottom: 1px;
+    border: none;
+    border-radius: 6px;
+    background: transparent;
+    color: inherit;
+    font-size: 13px;
+    line-height: 1.4;
+    cursor: pointer;
+    transition: background-color 0.15s ease;
+}
+.settings-nav-item:hover {
+    background: rgba(var(--v-theme-on-surface), 0.06);
+}
+.settings-nav-item.active {
+    background: rgba(var(--v-theme-primary), 0.12);
+    color: rgb(var(--v-theme-primary));
+    font-weight: 600;
+}
+
+/* 右侧内容：紧凑 + 常规字号 */
+.settings-content {
+    flex: 1 1 auto;
+    min-width: 0;
+    font-size: 14px;
+    /* 左右两栏之间的竖线分隔（内容在左，导航在右） */
+    padding-right: 24px;
+    border-right: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+.settings-section {
+    scroll-margin-top: 116px;
+    padding-bottom: 20px;
+    margin-bottom: 20px;
+}
+.settings-section-title {
+    font-size: 16px;
+    font-weight: 600;
+    margin-bottom: 14px;
+    padding-bottom: 6px;
+    border-bottom: 1px solid rgba(var(--v-theme-on-surface), 0.12);
+}
+/* 紧凑表单：缩小各控件之间的垂直间距 */
+.settings-section-body :deep(.v-input) {
+    margin-bottom: 2px;
+}
+/* 整页紧凑：缩小所有输入/下拉/文本域的字号 */
+.settings-content :deep(.v-field__input),
+.settings-content :deep(.v-field__input input),
+.settings-content :deep(.v-field textarea),
+.settings-content :deep(.v-select__selection-text),
+.settings-content :deep(.v-label),
+.settings-content :deep(.v-field-label),
+.settings-content :deep(.v-chip) {
+    font-size: 13px;
+}
+
 </style>

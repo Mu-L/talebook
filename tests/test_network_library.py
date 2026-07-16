@@ -9,7 +9,7 @@ from unittest import mock
 
 from tests.test_booksource_admin import CSS_SOURCE
 from tests.test_booksource_engine import FakeSession, text
-from tests.test_main import TestWithUserLogin, get_db
+from tests.test_main import BID_EPUB, TestWithUserLogin, get_db
 from tests.test_main import setUpModule as init
 from webserver import models
 
@@ -192,6 +192,26 @@ class TestNetworkLibrary(TestWithUserLogin):
     def test_explore_missing_url(self):
         d = self.json("/api/network/explore?source_id=%d&url=&page=1" % self.sid)
         self.assertEqual(d["err"], "params.error")
+
+    def test_library_online(self):
+        # /api/library/online 走 render_book_list，需 NetworkBaseHandler 继承 ListHandler
+        session = get_db()
+        session.query(models.OnlineBookMeta).delete()
+        session.commit()
+        meta = models.OnlineBookMeta(book_id=BID_EPUB, source_url="http://x.com")
+        meta.serialize_status = models.OnlineBookMeta.SERIAL
+        meta.save()
+        try:
+            d = self.json("/api/library/online")
+            self.assertEqual(d["err"], "ok")
+            self.assertEqual(d["title"], "网络书库")
+            ids = [b["id"] for b in d["books"]]
+            self.assertIn(BID_EPUB, ids)
+            book = next(b for b in d["books"] if b["id"] == BID_EPUB)
+            self.assertEqual(book["serialize_status"], "serial")
+        finally:
+            session.query(models.OnlineBookMeta).filter(models.OnlineBookMeta.book_id == BID_EPUB).delete()
+            session.commit()
 
     def test_status_get_set(self):
         session = get_db()

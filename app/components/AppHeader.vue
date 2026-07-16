@@ -42,12 +42,14 @@
             </template>
 
             <v-app-bar-nav-icon @click.stop="sidebar = !sidebar" />
-            <v-toolbar-title
-                class="ml-2 mr-4 align-center"
-                style="cursor: pointer"
-                @click="router.push('/')"
-            >
-                {{ store.sys.title }}
+            <v-toolbar-title class="ml-2 mr-4 align-center">
+                <span
+                    class="site-title"
+                    style="cursor: pointer"
+                    @click="router.push('/')"
+                >
+                    {{ store.sys.title }}
+                </span>
             </v-toolbar-title>
 
             <template v-if="display.smAndUp.value">
@@ -316,6 +318,7 @@
             v-model="sidebar"
             class="app-navigation-drawer"
             :order="2"
+            mobile-breakpoint="md"
             width="240"
         >
             <v-list
@@ -535,7 +538,7 @@ const items = computed(() => {
 
 onMounted(() => {
     visit_admin_pages.value = route.path.indexOf('/admin/') == 0;
-    sidebar.value = display.lgAndUp.value;
+    sidebar.value = display.mdAndUp.value;
     store.bootstrap().then((rsp) => {
         err.value = rsp.err;
     });
@@ -577,10 +580,13 @@ function toggleTheme() {
 </script>
 
 <style scoped>
+.v-app-bar :deep(.v-toolbar__content) {
+    position: relative;
+}
 .search-wrapper {
-    flex: 0 1 600px;
-    margin-left: auto;
-    margin-right: 12px;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     width: 40vw;
     max-width: 600px;
     min-width: 250px;

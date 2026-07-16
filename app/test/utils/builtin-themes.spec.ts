@@ -31,6 +31,21 @@ describe('builtin-themes', () => {
             expect(css).toContain(`body.tb-current-builtin-theme-${themeName}.tb-current-builtin-theme-mode-dark .v-overlay-container`);
             expect(css).toContain('.v-overlay__content .v-toolbar.bg-primary');
             expect(css).toContain('.v-overlay__content .v-card');
+            expect(css).toContain('.v-overlay__content .v-alert');
+        }
+    });
+
+    it('aligns dialog title / text / actions horizontal padding for every theme', () => {
+        for (const themeName of builtinThemeNames) {
+            const css = buildBuiltinThemeOverlayCss(themeName);
+
+            const titleX = css.match(/\.v-card-title \{\s*padding-left: (\d+px) !important;/)?.[1];
+            const actionsX = css.match(/\.v-card-actions \{[^}]*padding-left: (\d+px) !important;/)?.[1];
+            const textX = css.match(/\.v-card-text \{[^}]*padding: \d+px (\d+px)/)?.[1];
+
+            expect(titleX).toBeDefined();
+            expect(actionsX).toBe(titleX);
+            expect(textX).toBe(titleX);
         }
     });
 

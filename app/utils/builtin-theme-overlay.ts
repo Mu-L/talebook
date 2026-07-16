@@ -320,6 +320,9 @@ function overlaySelector(themeName: BuiltinThemeName, mode: BuiltinThemeMode, su
 function buildModeOverlayCss(themeName: BuiltinThemeName, mode: BuiltinThemeMode, palette: OverlayThemePalette) {
     const base = overlaySelector(themeName, mode);
     const titleFontFamily = palette.titleFontFamily || palette.fontFamily;
+    // cardPadding 是 CSS 简写（如 "12px 18px 18px"），取水平内边距让弹窗标题/正文/操作栏左右对齐
+    const cardPaddingParts = palette.cardPadding.split(/\s+/);
+    const cardPaddingX = cardPaddingParts[1] || cardPaddingParts[0];
 
     return `
         ${base} { color: ${palette.text}; font-family: ${palette.fontFamily}; font-size: ${palette.fontSize}; }
@@ -356,14 +359,27 @@ function buildModeOverlayCss(themeName: BuiltinThemeName, mode: BuiltinThemeMode
         ${base} .v-overlay__content .v-toolbar.bg-primary .v-btn.v-btn--variant-outlined {
             border-color: ${palette.primaryText} !important;
         }
+        ${base} .v-overlay__content .v-card-title {
+            padding-left: ${cardPaddingX} !important;
+            padding-right: ${cardPaddingX} !important;
+        }
         ${base} .v-overlay__content .v-card-text {
             color: ${palette.text} !important;
             font-size: ${palette.fontSize} !important;
             padding: ${palette.cardPadding} !important;
         }
+        ${base} .v-overlay__content .v-card-actions {
+            padding-bottom: ${cardPaddingX} !important;
+            padding-left: ${cardPaddingX} !important;
+            padding-right: ${cardPaddingX} !important;
+        }
         ${base} .v-overlay__content .text-medium-emphasis,
         ${base} .v-overlay__content .v-card-subtitle {
             color: ${palette.muted} !important;
+        }
+        ${base} .v-overlay__content .v-card-subtitle {
+            padding-left: ${cardPaddingX} !important;
+            padding-right: ${cardPaddingX} !important;
         }
         ${base} .v-overlay__content .v-btn {
             border-radius: ${palette.buttonRadius} !important;
@@ -428,6 +444,21 @@ function buildModeOverlayCss(themeName: BuiltinThemeName, mode: BuiltinThemeMode
         }
         ${base} .v-overlay__content .v-progress-circular {
             color: ${palette.primaryTextColor} !important;
+        }
+        ${base} .v-overlay__content .v-alert {
+            background: ${palette.tonalBackground} !important;
+            border: 1px solid ${palette.outlinedBorder} !important;
+            border-radius: ${palette.radius} !important;
+            box-shadow: none !important;
+            color: ${palette.tonalText} !important;
+        }
+        ${base} .v-overlay__content .v-alert .v-alert-title,
+        ${base} .v-overlay__content .v-alert .v-alert__content {
+            color: ${palette.tonalText} !important;
+        }
+        ${base} .v-overlay__content .v-alert .v-alert__prepend .v-icon,
+        ${base} .v-overlay__content .v-alert .v-alert__close .v-icon {
+            color: ${palette.tonalText} !important;
         }
     `;
 }

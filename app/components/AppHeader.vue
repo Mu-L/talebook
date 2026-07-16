@@ -459,6 +459,7 @@ const messages = computed(() => store.messages);
 
 const mobile_search = ref(null);
 const search_input = ref(null);
+const readDoneCount = ref(0);
 
 // 多语言相关
 const availableLocales = computed(() => {
@@ -479,7 +480,10 @@ const items = computed(() => {
         { icon: 'mdi-cloud-search', href: '/network', text: $t('navigation.networkLibrary') },
     ];
     var shelf_links = store.user.is_login
-        ? [{ icon: 'mdi-bookshelf', href: '/user/shelf', text: $t('navigation.myShelf') }]
+        ? [
+            { icon: 'mdi-bookshelf', href: '/user/shelf', text: $t('navigation.myShelf') },
+            { icon: 'mdi-check-circle', href: '/user/history?tab=finished', text: $t('navigation.readBooks'), count: readDoneCount.value },
+        ]
         : [];
     var admin_links = [
         {
@@ -541,6 +545,14 @@ onMounted(() => {
     sidebar.value = display.mdAndUp.value;
     store.bootstrap().then((rsp) => {
         err.value = rsp.err;
+        if (store.user.is_login) {
+            const { $backend } = useNuxtApp();
+            $backend('/read-done').then((rsp) => {
+                if (rsp.err === 'ok') {
+                    readDoneCount.value = rsp.total || 0;
+                }
+            }).catch(() => {});
+        }
     });
 });
 

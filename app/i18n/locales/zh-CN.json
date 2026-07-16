@@ -204,7 +204,8 @@
     "bookSources": "书源管理",
     "themes": "主题管理",
     "systemLogs": "系统日志",
-    "myShelf": "我的书架"
+    "myShelf": "我的书架",
+    "readBooks": "已读书目"
   },
   "network": {
     "title": "网络书库",

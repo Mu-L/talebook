@@ -258,6 +258,65 @@ class TestReadingLists(TestWithUserLogin):
         self.assertIn("month_read_done", stats)
 
 
+class TestBookListReadState(TestWithUserLogin):
+    def _set_read_state(self, book_id, read_state, reader_id=1):
+        from webserver.models import ReadingState
+
+        session = get_db()
+        state = (
+            session.query(ReadingState)
+            .filter(ReadingState.book_id == book_id, ReadingState.reader_id == reader_id)
+            .first()
+        )
+        if not state:
+            state = ReadingState(book_id, reader_id)
+            session.add(state)
+        state.set_read_state(read_state)
+        session.commit()
+
+    def _clear_reading_state(self, book_id, reader_id=1):
+        from webserver.models import ReadingState
+
+        session = get_db()
+        state = (
+            session.query(ReadingState)
+            .filter(ReadingState.book_id == book_id, ReadingState.reader_id == reader_id)
+            .first()
+        )
+        if state:
+            session.delete(state)
+            session.commit()
+
+    def test_index_marks_read_done_book(self):
+        self._set_read_state(BID_EPUB, 2)
+        try:
+            d = self.json("/api/index?random=1&recent=30")
+            books = d["new_books"] + d["random_books"]
+            book = next((b for b in books if b["id"] == BID_EPUB), None)
+            if book is not None:
+                self.assertIn("state", book)
+                self.assertEqual(book["state"]["read_state"], 2)
+        finally:
+            self._clear_reading_state(BID_EPUB)
+
+    def test_recent_marks_read_done_book(self):
+        self._set_read_state(BID_EPUB, 2)
+        try:
+            d = self.json("/api/recent")
+            book = next(b for b in d["books"] if b["id"] == BID_EPUB)
+            self.assertIn("state", book)
+            self.assertEqual(book["state"]["read_state"], 2)
+        finally:
+            self._clear_reading_state(BID_EPUB)
+
+    def test_recent_defaults_to_unread(self):
+        self._clear_reading_state(BID_EPUB)
+        d = self.json("/api/recent")
+        book = next(b for b in d["books"] if b["id"] == BID_EPUB)
+        self.assertIn("state", book)
+        self.assertEqual(book["state"]["read_state"], 0)
+
+
 class TestBookDetailWithReadingState(TestWithUserLogin):
     def test_book_detail_no_state(self):
         from webserver.models import ReadingState

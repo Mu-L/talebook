@@ -89,8 +89,8 @@ class Index(BaseHandler):
         return {
             "random_books_count": len(random_books),
             "new_books_count": len(new_books),
-            "random_books": [self.fmt(b) for b in random_books],
-            "new_books": [self.fmt(b) for b in new_books],
+            "random_books": self.attach_reading_states([self.fmt(b) for b in random_books]),
+            "new_books": self.attach_reading_states([self.fmt(b) for b in new_books]),
         }
 
 
@@ -2115,6 +2115,7 @@ class BookScoped(BaseHandler):
             for book in books:
                 book_data = utils.BookFormatter(self, book).format()
                 books_result.append(book_data)
+            books_result = self.attach_reading_states(books_result)
 
             return {"err": "ok", "title": title, "total": total_items, "books": books_result}
         except Exception as e:

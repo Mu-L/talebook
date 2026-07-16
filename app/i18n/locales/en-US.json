@@ -199,7 +199,8 @@
     "bookSources": "Book Sources",
     "themes": "Themes",
     "systemLogs": "System Logs",
-    "myShelf": "My Shelf"
+    "myShelf": "My Shelf",
+    "readBooks": "Read Books"
   },
   "network": {
     "title": "Network Library",

@@ -70,9 +70,10 @@ import { useI18n } from 'vue-i18n';
 
 const { $backend } = useNuxtApp();
 const mainStore = useMainStore();
+const route = useRoute();
 const { t } = useI18n();
 
-const activeTab = ref(0);
+const activeTab = ref(route.query.tab === 'finished' ? 1 : 0);
 const user = ref({});
 const readingBooks = ref([]);
 const finishedBooks = ref([]);

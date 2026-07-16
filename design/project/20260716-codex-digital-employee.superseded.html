@@ -39,7 +39,7 @@
     .subtitle { max-width: 760px; margin: 0; color: var(--muted); font-size: 18px; }
     .meta { display: flex; flex-wrap: wrap; gap: 10px; margin-top: 22px; font-size: 12px; }
     .tag { padding: 5px 9px; border: 1px solid var(--line); border-radius: 999px; background: var(--panel); }
-    .tag.active { color: var(--green); border-color: #a8c6b2; background: var(--green-soft); }
+    .tag.superseded { color: var(--amber); border-color: #d7ba83; background: var(--amber-soft); }
     .summary {
       margin: 34px 0 48px;
       padding: 22px 24px;
@@ -94,7 +94,7 @@
     <h1>Codex 数字员工工作流</h1>
     <p class="subtitle">将评论触发的 patch-only 助手升级为可联网、可验证、可向当前 PR 或 issue 工作分支提交代码的仓库数字员工。</p>
     <div class="meta">
-      <span class="tag active">状态 · ACTIVE</span>
+      <span class="tag superseded">状态 · SUPERSEDED</span>
       <span class="tag">创建日期 · 2026-07-16</span>
       <span class="tag">所属模块 · project</span>
       <span class="tag">需求来源 · 维护者对话</span>
@@ -104,6 +104,7 @@
 
   <div class="summary">
     <strong>结论摘要</strong>
+    <p><strong>本方案已由 <code>design/project/20260716-codex-digital-employee-review-fixes.active.html</code> 替代。</strong>替代方案修复了 loopback 监听、无变化门禁顺序和结构化测试评论，并保留本方案作为历史决策。</p>
     <p>停用官方 <code>chatgpt-codex-connector</code> 后，仓库内 <code>.github/workflows/codex.yml</code> 成为唯一入口。Codex 在 20 分钟上限内获得公共出站网络、本机测试回环地址和目标分支工作区，但 permission profile 默认拒绝读取工作区外文件，因此无法读取 runner 临时目录中的登录文件、GitHub 发布令牌或仓库 Secrets；发布由后置受控步骤使用专用 GitHub App 短期 token 完成。成功任务直接推送，失败任务评论原因并保留 patch artifact。</p>
   </div>
 
@@ -276,7 +277,7 @@
   </section>
 
   <footer>
-    替代：design/project/20260622-codex-actions.superseded.html 。旧 patch-only 方案已由本方案取代。
+    历史替代：design/project/20260622-codex-actions.superseded.html 。当前替代方案：design/project/20260716-codex-digital-employee-review-fixes.active.html 。
   </footer>
 </main>
 </body>

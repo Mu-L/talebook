@@ -52,10 +52,13 @@ def test_agent_has_public_network_but_cannot_read_host_credentials():
     assert '".github/workflows" = "read"' in workflow
     assert "[permissions.codex-employee.network.domains]" in workflow
     assert "network_proxy = true" in workflow
-    assert "allow_local_binding = false" in workflow
+    assert "allow_local_binding = true" in workflow
+    assert "allow_local_binding = false" not in workflow
     assert '"*" = "allow"' in workflow
     assert '"localhost" = "allow"' in workflow
     assert '"127.0.0.1" = "allow"' in workflow
+    assert '"169.254.169.254" = "deny"' in workflow
+    assert '"metadata.google.internal" = "deny"' in workflow
     assert 'TMPDIR = "$GITHUB_WORKSPACE/.codex-runtime"' in workflow
     assert "'.codex/tmp/'" in workflow
     assert '"GITHUB_TOKEN"' in workflow
@@ -128,6 +131,17 @@ def test_publish_gate_rejects_incomplete_or_unsafe_changes():
     assert 'echo "ready=false" >> "$GITHUB_OUTPUT"' in workflow
 
 
+def test_repository_wip_gate_runs_before_no_change_classification():
+    workflow = workflow_text()
+
+    wip_gate = "find design -type f -name '*.wip.html'"
+    no_change_gate = "git diff --cached --quiet; then\n            no_changes=true"
+
+    assert wip_gate in workflow
+    assert no_change_gate in workflow
+    assert workflow.index(wip_gate) < workflow.index(no_change_gate)
+
+
 def test_controlled_publisher_uses_a_short_lived_app_token_and_fast_forward_push():
     workflow = workflow_text()
 
@@ -198,3 +212,16 @@ def test_comment_reports_the_remote_delivery_result_and_job_fails_closed():
     assert "id: final_status" in workflow
     assert 'if [ "$GATE_READY" != "true" ]' in workflow
     assert 'if [ "$PUBLISH_OUTCOME" != "success" ]' in workflow
+
+
+def test_comment_uses_validated_summary_and_test_metadata():
+    workflow = workflow_text()
+
+    assert "CODEX_CONTRACT_VALID: ${{ steps.publish_gate.outputs.contract_valid }}" in workflow
+    assert "CODEX_RESULT_FILE: .codex-result.json" in workflow
+    assert "const validatedResult" in workflow
+    assert "validatedResult.summary" in workflow
+    assert "validatedResult.tests.map" in workflow
+    assert "### Validation" in workflow
+    assert "test.command" in workflow
+    assert "test.result" in workflow

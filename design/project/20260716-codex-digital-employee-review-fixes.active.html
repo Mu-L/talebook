@@ -1,0 +1,141 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Codex 数字员工评审修复方案</title>
+  <style>
+    :root { --paper:#f5f4ef; --panel:#fffef9; --ink:#20211f; --muted:#666861; --line:#d7d7cf; --blue:#315f73; --blue-soft:#e7f0f4; --amber:#8b6024; --amber-soft:#f7eddb; --red:#86433b; --red-soft:#f7e9e5; --green:#35654c; --green-soft:#e8f2eb; --code:#ecece6; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:52px 20px 84px; color:var(--ink); background:var(--paper); font:16px/1.68 ui-serif, Georgia, "Songti SC", serif; }
+    main { max-width:960px; margin:auto; }
+    header { padding-bottom:26px; border-bottom:1px solid var(--line); }
+    h1 { margin:12px 0 8px; font-size:clamp(30px,5vw,44px); line-height:1.15; }
+    h2 { margin:44px 0 16px; padding-bottom:8px; border-bottom:1px solid var(--line); font-size:23px; }
+    h3 { margin:26px 0 10px; font-size:18px; }
+    p { margin:0 0 14px; }
+    ul,ol { padding-left:24px; }
+    li { margin:7px 0; }
+    .eyebrow,.meta,code,th,figcaption { font-family:ui-monospace, SFMono-Regular, Menlo, monospace; }
+    .eyebrow { color:var(--blue); font-size:11px; letter-spacing:.14em; }
+    .subtitle { max-width:760px; color:var(--muted); font-size:18px; }
+    .meta { display:flex; flex-wrap:wrap; gap:9px; margin-top:20px; font-size:12px; }
+    .tag { padding:5px 9px; border:1px solid var(--line); border-radius:999px; background:var(--panel); }
+    .active { color:var(--green); border-color:#a8c6b2; background:var(--green-soft); }
+    .summary,.callout { margin:24px 0; padding:18px 20px; border:1px solid var(--line); background:var(--panel); }
+    .summary { border-left:4px solid var(--blue); background:var(--blue-soft); }
+    .danger { border-color:#dfaca3; background:var(--red-soft); }
+    .good { border-color:#a8c6b2; background:var(--green-soft); }
+    code { padding:1px 5px; border-radius:3px; background:var(--code); font-size:.86em; }
+    table { width:100%; margin:16px 0; border-collapse:collapse; font-size:14px; }
+    th,td { padding:11px 12px; border-bottom:1px solid var(--line); text-align:left; vertical-align:top; }
+    th { color:var(--muted); font-size:11px; }
+    figure { margin:22px 0; border:1px solid var(--line); background:white; }
+    svg { display:block; width:100%; height:auto; }
+    figcaption { padding:10px 13px; color:var(--muted); background:#f0f0eb; font-size:11px; }
+    footer { margin-top:56px; padding-top:16px; border-top:1px solid var(--line); color:var(--muted); font-size:12px; }
+    @media (max-width:700px) { body { padding:28px 13px 58px; } table { display:block; overflow-x:auto; } .subtitle { font-size:16px; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">TALEBOOK · PROJECT DESIGN</div>
+    <h1>Codex 数字员工评审修复</h1>
+    <p class="subtitle">补齐本地前端服务验证、无变化发布门禁和结构化测试回报，确保自动交付既可执行又可审计。</p>
+    <div class="meta">
+      <span class="tag active">状态 · ACTIVE</span>
+      <span class="tag">创建日期 · 2026-07-16</span>
+      <span class="tag">所属模块 · project</span>
+      <span class="tag">需求来源 · PR #870 评审</span>
+      <span class="tag">影响范围 · GitHub Actions / tests / security</span>
+    </div>
+  </header>
+
+  <div class="summary"><strong>结论摘要</strong><p>开启 loopback binding 以允许 agent 启动 Nuxt 和 Mock API；把仓库级 WIP 门禁前移到“无变化”判定之前；GitHub 回复以门禁验证过的 <code>.codex-result.json</code> 为事实来源。安全上继续隔离所有凭据和 Unix socket，并拒绝常见云元数据目标。</p></div>
+
+  <section>
+    <h2>01 · 原始诉求与验收目标</h2>
+    <p>PR #870 的评审指出三个 P2：本地监听被禁止导致无法完成前端验收；无 diff 路径可跳过仓库内残留 WIP 检查；最终评论没有可靠展示结构化测试命令和结果。</p>
+    <table>
+      <thead><tr><th>目标</th><th>验收标准</th></tr></thead>
+      <tbody>
+        <tr><td>本地服务可用</td><td>permission profile 允许 agent 在 loopback 上监听，并能访问 <code>localhost</code>、<code>127.0.0.1</code>。</td></tr>
+        <tr><td>无变化也 fail closed</td><td>分支存在 <code>*.wip.html</code> 时，即使没有新 diff，也不得成功或补建 Draft PR。</td></tr>
+        <tr><td>测试证据可审计</td><td>结构化契约有效时，评论必须展示其 <code>summary</code>、测试命令、结果和可选详情。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>02 · 决策与安全边界</h2>
+    <div class="callout danger"><strong>已确认的取舍</strong><code>allow_local_binding = true</code> 同时允许 loopback 监听并放宽网络代理的本地/私网保护。维护者确认接受该取舍，以满足仓库强制的前端实际渲染验证。</div>
+    <ul>
+      <li>Agent 仍运行在一次性 GitHub-hosted Runner，文件系统默认拒绝读取工作区外内容。</li>
+      <li><code>CODEX_AUTH_JSON</code>、GitHub token、App 私钥和常见 Secret 环境变量继续对 agent shell 隐藏。</li>
+      <li>不开放任何 Unix socket；Prompt 继续禁止访问私网，并在域名策略中显式拒绝常见云元数据地址。</li>
+      <li><code>.github/workflows</code> 保持 read-only，发布 token 仍只在 Codex 结束后创建。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>03 · 门禁和评论数据流</h2>
+    <figure>
+      <svg viewBox="0 0 900 370" role="img" xmlns="http://www.w3.org/2000/svg">
+        <title>结构化结果经过仓库门禁后形成评论和发布决策</title>
+        <desc>Codex 输出 JSON 后先校验契约和仓库级 WIP，再判断是否有 diff；有效元数据进入评论，有变化且门禁通过时才发布。</desc>
+        <defs><marker id="a" viewBox="0 0 10 10" refX="8" refY="5" markerWidth="7" markerHeight="7" orient="auto"><path d="M1 1L9 5L1 9" fill="none" stroke="#666861" stroke-width="1.5"/></marker></defs>
+        <rect width="900" height="370" fill="#fff"/>
+        <g font-family="ui-monospace, Menlo, monospace" font-size="13">
+          <rect x="35" y="50" width="170" height="76" rx="8" fill="#e7f0f4" stroke="#86a9b9"/><text x="55" y="80" fill="#315f73" font-weight="700">Codex 输出</text><text x="55" y="103" fill="#666861">result JSON + diff</text>
+          <rect x="270" y="50" width="170" height="76" rx="8" fill="#f7eddb" stroke="#c8a56b"/><text x="290" y="80" fill="#8b6024" font-weight="700">契约校验</text><text x="290" y="103" fill="#666861">类型 / tests / ready</text>
+          <rect x="505" y="50" width="170" height="76" rx="8" fill="#f7e9e5" stroke="#c98f86"/><text x="525" y="80" fill="#86433b" font-weight="700">仓库级门禁</text><text x="525" y="103" fill="#666861">先查 WIP，再查 diff</text>
+          <rect x="695" y="230" width="170" height="76" rx="8" fill="#e8f2eb" stroke="#8eb39c"/><text x="715" y="260" fill="#35654c" font-weight="700">受控发布</text><text x="715" y="283" fill="#666861">仅 ready + 有 diff</text>
+          <rect x="270" y="230" width="250" height="76" rx="8" fill="#e7f0f4" stroke="#86a9b9"/><text x="290" y="260" fill="#315f73" font-weight="700">GitHub 评论</text><text x="290" y="283" fill="#666861">summary + tests + 交付状态</text>
+        </g>
+        <g fill="none" stroke="#666861" stroke-width="1.5" marker-end="url(#a)"><path d="M205 88H268"/><path d="M440 88H503"/><path d="M590 126V180H395V228"/><path d="M675 88H780V228"/></g>
+      </svg>
+      <figcaption>FIG 1 · 评论使用已验证事实；“无变化”是仓库级门禁通过后的交付分支，而不是提前返回。</figcaption>
+    </figure>
+    <h3>评论规则</h3>
+    <ul>
+      <li>仅当 publish gate 输出 <code>contract_valid=true</code> 时解析结构化文件。</li>
+      <li><code>summary</code> 作为评论正文事实摘要，<code>tests</code> 渲染为独立 Validation 列表。</li>
+      <li>契约无效或执行失败时才退回 Codex 最终自然语言或通用错误提示。</li>
+      <li>提交 SHA、分支、Draft PR、失败原因和恢复 artifact 仍由 workflow 追加，不能被 agent 覆盖。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>04 · 实施与回滚</h2>
+    <ol>
+      <li>用现有 workflow 契约测试分别建立三个失败断言，逐项修复。</li>
+      <li>更新 permission profile、publish gate 顺序和评论生成脚本。</li>
+      <li>验证 Codex 严格配置、YAML、actionlint、设计检查和 Python 测试。</li>
+      <li>验证完成后激活本方案，并把 <code>20260716-codex-digital-employee.active.html</code> 标记为 SUPERSEDED。</li>
+      <li>回滚时恢复旧配置和评论路径，并以新的 WIP 方案记录，不改写本 ACTIVE。</li>
+    </ol>
+  </section>
+
+  <section>
+    <h2>05 · 测试计划与当前结果</h2>
+    <div class="callout good"><strong>状态：本地验证通过</strong>三项评审反馈均通过独立红—绿循环修复。真实 GitHub Actions 的浏览器验收仍需在 PR workflow 或合并后任务中执行。</div>
+    <table>
+      <thead><tr><th>命令或状态</th><th>验证内容</th><th>实际结果</th></tr></thead>
+      <tbody>
+        <tr><td><code>python3 -m pytest tests/test_codex_workflow.py tests/test_check_design_docs.py -q</code></td><td>loopback、metadata deny、WIP 前置门禁、结构化评论和设计检查器回归。</td><td>PASS，36 passed</td></tr>
+        <tr><td><code>ruff check tests/test_codex_workflow.py --no-cache</code><br><code>ruff format --check tests/test_codex_workflow.py</code></td><td>新增契约测试的静态检查和格式。</td><td>PASS</td></tr>
+        <tr><td><code>codex sandbox -P codex-employee ... python3 -c '&lt;bind 127.0.0.1:0&gt;'</code></td><td>更新后的 permission profile 允许沙箱命令监听随机 loopback 端口。</td><td>PASS，输出 <code>loopback-bind-ok</code></td></tr>
+        <tr><td><code>codex exec --strict-config --oss --local-provider ollama ...</code></td><td>Codex 0.144.4 严格解析更新后的 permission profile。</td><td>配置解析通过；随后因本机未运行 Ollama 按预期停止，未发起模型任务</td></tr>
+        <tr><td><code>go run ... actionlint@latest ... .github/workflows/codex.yml</code></td><td>Actions 表达式、输入和 shell 语义；继续精确忽略 v3 <code>client-id</code> 的两条已确认元数据误报。</td><td>PASS</td></tr>
+        <tr><td><code>make check-design</code></td><td>方案路径、单文件 HTML、状态与 WIP 门禁。</td><td>PASS</td></tr>
+        <tr><td><code>python3 -c 'import yaml; ...'</code><br><code>git diff --check</code></td><td>YAML 基本解析和补丁空白。</td><td>PASS</td></tr>
+        <tr><td>真实 Actions 冒烟</td><td>Nuxt/Mock 服务监听、评论渲染和无变化分支恢复。</td><td>合并并配置 Secrets 后执行</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>替代：design/project/20260716-codex-digital-employee.superseded.html 。原方案的 loopback、门禁顺序和评论数据源决策已由本方案修正。</footer>
+</main>
+</body>
+</html>

@@ -419,6 +419,13 @@ class BaseHandler(web.RequestHandler):
                 return None
         return books[0]
 
+    def get_book_or_404(self, book_id):
+        """获取当前访问者可见的图书，否则返回适用于文件和阅读入口的 HTTP 404。"""
+        book = self.get_book(book_id, raise_exception=False)
+        if not book:
+            raise web.HTTPError(404, reason=_("书籍不存在"))
+        return book
+
     def can_view_book(self, book_id):
         """返回当前访问者是否有权查看指定图书。"""
         if self.is_admin():

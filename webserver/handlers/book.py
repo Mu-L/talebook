@@ -952,9 +952,7 @@ class BookDownload(BaseHandler, web.StaticFileHandler):
         bid, fmt = filename.split(".")
         fmt = fmt.lower()
         logging.error("download %s bid=%s, fmt=%s" % (filename, bid, fmt))
-        book = self.get_book(bid, raise_exception=False)
-        if not book:
-            raise web.HTTPError(404, reason=_("书籍不存在"))
+        book = self.get_book_or_404(bid)
         book_id = book["id"]
         self.user_history("download_history", book)
         self.count_increase(book_id, count_download=1)
@@ -1502,7 +1500,7 @@ class BookRead(BaseHandler):
             else:
                 raise web.HTTPError(403, reason=_("无权在线阅读"))
 
-        book = self.get_book(id)
+        book = self.get_book_or_404(id)
         book_id = book["id"]
         self.user_history("read_history", book)
         self.count_increase(book_id, count_download=1)

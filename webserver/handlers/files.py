@@ -167,7 +167,7 @@ class EpubReader(BaseHandler):
             else:
                 raise web.HTTPError(403, reason=_("无权在线阅读"))
 
-        book = self.get_book(bid)
+        book = self.get_book_or_404(bid)
         fpath = book.get("fmt_epub", None)
         if not fpath:
             raise web.HTTPError(404)

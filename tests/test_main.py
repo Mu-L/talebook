@@ -1010,7 +1010,7 @@ class TestBookDetailScope(TestApp):
         self._set_book_scope(BID_EPUB, "private", collector_id=1)
         try:
             d = self.json("/api/book/%d" % BID_EPUB)
-            self.assertNotEqual(d["err"], "ok")
+            self.assertEqual(d["err"], "book.not_found")
         finally:
             self._clear_book_scope(BID_EPUB)
 
@@ -1028,7 +1028,16 @@ class TestBookDetailScope(TestApp):
         try:
             with mock.patch.object(BaseHandler, "user_id", return_value=2):
                 d = self.json("/api/book/%d" % BID_EPUB)
-                self.assertNotEqual(d["err"], "ok")
+                self.assertEqual(d["err"], "book.not_found")
+        finally:
+            self._clear_book_scope(BID_EPUB)
+
+    def test_admin_can_access_private_book_owned_by_other_user(self):
+        self._set_book_scope(BID_EPUB, "private", collector_id=2)
+        try:
+            with mock.patch.object(BaseHandler, "user_id", return_value=1):
+                d = self.json("/api/book/%d" % BID_EPUB)
+                self.assertEqual(d["err"], "ok")
         finally:
             self._clear_book_scope(BID_EPUB)
 
@@ -1069,6 +1078,55 @@ class TestBookDetailScope(TestApp):
                 self.assertEqual(d["err"], "ok")
                 ids = [b["id"] for b in d["books"]]
                 self.assertNotIn(BID_EPUB, ids)
+        finally:
+            self._clear_book_scope(BID_EPUB)
+
+    def test_admin_search_shows_private_book_owned_by_other_user(self):
+        self._set_book_scope(BID_EPUB, "private", collector_id=2)
+        try:
+            with mock.patch.object(BaseHandler, "user_id", return_value=1):
+                d = self.json("/api/search?name=A")
+                self.assertEqual(d["err"], "ok")
+                ids = [book["id"] for book in d["books"]]
+                self.assertIn(BID_EPUB, ids)
+        finally:
+            self._clear_book_scope(BID_EPUB)
+
+    def test_other_user_cannot_download_private_book_by_direct_url(self):
+        self._set_book_scope(BID_EPUB, "private", collector_id=1)
+        try:
+            with mock.patch.object(BaseHandler, "user_id", return_value=2):
+                rsp = self.fetch("/api/book/%d.epub" % BID_EPUB)
+                self.assertEqual(rsp.code, 404)
+        finally:
+            self._clear_book_scope(BID_EPUB)
+
+    def test_admin_can_download_private_book_owned_by_other_user(self):
+        self._set_book_scope(BID_EPUB, "private", collector_id=2)
+        try:
+            with mock.patch.object(BaseHandler, "user_id", return_value=1):
+                rsp = self.fetch("/api/book/%d.epub" % BID_EPUB)
+                self.assertEqual(rsp.code, 200)
+                self.assertGreater(len(rsp.body), 0)
+                self.assertNotEqual(rsp.headers.get("Content-Type"), "application/json; charset=UTF-8")
+        finally:
+            self._clear_book_scope(BID_EPUB)
+
+    def test_other_user_cannot_read_private_book_by_direct_url(self):
+        self._set_book_scope(BID_EPUB, "private", collector_id=1)
+        try:
+            with mock.patch.object(BaseHandler, "user_id", return_value=2):
+                rsp = self.fetch("/read/%d" % BID_EPUB)
+                self.assertEqual(rsp.code, 200)
+                self.assertEqual(json.loads(rsp.body)["err"], "not_found")
+        finally:
+            self._clear_book_scope(BID_EPUB)
+
+    def test_guest_cannot_get_private_book_cover_by_direct_url(self):
+        self._set_book_scope(BID_EPUB, "private", collector_id=1)
+        try:
+            rsp = self.fetch("/get/cover/%d.jpg" % BID_EPUB)
+            self.assertEqual(rsp.code, 404)
         finally:
             self._clear_book_scope(BID_EPUB)
 

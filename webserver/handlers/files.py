@@ -46,6 +46,8 @@ class ImageHandler(BaseHandler):
             id = int(match.group())
         if not self.db.has_id(id):
             raise web.HTTPError(404, "id:%d does not exist in database" % id)
+        if not self.can_view_book(id):
+            raise web.HTTPError(404, "id:%d does not exist in database" % id)
         if fmt == "thumb" or fmt.startswith("thumb_"):
             try:
                 width, height = map(int, fmt.split("_")[1:])

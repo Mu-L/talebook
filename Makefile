@@ -12,7 +12,7 @@ BASE := talebook/talebook-base
 all: lint-py-fix build up
 
 init:
-	pip3 install -r requirements.txt
+	pip3 install -r requirements.txt -r requirements-test.txt
 	#python3 -m pip install --upgrade pip
 	#uv sync
 

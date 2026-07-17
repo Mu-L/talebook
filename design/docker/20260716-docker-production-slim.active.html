@@ -1,0 +1,155 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Docker 生产阶段依赖瘦身方案</title>
+  <style>
+    :root { color-scheme: light; --paper:#f7f6f2; --ink:#20211f; --muted:#63665f; --line:#d9d7cf; --accent:#245c4f; --accent-bg:#e7f0ec; --warn:#875f1d; --warn-bg:#f5ecd8; --code:#eceae3; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:48px 20px 80px; background:var(--paper); color:var(--ink); font:16px/1.65 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+    main { max-width:960px; margin:auto; }
+    header { padding-bottom:28px; border-bottom:1px solid var(--line); }
+    h1 { margin:.3rem 0 .7rem; font-size:2.15rem; line-height:1.2; }
+    h2 { margin-top:2.8rem; padding-bottom:.45rem; border-bottom:1px solid var(--line); font-size:1.35rem; }
+    h3 { margin-top:1.8rem; font-size:1.05rem; }
+    p, li { max-width:80ch; }
+    .eyebrow, .meta, th, code, .status { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .eyebrow { color:var(--accent); font-size:.78rem; letter-spacing:.12em; }
+    .meta { display:flex; flex-wrap:wrap; gap:12px 24px; color:var(--muted); font-size:.82rem; }
+    .status { display:inline-block; padding:2px 9px; color:var(--warn); background:var(--warn-bg); border:1px solid #dfc99f; border-radius:999px; }
+    .summary { margin:30px 0; padding:18px 22px; background:var(--accent-bg); border-left:4px solid var(--accent); }
+    code { padding:1px 5px; background:var(--code); border-radius:3px; font-size:.9em; }
+    table { width:100%; border-collapse:collapse; margin:18px 0; font-size:.94rem; }
+    th, td { padding:11px 12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); font-size:.82rem; }
+    figure { margin:24px 0; border:1px solid var(--line); background:#fff; overflow:auto; }
+    svg { display:block; width:100%; min-width:700px; height:auto; }
+    figcaption { padding:10px 14px; color:var(--muted); background:#efeee9; font-size:.82rem; }
+    .risk { padding:15px 18px; background:var(--warn-bg); border:1px solid #dfc99f; }
+    footer { margin-top:54px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:.85rem; }
+    @media (max-width:700px) { body { padding:28px 14px 56px; } h1 { font-size:1.7rem; } th, td { padding:8px 6px; font-size:.82rem; } }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">TALEBOOK · DOCKER DESIGN</div>
+    <h1>Docker 生产阶段依赖瘦身</h1>
+    <div class="meta">
+      <span>创建日期：2026-07-16</span>
+      <span>所属模块：docker</span>
+      <span>状态：<b class="status">ACTIVE</b></span>
+      <span>需求来源：用户直接提出</span>
+    </div>
+  </header>
+
+  <div class="summary">
+    生产构建改用本地预发布的 <code>talebook/talebook-base:slim-v8.5.0</code>；删除共享阶段重复安装的运行工具与 <code>vim</code>；把测试、覆盖率和 lint 工具从生产依赖中拆出，只在 Docker <code>test</code> 阶段安装。
+  </div>
+
+  <section>
+    <h2>原始诉求与已确认决策</h2>
+    <p>原始诉求包含三项：生产环境阶段移除 <code>vim</code> 等无关组件；确保 <code>pytest</code> 等组件只放在测试阶段；基础镜像切换为 <code>slim-v8.5.0</code>。</p>
+    <table>
+      <thead><tr><th>决策</th><th>结论</th><th>依据</th></tr></thead>
+      <tbody>
+        <tr><td>完整基础镜像引用</td><td><code>talebook/talebook-base:slim-v8.5.0</code></td><td>方案制定时用户确认该镜像仅存在于本地；2026-07-16 已发布到 Docker Hub。</td></tr>
+        <tr><td>共享 apt 安装层</td><td>整体删除 <code>gettext gosu procps vim</code> 安装层</td><td>已从本地 slim 镜像核实：<code>envsubst</code>、<code>gosu</code>、<code>ps</code> 已存在，<code>vim</code> 不存在。</td></tr>
+        <tr><td>测试工具范围</td><td><code>ruff</code>、<code>pytest</code>、<code>pytest-cov</code>、<code>flake8</code></td><td>这些工具不参与 Talebook 生产运行。</td></tr>
+        <tr><td>Python 元数据</td><td>同步迁入 <code>pyproject.toml</code> 的 <code>test</code> optional dependencies</td><td>避免项目元数据继续把测试工具声明为生产依赖。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>目标与非目标</h2>
+    <h3>目标</h3>
+    <ul>
+      <li>生产镜像不包含 <code>vim</code>、<code>pytest</code>、<code>pytest-cov</code>、<code>ruff</code> 和 <code>flake8</code>。</li>
+      <li>测试镜像仍可运行完整 pytest、覆盖率与 lint 工具链。</li>
+      <li>本地初始化命令仍一次性安装开发所需的生产和测试依赖。</li>
+      <li>通过自动化测试固定 Docker 阶段边界，防止后续把测试工具重新带入生产。</li>
+    </ul>
+    <h3>非目标</h3>
+    <ul>
+      <li>本次不修改 <code>Dockerfile.base</code> ，不负责发布 <code>slim-v8.5.0</code>。</li>
+      <li>不改变 SPA、SSR、dev 镜像的业务行为或 Talebook 功能。</li>
+      <li>不继续裁剪 slim 基础镜像内仍存在的运行时组件。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>方案</h2>
+    <figure>
+      <svg viewBox="0 0 900 350" role="img" xmlns="http://www.w3.org/2000/svg">
+        <title>Docker 依赖分层</title>
+        <desc>slim 基础镜像进入 server，生产和测试阶段分叉，测试依赖只安装到 test。</desc>
+        <defs><marker id="arrow" markerWidth="8" markerHeight="8" refX="7" refY="4" orient="auto"><path d="M0,0 L8,4 L0,8 Z" fill="#68716c"/></marker></defs>
+        <rect width="900" height="350" fill="#fff"/>
+        <g font-family="system-ui, PingFang SC, sans-serif" font-size="15" text-anchor="middle">
+          <rect x="40" y="120" width="190" height="100" rx="10" fill="#e7f0ec" stroke="#568577"/>
+          <text x="135" y="155" fill="#245c4f" font-weight="700">slim-v8.5.0</text><text x="135" y="183" fill="#48524e">既有运行工具</text><text x="135" y="205" fill="#48524e">无 vim / 测试工具</text>
+          <rect x="355" y="120" width="190" height="100" rx="10" fill="#eef1f4" stroke="#778594"/>
+          <text x="450" y="155" fill="#34485a" font-weight="700">server</text><text x="450" y="183" fill="#48524e">只安装</text><text x="450" y="205" fill="#48524e">requirements.txt</text>
+          <rect x="675" y="40" width="185" height="100" rx="10" fill="#edf4ee" stroke="#63876a"/>
+          <text x="767" y="76" fill="#365f3d" font-weight="700">production</text><text x="767" y="104" fill="#48524e">继承生产依赖</text><text x="767" y="126" fill="#48524e">不安装测试工具</text>
+          <rect x="675" y="220" width="185" height="100" rx="10" fill="#f5ecd8" stroke="#a77c32"/>
+          <text x="767" y="256" fill="#875f1d" font-weight="700">test</text><text x="767" y="284" fill="#48524e">额外安装</text><text x="767" y="306" fill="#48524e">requirements-test.txt</text>
+        </g>
+        <g fill="none" stroke="#68716c" stroke-width="2" marker-end="url(#arrow)"><path d="M230 170 H350"/><path d="M545 155 C610 155 610 90 670 90"/><path d="M545 185 C610 185 610 270 670 270"/></g>
+      </svg>
+      <figcaption>阶段分叉：测试依赖不会进入 production、production-spa 或 production-ssr 的公共父层。</figcaption>
+    </figure>
+
+    <table>
+      <thead><tr><th>文件</th><th>计划改动</th></tr></thead>
+      <tbody>
+        <tr><td><code>Dockerfile</code></td><td>切换基础镜像；删除重复 apt 安装层；测试阶段复制并安装 <code>requirements-test.txt</code> 。</td></tr>
+        <tr><td><code>requirements.txt</code></td><td>移除四项测试与 lint 工具，仅保留生产依赖。</td></tr>
+        <tr><td><code>requirements-test.txt</code></td><td>新增测试依赖清单并保留现有版本约束。</td></tr>
+        <tr><td><code>pyproject.toml</code> / <code>uv.lock</code></td><td>把相同工具迁入 <code>test</code> optional dependency group，并同步锁文件。</td></tr>
+        <tr><td><code>Makefile</code></td><td><code>make init</code> 同时安装两份 requirements，保持开发体验。</td></tr>
+        <tr><td><code>tests/test_docker_stages.py</code></td><td>静态校验镜像引用、生产/测试依赖归属和 Docker 阶段安装关系。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>兼容性、发布与回滚</h2>
+    <ul>
+      <li><strong>兼容性：</strong>slim 基础镜像必须继续提供 <code>envsubst</code>、<code>gosu</code> 和 <code>ps</code>；本地镜像已验证，发布到 registry 时需保持同一内容。</li>
+      <li><strong>发布状态：</strong><code>talebook/talebook-base:slim-v8.5.0</code> 已于 2026-07-16 发布，Docker Hub 已提供 amd64、arm64 与 arm/v7 清单，远程 CI 的镜像拉取前置条件已满足。</li>
+      <li><strong>回滚：</strong>若 slim 镜像运行能力不完整，将 Dockerfile 的基础镜像引用恢复为原标签，并恢复共享 apt 安装层；依赖清单拆分可以独立保留。</li>
+      <li><strong>安全与性能：</strong>减少生产工具和包数量可缩小攻击面与镜像体积；不新增运行时权限、端口或网络行为。</li>
+    </ul>
+    <div class="risk"><strong>已知风险：</strong>多架构清单已发布，但本轮只在本地 arm64 完成应用构建与运行验证；其余架构仍以远程 CI 的实际拉取和构建结果为准。</div>
+  </section>
+
+  <section>
+    <h2>测试结果</h2>
+    <p>2026-07-16 在本地 arm64 Docker Desktop 环境完成初次验证。配置测试先在改动前运行，5 项全部失败；实现后全部通过。2026-07-17 rebase 最新 master 后，使用 Docker Hub 已发布镜像完成 PR 前复验。</p>
+    <table>
+      <thead><tr><th>命令或验证</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td><code>pytest tests/test_docker_stages.py -v</code></td><td>通过，5 passed；覆盖基础镜像引用、vim 移除、requirements 分层、pyproject optional group 和 make init。</td></tr>
+        <tr><td><code>uv lock</code> / <code>uv lock --check</code></td><td>通过；新增 flake8 及其依赖并同步 optional dependency 锁定关系。首次沙箱内运行因 DNS 受限失败，授权联网后成功。</td></tr>
+        <tr><td><code>make test</code></td><td>通过；初次使用本地 <code>slim-v8.5.0</code> 完成 580 passed、1 skipped；2026-07-17 拉取已发布镜像并 rebase 最新 master 后复验为 612 passed、1 skipped、32 warnings。</td></tr>
+        <tr><td><code>docker build ... --target production</code></td><td>通过；完成 Nuxt SSR/SPA 构建、13 本样书导入、数据库建表和配置初始化，生成 <code>talebook/production-slim-test</code>。</td></tr>
+        <tr><td>production 容器工具检查</td><td><code>vim</code>、<code>pytest</code>、<code>pytest-cov</code>、<code>ruff</code>、<code>flake8</code> 均缺失；<code>envsubst</code>、<code>gosu</code>、<code>ps</code> 均存在。</td></tr>
+        <tr><td>test 容器工具检查</td><td><code>pytest 7.4.4</code>、<code>ruff 0.15.22</code>、<code>flake8 7.3.0</code> 和 pytest-cov 均可用。</td></tr>
+        <tr><td>本地镜像信息</td><td>arm64；base 356,151,513 B，production 500,165,487 B，test 553,441,067 B。该数据仅作为本次本地验证快照，不代表多架构压缩传输体积。</td></tr>
+        <tr><td><code>make lint-py-fix</code> / <code>make lint-py</code></td><td>通过；96 个后端文件无需格式调整，ruff 检查无错误。</td></tr>
+        <tr><td>新增测试 ruff 检查与格式检查</td><td>通过；<code>tests/test_docker_stages.py</code> 无 lint 或格式问题。</td></tr>
+        <tr><td><code>cd app &amp;&amp; npm run lint</code></td><td>退出码 0；0 errors、196 个既有 warnings。本次未修改前端代码。安装依赖时内部镜像缺包，改用公开镜像后成功。</td></tr>
+        <tr><td>宿主机 <code>make pytest</code></td><td>未通过：测试收集缺少 Calibre 与 Pillow，共 6 个导入错误；这是宿主机环境限制。Docker test 阶段已使用项目运行依赖完成全部 581 项收集与执行。</td></tr>
+        <tr><td>Docker Hub 标签核对</td><td>2026-07-17 通过标签 API 确认 <code>slim-v8.5.0</code> 已发布，并包含 amd64、arm64、arm/v7 三种目标架构。</td></tr>
+        <tr><td><code>make check-design</code></td><td>通过，13 份方案文档全部满足路径、状态、HTML 和单文件资源约束；待合并内容不存在 WIP 方案。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>本方案是 <code>design/docker/20260612-docker-base-image-slim.active.html</code> 的消费方后续调整，不修改该方案所描述的基础镜像构建实现。</footer>
+</main>
+</body>
+</html>

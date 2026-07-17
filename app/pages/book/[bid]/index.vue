@@ -816,6 +816,7 @@
                             <v-card-text>
                                 <p
                                     v-if="book.id > 0 && book.comments && book.comments !== '暂无简介'"
+                                    class="book-comments"
                                     v-html="book.comments"
                                 />
                                 <p v-else-if="book.id > 0">
@@ -1785,6 +1786,11 @@ onMounted(async () => {
 .book-footer {
     padding-top: 0;
     padding-bottom: 3px;
+}
+
+/* ponytail: pre-line 保留 \n 段落分隔、折叠多余空格、长行自动换行；不影响 v-html 中的 <br>/<p> 标签。 */
+.book-comments {
+    white-space: pre-line;
 }
 
 .tag-chips a {

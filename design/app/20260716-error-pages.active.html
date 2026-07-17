@@ -1,0 +1,86 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>4xx / 5xx 统一错误页设计 · ACTIVE</title>
+<style>
+  :root { color-scheme: light dark; }
+  body { font: 15px/1.7 -apple-system, "PingFang SC", "Microsoft YaHei", sans-serif; max-width: 960px; margin: 0 auto; padding: 24px; color: #1f2328; background: #fff; }
+  h1 { font-size: 26px; margin-bottom: 4px; }
+  h2 { font-size: 20px; margin-top: 32px; border-bottom: 1px solid #d0d7de; padding-bottom: 6px; }
+  code { background: #f6f8fa; padding: 1px 5px; border-radius: 4px; font-size: 13px; }
+  pre { background: #f6f8fa; padding: 12px; border-radius: 6px; overflow-x: auto; }
+  table { border-collapse: collapse; width: 100%; margin: 12px 0; font-size: 14px; }
+  th, td { border: 1px solid #d0d7de; padding: 6px 10px; text-align: left; vertical-align: top; }
+  th { background: #f6f8fa; }
+  .meta { display: flex; flex-wrap: wrap; gap: 8px 20px; color: #57606a; font-size: 14px; margin: 8px 0 16px; }
+  .badge { display: inline-block; padding: 2px 10px; border-radius: 12px; font-size: 13px; font-weight: 600; }
+  .active { background: #dafbe1; color: #1a7f37; }
+  .todo { color: #8250df; font-weight: 600; }
+  ul { padding-left: 22px; }
+</style>
+</head>
+<body>
+<h1>4xx / 5xx 统一错误页设计</h1>
+<div class="meta">
+  <span><span class="badge active">ACTIVE</span> 待实现</span>
+  <span>创建日期：2026-07-16</span>
+  <span>所属模块：app</span>
+  <span>需求来源：features.md（"站点美化 → 4xx 页面、5xx 页面"）</span>
+</div>
+
+<h2>1. 原始诉求</h2>
+<blockquote>
+完善 4xx 和 5xx 错误页面，避免出现 Tornado 默认的丑陋堆栈页。
+</blockquote>
+<p>当前 Nuxt SSR 模式下，访问 <code>/book/999999</code>（不存在的书籍）或 <code>/api/...</code> 直接返回 404 HTML 时，前端未做拦截，会落到 Nuxt 默认错误页或直接渲染空白。需要一个统一页面承接所有 <code>4xx</code> / <code>5xx</code> 状态。</p>
+
+<h2>2. 目标</h2>
+<ul>
+  <li>新增 <code>app/error.vue</code>，按 HTTP 状态码显示对应文案与建议操作。</li>
+  <li>支持明 / 暗主题（继承 <code>useMainStore().theme</code>）。</li>
+  <li>i18n 完整覆盖中英文。</li>
+</ul>
+
+<h2>3. 页面结构</h2>
+<table>
+<thead><tr><th>状态</th><th>标题（zh-CN）</th><th>建议操作</th></tr></thead>
+<tbody>
+<tr><td>400</td><td>请求格式有误</td><td>检查 URL 或返回上一页</td></tr>
+<tr><td>401</td><td>需要登录</td><td>跳转登录页</td></tr>
+<tr><td>403</td><td>没有访问权限</td><td>联系管理员</td></tr>
+<tr><td>404</td><td>找不到页面</td><td>返回首页 / 搜索</td></tr>
+<tr><td>500</td><td>服务器内部错误</td><td>稍后再试，必要时查看日志</td></tr>
+<tr><td>502 / 503 / 504</td><td>服务暂不可用</td><td>稍后再试</td></tr>
+<tr><td>其他</td><td>出现错误（status = ...）</td><td>返回首页</td></tr>
+</tbody>
+</table>
+
+<h2>4. 实现要点</h2>
+<ul>
+  <li>使用 Nuxt 4 内置的 <code>error.vue</code> 约定，根级放置。</li>
+  <li>通过 <code>defineProps&lt;{ error: { statusCode, statusMessage, message } }&gt;()</code> 接收错误。</li>
+  <li>不展示后端堆栈（避免信息泄露）。管理员模式下可显示简短 <code>message</code>。</li>
+  <li>提供"返回首页"和"返回上一页"按钮；401 自动跳 <code>/login?redirect=...</code>。</li>
+</ul>
+
+<h2>5. i18n key</h2>
+<p>新增 <code>error.title.{400|401|403|404|500|502|503|504|other}</code> 与 <code>error.action.{back|home|login}</code>。</p>
+
+<h2>6. 边界</h2>
+<ul>
+  <li>不影响 <code>/api/...</code> 的 JSON 错误响应（仍由 Tornado 装饰器返回 JSON）。</li>
+  <li>404 资源请求（<code>/get/xxx.png</code>）保持浏览器默认行为，不渲染 SPA 错误页。</li>
+  <li>不要让错误页本身抛错（避免递归）。</li>
+</ul>
+
+<h2>7. 测试计划（待验证）</h2>
+<table>
+<thead><tr><th>层级</th><th>用例</th></tr></thead>
+<tbody>
+<tr><td>组件</td><td><code>app/test/components/ErrorPage.spec.ts</code>：传入不同 statusCode 显示对应文案</td></tr>
+<tr><td>E2E</td><td><code>app/test/e2e/error-page.spec.ts</code>：访问 <code>/this-route-does-not-exist</code> 显示 404 错误页</td></tr>
+</tbody>
+</table>
+<p class="todo">实现完成后回写实际跑通结果。</p>

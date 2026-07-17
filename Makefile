@@ -75,10 +75,10 @@ pytest:
 
 testv:
 	coverage run -m unittest
-	coverage report --include "*talebook*"
+	coverage report --include "webserver/*"
 
 testvv: testv
-	coverage html -d ".htmlcov" --include "*talebook*"
+	coverage html -d ".htmlcov" --include "webserver/*"
 	cd ".htmlcov" && python3 -m http.server 7777
 
 up:

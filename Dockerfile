@@ -28,8 +28,8 @@ RUN cp -r dist package* /app-static/
 
 # ----------------------------------------
 # 第二阶段，构建环境
-# 基础镜像源码见本仓库 Dockerfile.base，独立构建并推送，避免重复编译 calibre
-FROM talebook/talebook-base:8.5 AS server
+# 基础镜像由 https://github.com/talebook/talebook-base 独立维护和发布
+FROM talebook/talebook-base:slim-v8.5.0 AS server
 ARG BUILD_COUNTRY=""
 ARG TARGETARCH
 ARG TARGETVARIANT
@@ -64,12 +64,6 @@ RUN if [ "$TARGETARCH" = "arm" ] && [ "$TARGETVARIANT" = "v7" ]; then \
     dpkg --add-architecture armhf || true; \
     fi
 
-# install envsubst gosu procps
-RUN apt-get update -y && \
-    apt-get install -y gettext gosu procps vim && \
-    apt-get clean && \
-    rm -rf /var/lib/apt/lists/*
-
 # Create a talebook user and change the Nginx startup user if it doesn't exist
 RUN if ! id -u talebook > /dev/null 2>&1; then \
     useradd -u 911 -U -d /var/www/talebook -s /bin/false talebook && \
@@ -86,7 +80,8 @@ RUN --mount=type=cache,target=/root/.cache/pip pip install -r /tmp/requirements.
 # ----------------------------------------
 # 测试阶段
 FROM server AS test
-RUN pip install flake8 pytest
+COPY requirements-test.txt /tmp/
+RUN --mount=type=cache,target=/root/.cache/pip pip install -r /tmp/requirements-test.txt
 COPY webserver/ /var/www/talebook/webserver/
 COPY tests/ /var/www/talebook/tests/
 CMD ["pytest", "/var/www/talebook/tests"]
@@ -281,4 +276,3 @@ EXPOSE 80 443
 VOLUME ["/data"]
 
 CMD ["/var/www/talebook/docker/start-dev.sh"]
-

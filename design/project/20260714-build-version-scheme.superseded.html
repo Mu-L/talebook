@@ -102,9 +102,11 @@
     <div class="meta">
       <span><b>创建日期：</b>2026-07-14</span>
       <span><b>所属模块：</b>project（发布流程；影响 <code>.github/workflows/build.yml</code> 、 <code>Makefile</code> ）</span>
-      <span><b>状态：</b><span class="badge">ACTIVE</span></span>
+      <span><b>状态：</b><span class="badge">SUPERSEDED</span></span>
       <span><b>需求来源：</b>线上容器 update_checker 误报“已是最新”，排查发现 <code>VERSION=52957175</code> 为 commit 短 hash。</span>
     </div>
+
+    <div class="callout warn"><b>替代说明（2026-07-18）：</b>本方案已由 <code>design/project/20260718-local-build-boundary.active.html</code> 替代。CI 真实发布继续保留 <code>git describe</code>；Makefile 本地构建改用惰性分支版本，不再维护独立 <code>GIT_VER</code>。</div>
 
     <h2>1. 原始诉求</h2>
     <p>

@@ -28,7 +28,7 @@ RUN cp -r dist package* /app-static/
 
 # ----------------------------------------
 # 第二阶段，构建环境
-# 基础镜像源码见本仓库 Dockerfile.base，独立构建并推送，避免重复编译 calibre
+# 基础镜像由 https://github.com/talebook/talebook-base 独立维护和发布
 FROM talebook/talebook-base:slim-v8.5.0 AS server
 ARG BUILD_COUNTRY=""
 ARG TARGETARCH

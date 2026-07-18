@@ -47,6 +47,12 @@ def test_server_uses_slim_base_without_vim_installation():
     assert not re.search(r"\bvim\b", server)
 
 
+def test_base_image_source_and_publisher_are_externalized():
+    assert not (ROOT / "Dockerfile.base").exists()
+    assert not (ROOT / ".github" / "workflows" / "build-base.yml").exists()
+    assert "github.com/talebook/talebook-base" in read("Dockerfile")
+
+
 def test_test_tools_are_isolated_from_production_requirements():
     production = requirement_names("requirements.txt")
     testing = requirement_names("requirements-test.txt")

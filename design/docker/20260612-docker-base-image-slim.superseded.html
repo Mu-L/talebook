@@ -8,7 +8,8 @@
   </style>
 </head>
 <body><article class="doc">
-  <header><div class="eyebrow">TALEBOOK · DOCKER DESIGN</div><h1>基础镜像瘦身：第一阶段</h1><p class="subtitle">在不损失 Calibre 转换能力的前提下，去掉安装方式造成的重复与隐式依赖</p><div class="meta"><span>状态 · ACTIVE</span><span>原日期 · 2026-06-12</span><span>迁移 · 2026-07-13</span></div></header>
+  <header><div class="eyebrow">TALEBOOK · DOCKER DESIGN</div><h1>基础镜像瘦身：第一阶段</h1><p class="subtitle">在不损失 Calibre 转换能力的前提下，去掉安装方式造成的重复与隐式依赖</p><div class="meta"><span>状态 · SUPERSEDED</span><span>原日期 · 2026-06-12</span><span>迁移 · 2026-07-13</span></div></header>
+  <div class="warn"><div class="label">替代说明 · 2026-07-18</div>本方案已由 <code>design/project/20260718-local-build-boundary.active.html</code> 替代。Talebook 仓库不再维护 base Dockerfile；当前 slim base 的依赖、测试和多架构发布以独立 <code>talebook-base</code> 仓库为准。</div>
   <div class="tldr"><div class="label">TL;DR</div>静态化 <code>ebook-convert</code> 不可行：转换链依赖 Python、Qt6 Gui 与 QtWebEngine，服务端也直接导入 Calibre。第一阶段清理 apt Recommends 与重复 Qt5，同时显式保留编译、图片格式和中文字体依赖。2026-07-13 核对确认瘦身改动仍在 <code>Dockerfile.base</code> 中，但主镜像仍使用 base 8.5，尚未切换到计划发布的 8.6。</div>
   <section><h2><span class="num">01</span>原始诉求</h2><p>Talebook arm64 完整镜像实测 2.63GB，需要评估能否把 <code>ebook-convert</code> 编译成静态工具并缩小镜像，同时不能牺牲现有格式转换和 PDF 输出能力。</p></section>
   <section><h2><span class="num">02</span>目标</h2><ul><li>第一阶段以零功能损失为硬约束。</li><li>移除与 Debian 13 / Calibre Qt6 运行时重复或无关的包。</li><li>把过去由 Recommends 隐式带入、实际仍必需的依赖显式化。</li><li>先发布 base 8.6，再切换主 Dockerfile，避免 CI 依赖尚不存在的标签。</li></ul></section>

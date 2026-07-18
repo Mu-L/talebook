@@ -56,6 +56,10 @@ test.describe('Navigation Sidebar', () => {
         await expect(page.locator('nav').getByRole('link', { name: '最近' })).toBeVisible();
         await expect(page.locator('nav').getByRole('link', { name: '最近' })).toHaveAttribute('href', '/recent');
 
+        const readBooksLink = page.locator('nav').getByRole('link', { name: /已读书目/ });
+        await expect(readBooksLink).toBeVisible();
+        await expect(readBooksLink).toHaveAttribute('href', '/user/history?tab=finished');
+
         // 5. System Links (if sidebar_sys is true)
         await expect(page.locator('nav').getByRole('link', { name: 'OPDS 介绍' })).toBeVisible();
         await expect(page.locator('nav').getByRole('link', { name: 'OPDS 介绍' })).toHaveAttribute('href', '/opds-readme');
@@ -63,6 +67,17 @@ test.describe('Navigation Sidebar', () => {
         await expect(page.locator('nav').getByRole('link', { name: 'WebDAV 介绍' })).toBeVisible();
         await expect(page.locator('nav').getByRole('link', { name: 'WebDAV 介绍' })).toHaveAttribute('href', '/webdav-readme');
 
+    });
+
+    test('Read books link opens the finished tab with its count', async ({ page }) => {
+        await page.goto('/');
+
+        const readBooksLink = page.locator('nav').getByRole('link', { name: /已读书目/ });
+        await expect(readBooksLink).toContainText('1');
+        await readBooksLink.click();
+
+        await expect(page).toHaveURL('/user/history?tab=finished');
+        await expect(page.getByRole('tab', { name: /已读完 \[1\]/ })).toHaveAttribute('aria-selected', 'true');
     });
 
     test('Sidebar stays visible at md width', async ({ page }) => {

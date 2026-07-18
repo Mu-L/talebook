@@ -42,7 +42,7 @@ def progress_reporter_text():
 def test_employee_job_is_bounded_and_serialized_per_request_target():
     job = codex_job()
 
-    assert job["timeout-minutes"] == 20
+    assert job["timeout-minutes"] == 25
     assert job["concurrency"] == {
         "group": "codex-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}",
         "cancel-in-progress": False,
@@ -148,7 +148,7 @@ def test_agent_contract_requires_a_validated_publish_decision():
     run_step = workflow_step(step_id="run_codex")
     prompt = prompt_text()
 
-    assert "timeout --signal=TERM --kill-after=30s 15m env -u CODEX_PROGRESS_TOKEN codex exec" in run_step["run"]
+    assert "timeout --signal=TERM --kill-after=30s 20m env -u CODEX_PROGRESS_TOKEN codex exec" in run_step["run"]
     assert "--json" in run_step["run"]
     assert "tee .codex/tmp/codex-events.jsonl" in run_step["run"]
     assert run_step["env"]["CODEX_PROGRESS_TOKEN"] == "${{ github.token }}"
@@ -183,14 +183,16 @@ def test_agent_prompt_and_all_maintainer_facing_output_are_in_chinese():
     )
 
 
-def test_model_and_reasoning_effort_can_be_overridden_without_workflow_edits():
+def test_model_and_reasoning_effort_can_be_overridden_without_enabling_fast_mode():
     job_env = codex_job()["env"]
     restore_script = workflow_step(name="Restore Codex ChatGPT auth")["run"]
 
     assert job_env["CODEX_MODEL"] == "${{ vars.CODEX_MODEL || 'gpt-5.6-sol' }}"
-    assert job_env["CODEX_REASONING_EFFORT"] == "${{ vars.CODEX_REASONING_EFFORT || 'xhigh' }}"
+    assert job_env["CODEX_REASONING_EFFORT"] == "${{ vars.CODEX_REASONING_EFFORT || 'high' }}"
     assert 'model = "$CODEX_MODEL"' in restore_script
     assert 'model_reasoning_effort = "$CODEX_REASONING_EFFORT"' in restore_script
+    assert 'service_tier = "fast"' not in restore_script
+    assert "fast_mode = true" not in restore_script
 
 
 def test_publish_gate_rejects_incomplete_or_unsafe_changes():

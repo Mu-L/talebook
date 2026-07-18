@@ -37,7 +37,7 @@
     <div class="meta">
       <span>创建日期：2026-07-18</span>
       <span>所属模块：docker</span>
-      <span>状态：<b class="status">WIP</b></span>
+      <span>状态：<b class="status">ACTIVE</b></span>
       <span>需求来源：PR #872 及其他开放 PR 的 CI 故障</span>
     </div>
   </header>
@@ -118,10 +118,10 @@
         <tr><td><code>make test</code></td><td>通过，621 passed、1 skipped、32 warnings；使用本机 arm64 Docker 完成测试镜像构建和全量后端测试。</td></tr>
         <tr><td><code>make lint-py-fix</code> / <code>make lint-py</code></td><td>通过；96 个后端文件无需格式调整，ruff 无错误。</td></tr>
         <tr><td><code>cd app &amp;&amp; npm run lint</code></td><td>通过，0 errors、196 个既有 warnings；本次不修改前端。</td></tr>
-        <tr><td><code>make check-design</code></td><td>WIP 阶段按预期触发合并门禁；待远程多架构验证完成后转为 ACTIVE 并复验。</td></tr>
+        <tr><td><code>make check-design</code></td><td>通过，24 份方案文档均满足路径、状态、HTML 结构和单文件资源约束。</td></tr>
         <tr><td><code>docker buildx build --platform linux/arm/v7 --target server</code></td><td>通过；<code>psutil</code> 与 <code>cffi</code> wheel 安装完成，越过原 CI 失败点。</td></tr>
         <tr><td>ARMv7 完整 <code>production-spa</code> 本地构建</td><td>未完成：Python/server 层已命中成功缓存；既有前端 <code>npm ci</code> 在本机 Docker/QEMU 下连续 40 分 48 秒满 CPU 且无输出，人工终止。风险限定在既有 ARMv7 前端原生构建性能，改由 GitHub Actions 三架构 workflow 做替代验证。</td></tr>
-        <tr><td>GitHub Actions 多架构 SPA/SSR 构建</td><td>待 WIP 提交推送后验证，重点观察 <code>linux/arm/v7</code>。</td></tr>
+        <tr><td>GitHub Actions 多架构 SPA/SSR 构建</td><td>通过，run <code>29630098853</code>：amd64 1m58s、arm64 4m22s、arm/v7 7m20s；三架构 SPA、SSR、digest 上传及 multi-arch manifest 合并全部成功。</td></tr>
         <tr><td>ARMv7 server 运行检查</td><td>通过；<code>cryptography 49.0.0</code>、<code>psutil 7.2.2</code> 可导入，<code>gcc</code>、<code>g++</code>、<code>build-essential</code> 与 Python headers 均不在最终层。</td></tr>
       </tbody>
     </table>

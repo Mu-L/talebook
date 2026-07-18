@@ -40,7 +40,7 @@ A better online books library management website built on Calibre + Vue
 * **OPDS 导入**：支持添加外部 OPDS 源，浏览、批量导入书籍，含失败重试与进度查询。
 * **安全加固**：用户密码从 SHA256 自动迁移至 bcrypt；登录/注册/找回密码支持图形验证码与极验 GeeTest；修复多处安全告警（ReDoS、代码注入等）。
 * **管理后台增强**：新增用户管理界面、访客上传权限控制、回收站、批量删除图书、检查更新、用户反馈入口。
-* **基础设施**：升级 Tornado 6.5，改用 uv 管理 Python 依赖，新增数据库迁移工具；Docker 基础镜像合并为 `talebook/talebook-base`，构建提速。
+* **基础设施**：升级 Tornado 6.5，改用 uv 管理 Python 依赖，新增数据库迁移工具；使用独立维护的 `talebook/talebook-base` slim 基础镜像，构建提速。
 
 
 ## 桌面客户端 — Moke

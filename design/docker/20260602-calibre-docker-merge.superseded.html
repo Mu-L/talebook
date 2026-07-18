@@ -8,7 +8,8 @@
   </style>
 </head>
 <body><article class="doc">
-  <header><div class="eyebrow">TALEBOOK · DOCKER DESIGN</div><h1>合并 calibre-docker 基础镜像并改名</h1><p class="subtitle">统一源码归属，同时保持基础镜像“编译一次、registry 复用”的构建边界</p><div class="meta"><span>状态 · ACTIVE</span><span>原日期 · 2026-06-02</span><span>迁移 · 2026-07-13</span></div></header>
+  <header><div class="eyebrow">TALEBOOK · DOCKER DESIGN</div><h1>合并 calibre-docker 基础镜像并改名</h1><p class="subtitle">统一源码归属，同时保持基础镜像“编译一次、registry 复用”的构建边界</p><div class="meta"><span>状态 · SUPERSEDED</span><span>原日期 · 2026-06-02</span><span>迁移 · 2026-07-13</span></div></header>
+  <div class="warn"><div class="label">替代说明 · 2026-07-18</div>本方案已由 <code>design/project/20260718-local-build-boundary.active.html</code> 替代。基础镜像源码和发布流程已迁回独立 <code>talebook-base</code> 仓库，Talebook 只消费发布镜像。</div>
   <div class="tldr"><div class="label">TL;DR</div>将独立仓库 <code>talebook/calibre-docker</code> 的基础镜像源码合并到 Talebook，并把镜像更名为 <code>talebook/talebook-base</code>。基础镜像、构建 workflow 和消费方切换已经落地；原方案中的可覆盖 <code>BASE_IMAGE</code> 构建参数没有实现，主 <code>Dockerfile</code> 仍直接固定为 <code>talebook/talebook-base:8.5</code>。</div>
   <section><h2><span class="num">01</span>原始诉求</h2><p>原基础镜像由独立仓库维护，包含 Debian 13 Slim、Calibre、Nginx、Supervisor 与 PyQt5。需要统一源码管理并采用更准确的镜像命名，同时不能让主镜像在迁移窗口内失去可拉取的基础镜像。</p></section>
   <section><h2><span class="num">02</span>目标</h2><ul><li>基础镜像源码、构建 workflow 与主项目进入同一仓库。</li><li>镜像名从 <code>talebook/calibre-docker</code> 改为 <code>talebook/talebook-base</code>。</li><li>保留 QEMU 下耗时的 Calibre 构建只执行一次、后续从 registry 复用的机制。</li><li>迁移过程不中断主 Dockerfile 与 CI 构建。</li></ul></section>

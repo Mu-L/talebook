@@ -1,0 +1,116 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Talebook 本地构建边界收敛</title>
+  <style>
+    :root { color-scheme:light; --paper:#f7f6f2; --ink:#20211f; --muted:#63665f; --line:#d9d7cf; --accent:#245c4f; --accent-bg:#e7f0ec; --warn:#875f1d; --warn-bg:#f5ecd8; --code:#eceae3; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:46px 20px 76px; background:var(--paper); color:var(--ink); font:16px/1.65 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+    main { max-width:900px; margin:auto; }
+    header { padding-bottom:26px; border-bottom:1px solid var(--line); }
+    h1 { margin:.3rem 0 .7rem; font-size:2rem; line-height:1.2; }
+    h2 { margin-top:2.4rem; padding-bottom:.4rem; border-bottom:1px solid var(--line); font-size:1.28rem; }
+    p, li { max-width:82ch; }
+    .eyebrow, .meta, th, code, .status { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .eyebrow { color:var(--accent); font-size:.78rem; letter-spacing:.12em; }
+    .meta { display:flex; flex-wrap:wrap; gap:12px 24px; color:var(--muted); font-size:.82rem; }
+    .status { display:inline-block; padding:2px 9px; color:var(--accent); background:var(--accent-bg); border:1px solid #9bc1b5; border-radius:999px; }
+    .summary { margin:28px 0; padding:18px 22px; background:var(--accent-bg); border-left:4px solid var(--accent); }
+    code { padding:1px 5px; background:var(--code); border-radius:3px; font-size:.9em; }
+    pre { padding:16px 18px; overflow:auto; background:var(--code); border:1px solid var(--line); }
+    table { width:100%; border-collapse:collapse; margin:18px 0; font-size:.94rem; }
+    th, td { padding:11px 12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); font-size:.82rem; }
+    .verified { padding:15px 18px; background:var(--accent-bg); border:1px solid #9bc1b5; }
+    footer { margin-top:48px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:.85rem; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">TALEBOOK · BUILD DESIGN</div>
+    <h1>Talebook 本地构建边界收敛</h1>
+    <div class="meta">
+      <span>创建日期：2026-07-18</span>
+      <span>所属模块：project</span>
+      <span>状态：<b class="status">ACTIVE</b></span>
+      <span>需求来源：slim base test-server 日志复核</span>
+    </div>
+  </header>
+
+  <div class="summary">
+    Makefile 的本地镜像 tag 与镜像内版本统一使用分支名，并改为只有构建目标引用时才求值；删除所有 push 目标。基础镜像源码与发布 workflow 也从 Talebook 删除，统一由独立 <code>talebook-base</code> 仓库维护。
+  </div>
+
+  <section>
+    <h2>原始诉求与根因</h2>
+    <p>用户观察到无 Git 的 slim base 执行 <code>make init</code>、lint、pytest 时出现两次 <code>git: not found</code>，提出移除本地特殊版本编译、统一使用分支名版本，并明确 Makefile 不再提供 push。随后确认本仓库的 <code>Dockerfile.base</code> 也应删除，因为 slim base 已迁移到独立 <code>talebook-base</code> 仓库维护。</p>
+    <p>Git 日志的直接根因是 Makefile 顶层以立即展开赋值计算 <code>VER</code> 与 <code>GIT_VER</code>；GNU Make 解析任意目标时都会运行两条 Git 命令，即使目标完全不构建镜像。仓库同时保留旧 base Dockerfile、Makefile target 和发布 workflow，则会形成两个可修改、可发布但可能漂移的事实来源。</p>
+    <table>
+      <thead><tr><th>决策</th><th>理由</th></tr></thead>
+      <tbody>
+        <tr><td>本地只保留一个 <code>VER</code></td><td>镜像 tag 和 Docker build-arg <code>GIT_VERSION</code> 都使用分支名，符合本地构建仅用于验证的定位。</td></tr>
+        <tr><td>相关变量使用递归赋值</td><td>仅当 build 配方展开它们时才调用 Git；测试和检查目标不再隐式依赖 Git。</td></tr>
+        <tr><td>删除 <code>push</code> 与 <code>push-base</code></td><td>Makefile 只保留本地构建验证能力；Talebook 正式镜像由 GitHub Actions 发布，base 镜像由独立 <code>talebook-base</code> 仓库发布。</td></tr>
+        <tr><td>删除本仓库 base 源码与 workflow</td><td><code>Dockerfile.base</code> 和 <code>build-base.yml</code> 已由独立仓库取代；消费仓库只固定使用发布 tag，避免双源维护。</td></tr>
+        <tr><td>不修改 <code>.github/workflows/build.yml</code></td><td>真实发布仍需 <code>git describe</code> 产生可被 update checker 正确比较的版本，避免退回纯 hash 或无语义分支版本。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>方案</h2>
+    <pre><code>VER = $(shell git branch --show-current | tr '/' '-')
+IMAGE = talebook/talebook:$(VER)
+TAG2 = talebook/talebook:server-side-render-$(VER)
+
+build-spa / build-ssr:
+    docker build ... --build-arg GIT_VERSION=$(VER) ...</code></pre>
+    <p>删除 <code>GIT_VER</code>、<code>push</code>、<code>push-base</code> 及对应 <code>.PHONY</code> 声明。<code>REPO1</code>、<code>REPO2</code> 和固定 SSR tag 不含动态变量，可继续立即赋值。发布 workflow 不调用这些 Makefile 目标，因此其 <code>git describe</code> 版本策略不受影响。</p>
+
+    <h2>基础镜像仓库边界</h2>
+    <table>
+      <thead><tr><th>Talebook 删除</th><th>替代来源</th></tr></thead>
+      <tbody>
+        <tr><td><code>Dockerfile.base</code></td><td><code>https://github.com/talebook/talebook-base</code> 的 Dockerfile。</td></tr>
+        <tr><td><code>.github/workflows/build-base.yml</code></td><td>独立仓库的多架构发布 workflow。</td></tr>
+        <tr><td>Makefile 的 <code>build-base</code>、<code>push-base</code> 与 base 变量</td><td>消费仓库不再提供 base 构建或发布入口。</td></tr>
+        <tr><td>文档与 Dockerfile 的本地源码链接</td><td>改为独立仓库链接和“本仓库仅消费发布镜像”的说明。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>兼容性与替代关系</h2>
+    <ul>
+      <li>本方案生效后，完整替代 <code>design/project/20260714-build-version-scheme.superseded.html</code>：保留其 CI 真实发布的 <code>git describe</code> 策略，替换其 Makefile 本地 <code>GIT_VER</code> 策略。</li>
+      <li>同时替代 <code>design/docker/20260602-calibre-docker-merge.superseded.html</code> 与 <code>design/docker/20260612-docker-base-image-slim.superseded.html</code> 所描述的“base 源码由 Talebook 维护”状态；历史方案转为 SUPERSEDED，当前维护权归独立仓库。</li>
+      <li>本地构建的镜像内 <code>VERSION</code> 从最近 tag 描述改为分支名；这是用户确认的本地验证语义，不影响 Docker Hub 发布产物。</li>
+      <li>本地不再存在上传镜像的 Makefile target；需要发布时只能走受审计的仓库 workflow。</li>
+      <li>若在 detached HEAD 下执行本地 build，分支名可能为空；当前本地流程以工作分支构建为前提，不为不再承担发布职责的路径增加 hash fallback。</li>
+    </ul>
+  </section>
+
+  <section>
+    <h2>测试结果</h2>
+    <div class="verified"><strong>本地验证完成：</strong>Makefile 版本/目标边界、base 源码归属以及更新后的完整 slim-base CI 均通过；远端 PR checks 在推送后继续确认。</div>
+    <table>
+      <thead><tr><th>实际命令或检查</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>回归测试 TDD</td><td>实现前，无 Git PATH 解析 <code>make -n init</code>、push/base targets 及本地 base 文件断言按预期失败；实现后 <code>tests/test_makefile.py</code> 与 <code>tests/test_docker_stages.py</code> 合计 11 passed。</td></tr>
+        <tr><td><code>make -n init</code></td><td>通过；仅输出 pip 安装配方，不执行也不输出 Git。</td></tr>
+        <tr><td><code>make -n build-spa VER=feat-docker-slim</code></td><td>通过；镜像 tag 与 <code>GIT_VERSION</code> 均为 <code>feat-docker-slim</code>。</td></tr>
+        <tr><td>base 归属静态检查</td><td><code>Dockerfile.base</code>、<code>build-base.yml</code>、build/push base targets 与变量均已删除；Dockerfile 和开发文档均指向独立仓库。</td></tr>
+        <tr><td>slim base 内 <code>make init</code> / <code>make lint-py</code></td><td>通过；无 Git 错误，ruff 检查通过，96 个后端文件格式无变化。</td></tr>
+        <tr><td>slim base 内 <code>make pytest</code></td><td>通过；620 passed、1 skipped、33 warnings，coverage 59%。</td></tr>
+        <tr><td><code>make check-design</code> / <code>git diff --check</code></td><td>通过；22 份方案文档校验成功，补丁无空白错误。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <footer>本方案不改变 Dockerfile 写入 <code>webserver/version.py</code> 的机制，也不改变 Talebook GitHub Actions 的应用镜像发布 tag 规则。</footer>
+</main>
+</body>
+</html>

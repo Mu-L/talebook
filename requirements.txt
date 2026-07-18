@@ -8,13 +8,9 @@ chardet
 lxml
 jsonpath-ng
 quickjs
-ruff
 
 # build-in support for MYSQL
 pymysql
-pytest==7.4.4
-pytest-cov
-flake8
 bcrypt
 psutil
 requests-toolbelt

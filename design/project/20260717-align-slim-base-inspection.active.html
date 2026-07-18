@@ -1,0 +1,99 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>对齐 Slim Base 的 CI 环境探测</title>
+  <style>
+    :root { color-scheme:light; --paper:#f7f6f2; --ink:#20211f; --muted:#63665f; --line:#d9d7cf; --accent:#245c4f; --accent-bg:#e7f0ec; --warn:#875f1d; --warn-bg:#f5ecd8; --code:#eceae3; }
+    * { box-sizing:border-box; }
+    body { margin:0; padding:46px 20px 76px; background:var(--paper); color:var(--ink); font:16px/1.65 system-ui,-apple-system,"PingFang SC","Microsoft YaHei",sans-serif; }
+    main { max-width:900px; margin:auto; }
+    header { padding-bottom:26px; border-bottom:1px solid var(--line); }
+    h1 { margin:.3rem 0 .7rem; font-size:2rem; line-height:1.2; }
+    h2 { margin-top:2.4rem; padding-bottom:.4rem; border-bottom:1px solid var(--line); font-size:1.28rem; }
+    p, li { max-width:80ch; }
+    .eyebrow, .meta, th, code, .status { font-family:ui-monospace,SFMono-Regular,Menlo,monospace; }
+    .eyebrow { color:var(--accent); font-size:.78rem; letter-spacing:.12em; }
+    .meta { display:flex; flex-wrap:wrap; gap:12px 24px; color:var(--muted); font-size:.82rem; }
+    .status { display:inline-block; padding:2px 9px; color:var(--accent); background:var(--accent-bg); border:1px solid #9bc1b5; border-radius:999px; }
+    .summary { margin:28px 0; padding:18px 22px; background:var(--accent-bg); border-left:4px solid var(--accent); }
+    code { padding:1px 5px; background:var(--code); border-radius:3px; font-size:.9em; }
+    table { width:100%; border-collapse:collapse; margin:18px 0; font-size:.94rem; }
+    th, td { padding:11px 12px; text-align:left; vertical-align:top; border-bottom:1px solid var(--line); }
+    th { color:var(--muted); font-size:.82rem; }
+    .verified { padding:15px 18px; background:var(--accent-bg); border:1px solid #9bc1b5; }
+    footer { margin-top:48px; padding-top:18px; border-top:1px solid var(--line); color:var(--muted); font-size:.85rem; }
+  </style>
+</head>
+<body>
+<main>
+  <header>
+    <div class="eyebrow">TALEBOOK · CI DESIGN</div>
+    <h1>对齐 Slim Base 的 CI 环境探测</h1>
+    <div class="meta">
+      <span>创建日期：2026-07-17</span>
+      <span>所属模块：project</span>
+      <span>状态：<b class="status">ACTIVE</b></span>
+      <span>需求来源：PR #873 test-server 失败</span>
+    </div>
+  </header>
+
+  <div class="summary">
+    <code>test-server</code> 不再探测 slim base 已移除的 GUI 入口 <code>calibre</code>，改为验证测试真正依赖的 <code>ebook-convert</code>、<code>calibredb</code>、<code>make</code>、Python 与 pip。镜像内容和测试执行链保持不变。
+  </div>
+
+  <section>
+    <h2>原始诉求与失败证据</h2>
+    <p>用户确认新版 base 不提供 <code>calibre --version</code>，要求同步更新 GitHub Actions workflow。PR #873 的 run 29590332166 已成功拉取新镜像并通过 actions/checkout 的 REST fallback 下载源码，随后在 <code>Inspect environment</code> 的首条 <code>which calibre</code> 以退出码 1 终止，尚未执行依赖安装和后端测试。</p>
+    <table>
+      <thead><tr><th>观察</th><th>设计结论</th></tr></thead>
+      <tbody>
+        <tr><td>新 base 只公开服务端所需 Calibre CLI</td><td>环境探测应检查 <code>ebook-convert</code> 与 <code>calibredb</code>，不应以 GUI 聚合入口作为验收条件。</td></tr>
+        <tr><td>后续步骤使用 <code>make init</code>、<code>make lint-py</code>、<code>make pytest</code></td><td>同时检查 <code>make</code>，使失败在环境探测阶段清晰暴露。</td></tr>
+        <tr><td>checkout 已无 Git 成功</td><td>不引入 Git，也不恢复 safe-directory 命令。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>方案与边界</h2>
+    <table>
+      <thead><tr><th>文件</th><th>计划改动</th></tr></thead>
+      <tbody>
+        <tr><td><code>.github/workflows/ci.yml</code></td><td>将环境探测更新为 <code>command -v</code> 和版本检查：<code>ebook-convert</code>、<code>calibredb</code>、<code>make</code>、<code>python3</code>、<code>pip3</code>。</td></tr>
+        <tr><td><code>tests/test_ci_workflow.py</code></td><td>回归固定必需命令，明确禁止再次检查 <code>calibre</code> GUI 入口。</td></tr>
+      </tbody>
+    </table>
+    <p>不修改 base 镜像，不增加 Git 或 GUI 组件，不改变 test-server 直接运行于 base container 的方式，也不在 runner 内二次构建 Docker test target。</p>
+  </section>
+
+  <section>
+    <h2>测试结果</h2>
+    <div class="verified"><strong>本地验证完成：</strong>回归测试、发布镜像命令探测以及 slim base 内完整后端 CI 均通过；PR #873 的远端 test-server 与 integration checks 在推送后继续确认。</div>
+    <table>
+      <thead><tr><th>实际命令或检查</th><th>结果</th></tr></thead>
+      <tbody>
+        <tr><td>workflow 回归测试 TDD</td><td>修改前新增用例按预期失败；修改后 <code>tests/test_ci_workflow.py</code> 为 2 passed。</td></tr>
+        <tr><td>发布镜像环境探测</td><td><code>talebook/talebook-base:latest</code> digest 为 <code>sha256:4bca029954123fe92f996786b073614a34fd451d5dfeb636cb61c8306060be5e</code>；<code>ebook-convert 8.5.0</code>、<code>calibredb 8.5</code>、<code>make 4.4.1</code>、Python 与 pip 均通过，且不存在 <code>calibre</code> 和 Git。</td></tr>
+        <tr><td>slim base 内 <code>make init</code> / <code>make lint-py</code></td><td>通过；ruff 检查通过，96 个后端文件格式无变化。</td></tr>
+        <tr><td>slim base 内 <code>make pytest</code></td><td>通过；615 passed、1 skipped、33 warnings，coverage 59%。</td></tr>
+        <tr><td><code>git diff --check</code></td><td>通过。</td></tr>
+        <tr><td><code>make check-design</code></td><td>WIP 状态下按预期触发合并门禁；转 ACTIVE 后通过，21 份方案文档校验成功。</td></tr>
+      </tbody>
+    </table>
+  </section>
+
+  <section>
+    <h2>风险与回滚</h2>
+    <ul>
+      <li>版本命令可能初始化 Calibre 运行环境；以 base 发布时已通过的 CLI smoke test 为依据，并在发布镜像上直接复验。</li>
+      <li>若未来测试依赖新增命令，应按实际调用更新环境契约，而不是恢复未被业务使用的聚合入口。</li>
+      <li>回滚仅需恢复 workflow 探测列表，不影响镜像和业务代码。</li>
+    </ul>
+  </section>
+
+  <footer>本方案是 <code>design/project/20260717-remove-redundant-git-safe-directory.active.html</code> 的后续远端验收修正。</footer>
+</main>
+</body>
+</html>

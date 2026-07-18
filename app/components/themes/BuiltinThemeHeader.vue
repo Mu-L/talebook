@@ -882,10 +882,13 @@ const themeCss = {
     white-space: nowrap;
 }
 
+.v-app-bar :deep(.v-toolbar__content) {
+    position: relative;
+}
 .tb-theme-search {
-    flex: 0 1 560px;
-    margin-left: auto;
-    margin-right: 12px;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     max-width: 560px;
     min-width: 240px;
     width: 40vw;

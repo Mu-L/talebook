@@ -9,13 +9,17 @@ on:
     types: [submitted]
 
 permissions:
-  contents: write
+  contents: read
   issues: write
   pull-requests: write
 
 jobs:
   codex:
     name: Respond to maintainer request
+    timeout-minutes: 20
+    concurrency:
+      group: codex-${{ github.repository }}-${{ github.event.issue.number || github.event.pull_request.number }}
+      cancel-in-progress: false
     if: |
       github.actor != 'github-actions[bot]' &&
       contains(fromJSON('["OWNER", "MEMBER", "COLLABORATOR"]'), github.event.comment.author_association || github.event.review.author_association) &&
@@ -47,11 +51,15 @@ jobs:
       )
     runs-on: ubuntu-latest
     env:
-      CODEX_VERSION: "0.141.0"
+      CODEX_VERSION: "0.144.4"
+      CODEX_MODEL: ${{ vars.CODEX_MODEL || 'gpt-5.6-sol' }}
+      CODEX_REASONING_EFFORT: ${{ vars.CODEX_REASONING_EFFORT || 'xhigh' }}
     steps:
       - id: context
         name: Resolve request context
         uses: actions/github-script@v7
+        env:
+          WORKFLOW_SHA: ${{ github.workflow_sha }}
         with:
           script: |
             const fs = require("fs");
@@ -61,27 +69,37 @@ jobs:
             const payload = context.payload;
             const runnerTemp = process.env.RUNNER_TEMP;
             const codexHome = `${runnerTemp}/codex-home`;
-            const codexPrDiff = `${runnerTemp}/codex-pr.diff`;
-            const codexPrFilesJson = `${runnerTemp}/codex-pr-files.json`;
+            const codexPromptTemplate = `${runnerTemp}/codex-comment-response.md`;
+            const codexProgressReporter = `${runnerTemp}/codex-progress-reporter.py`;
             const codexRequestJson = `${runnerTemp}/codex-request.json`;
+            const workflowSha = process.env.WORKFLOW_SHA;
 
             core.exportVariable("CODEX_HOME", codexHome);
-            core.exportVariable("CODEX_PR_DIFF", codexPrDiff);
-            core.exportVariable("CODEX_PR_FILES_JSON", codexPrFilesJson);
+            core.exportVariable("CODEX_PROMPT_TEMPLATE", codexPromptTemplate);
+            core.exportVariable("CODEX_PROGRESS_REPORTER", codexProgressReporter);
             core.exportVariable("CODEX_REQUEST_JSON", codexRequestJson);
 
             let body = "";
             let actor = context.actor;
             let issueNumber = "";
+            let issueTitle = "";
             let pr = null;
             let requestKind = eventName;
             let triggerIssueCommentId = "";
             let triggerReviewCommentId = "";
+            let supportedTarget = false;
+            let blockReason = "";
+            let targetRef = "";
+            let targetSha = "";
+            let existingIssueBranch = "";
+            let existingIssuePrNumber = "";
+            const defaultBranch = payload.repository.default_branch;
 
             if (eventName === "issue_comment") {
               body = payload.comment.body || "";
               actor = payload.comment.user.login;
               issueNumber = String(payload.issue.number);
+              issueTitle = payload.issue.title || "";
               requestKind = payload.issue.pull_request ? "pull_request_comment" : "issue_comment";
               triggerIssueCommentId = String(payload.comment.id);
 
@@ -104,6 +122,7 @@ jobs:
               });
               pr = result.data;
               issueNumber = String(pr.number);
+              issueTitle = pr.title || "";
               requestKind = "pull_request_review_comment";
             } else if (eventName === "pull_request_review") {
               body = payload.review.body || "";
@@ -115,6 +134,7 @@ jobs:
               });
               pr = result.data;
               issueNumber = String(pr.number);
+              issueTitle = pr.title || "";
               requestKind = "pull_request_review";
             }
 
@@ -164,39 +184,60 @@ jobs:
               }
             }
 
+            const headRepoFullName = pr?.head?.repo?.full_name || "";
             if (authorized && pr) {
-              const files = await github.paginate(github.rest.pulls.listFiles, {
+              if (!headRepoFullName) {
+                blockReason = "该 Pull Request 的 head 仓库已不可用。";
+              } else if (headRepoFullName !== `${owner}/${repo}`) {
+                blockReason = "此 workflow 不能自动更新来自 fork 的 Pull Request。";
+              } else if (pr.state !== "open") {
+                blockReason = "该 Pull Request 已不再处于打开状态。";
+              } else {
+                supportedTarget = true;
+                targetRef = pr.head.ref;
+                targetSha = pr.head.sha;
+              }
+            } else if (authorized && requestKind === "issue_comment") {
+              const refPrefix = `heads/codex/issue-${issueNumber}-`;
+              const refs = await github.paginate(github.rest.git.listMatchingRefs, {
                 owner,
                 repo,
-                pull_number: pr.number,
+                ref: refPrefix,
                 per_page: 100,
               });
-              fs.writeFileSync(
-                codexPrFilesJson,
-                `${JSON.stringify(files.map((file) => ({
-                  filename: file.filename,
-                  status: file.status,
-                  additions: file.additions,
-                  deletions: file.deletions,
-                  changes: file.changes,
-                  patch: file.patch || null,
-                })), null, 2)}\n`,
-                { mode: 0o600 },
-              );
 
-              const diff = await github.request("GET /repos/{owner}/{repo}/pulls/{pull_number}", {
-                owner,
-                repo,
-                pull_number: pr.number,
-                headers: {
-                  accept: "application/vnd.github.v3.diff",
-                },
-              });
-              fs.writeFileSync(
-                codexPrDiff,
-                typeof diff.data === "string" ? diff.data : JSON.stringify(diff.data, null, 2),
-                { mode: 0o600 },
-              );
+              if (refs.length > 1) {
+                blockReason = `Issue #${issueNumber} 已存在多个 Codex 分支，请先处理冲突分支再重试。`;
+              } else if (refs.length === 1) {
+                existingIssueBranch = refs[0].ref.replace(/^refs\/heads\//, "");
+                const pulls = await github.paginate(github.rest.pulls.list, {
+                  owner,
+                  repo,
+                  state: "all",
+                  head: `${owner}:${existingIssueBranch}`,
+                  per_page: 100,
+                });
+                const closedPull = pulls.find((pull) => pull.state !== "open");
+                const openPull = pulls.find((pull) => pull.state === "open");
+
+                if (closedPull) {
+                  blockReason = `分支 ${existingIssueBranch} 属于已关闭或已合并的 Pull Request，请删除或重命名后重试。`;
+                } else {
+                  supportedTarget = true;
+                  targetRef = existingIssueBranch;
+                  targetSha = refs[0].object.sha;
+                  existingIssuePrNumber = openPull ? String(openPull.number) : "";
+                }
+              } else {
+                const branch = await github.rest.repos.getBranch({
+                  owner,
+                  repo,
+                  branch: defaultBranch,
+                });
+                supportedTarget = true;
+                targetRef = defaultBranch;
+                targetSha = branch.data.commit.sha;
+              }
             }
 
             const request = {
@@ -206,7 +247,17 @@ jobs:
               actor,
               actorPermission: permission,
               issueNumber,
+              issueTitle,
               body,
+              target: {
+                supported: supportedTarget,
+                blockReason,
+                defaultBranch,
+                ref: targetRef,
+                sha: targetSha,
+                existingIssueBranch,
+                existingIssuePrNumber,
+              },
               pullRequest: pr ? {
                 number: pr.number,
                 title: pr.title,
@@ -215,8 +266,8 @@ jobs:
                 baseSha: pr.base.sha,
                 headRef: pr.head.ref,
                 headSha: pr.head.sha,
-                headRepo: pr.head.repo.full_name,
-                sameRepository: pr.head.repo.full_name === `${owner}/${repo}`,
+                headRepo: headRepoFullName,
+                sameRepository: headRepoFullName === `${owner}/${repo}`,
               } : null,
             };
 
@@ -226,30 +277,126 @@ jobs:
               { mode: 0o600 },
             );
 
+            let progressCommentId = "";
+            if (authorized && supportedTarget && issueNumber) {
+              try {
+                const progressComment = await github.rest.issues.createComment({
+                  owner,
+                  repo,
+                  issue_number: Number(issueNumber),
+                  body: [
+                    "<!-- codex-live-progress -->",
+                    "## Codex 正在处理",
+                    "",
+                    "已接收请求，正在准备执行环境。",
+                    "",
+                    "- [x] 已接收请求",
+                    "- [ ] 分析并制定计划",
+                    "- [ ] 执行修改",
+                    "- [ ] 验证并发布",
+                    "",
+                    "<sub>该评论会持续更新，任务完成后将替换为最终结果。</sub>",
+                  ].join("\n"),
+                });
+                progressCommentId = String(progressComment.data.id);
+              } catch (error) {
+                core.warning(`Could not create the Codex progress comment: ${error.message}`);
+              }
+            }
+
+            if (authorized && supportedTarget) {
+              try {
+                const promptResult = await github.rest.repos.getContent({
+                  owner,
+                  repo,
+                  path: ".github/codex/prompts/comment-response.md",
+                  ref: workflowSha,
+                });
+                if (Array.isArray(promptResult.data) || !promptResult.data.content) {
+                  throw new Error("Trusted Codex prompt is missing from the workflow commit.");
+                }
+                fs.writeFileSync(
+                  codexPromptTemplate,
+                  Buffer.from(promptResult.data.content, "base64"),
+                  { mode: 0o600 },
+                );
+
+                const progressReporterResult = await github.rest.repos.getContent({
+                  owner,
+                  repo,
+                  path: ".github/codex/scripts/codex_progress_reporter.py",
+                  ref: workflowSha,
+                });
+                if (Array.isArray(progressReporterResult.data) || !progressReporterResult.data.content) {
+                  throw new Error("Trusted Codex progress reporter is missing from the workflow commit.");
+                }
+                fs.writeFileSync(
+                  codexProgressReporter,
+                  Buffer.from(progressReporterResult.data.content, "base64"),
+                  { mode: 0o600 },
+                );
+              } catch (error) {
+                if (progressCommentId) {
+                  try {
+                    await github.rest.issues.updateComment({
+                      owner,
+                      repo,
+                      comment_id: Number(progressCommentId),
+                      body: "## Codex 处理失败\n\n无法加载受信任的 Codex 运行资源，请查看 Actions 日志后重试。",
+                    });
+                  } catch (commentError) {
+                    core.warning(`Could not update the failed Codex progress comment: ${commentError.message}`);
+                  }
+                }
+                throw error;
+              }
+            }
+
             core.setOutput("authorized", authorized ? "true" : "false");
             core.setOutput("is_pr", pr ? "true" : "false");
             core.setOutput("issue_number", issueNumber);
             core.setOutput("pr_number", pr ? String(pr.number) : "");
             core.setOutput("base_ref", pr ? pr.base.ref : "");
-            core.setOutput("same_repository", pr && pr.head.repo.full_name === `${owner}/${repo}` ? "true" : "false");
+            core.setOutput("same_repository", pr && headRepoFullName === `${owner}/${repo}` ? "true" : "false");
+            core.setOutput("supported_target", supportedTarget ? "true" : "false");
+            core.setOutput("block_reason", blockReason);
+            core.setOutput("target_ref", targetRef);
+            core.setOutput("target_sha", targetSha);
+            core.setOutput("existing_issue_branch", existingIssueBranch);
+            core.setOutput("existing_issue_pr_number", existingIssuePrNumber);
+            core.setOutput("default_branch", defaultBranch);
+            core.setOutput("issue_title", issueTitle);
+            core.setOutput("progress_comment_id", progressCommentId);
+
+      - name: Explain unsupported target
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target != 'true'
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ steps.context.outputs.issue_number }}
+          BLOCK_REASON: ${{ steps.context.outputs.block_reason }}
+        with:
+          script: |
+            await github.rest.issues.createComment({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              issue_number: Number(process.env.ISSUE_NUMBER),
+              body: process.env.BLOCK_REASON || "Codex 无法安全地更新该目标。",
+            });
 
       - name: Checkout repository
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         uses: actions/checkout@v4
         with:
-          # This workflow runs with repository secrets on comment events. Never
-          # checkout PR head or merge refs here; PR contents are passed as data
-          # through CODEX_PR_DIFF instead.
-          ref: master
+          ref: ${{ steps.context.outputs.target_sha }}
           fetch-depth: 0
           persist-credentials: false
 
       - name: Install Codex CLI
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         run: npm install -g "@openai/codex@${CODEX_VERSION}"
 
       - name: Setup bubblewrap and AppArmor for sandbox
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         run: |
           set -euo pipefail
           
@@ -263,13 +410,13 @@ jobs:
           PROFILE_SRC="/usr/share/apparmor/extra-profiles/bwrap-userns-restrict"
           PROFILE_DST="/etc/apparmor.d/bwrap-userns-restrict"
           
-          if [ -f "$PROFILE_SRC" ]; then
-            sudo install -m 0644 "$PROFILE_SRC" "$PROFILE_DST"
-            sudo apparmor_parser -r "$PROFILE_DST"
-            echo "✅ AppArmor profile loaded successfully"
-          else
-            echo "⚠️  AppArmor profile not found at $PROFILE_SRC, continuing..."
+          if [ ! -f "$PROFILE_SRC" ]; then
+            echo "::error::Required AppArmor profile source is missing: $PROFILE_SRC"
+            exit 1
           fi
+          sudo install -m 0644 "$PROFILE_SRC" "$PROFILE_DST"
+          sudo apparmor_parser -r "$PROFILE_DST"
+          echo "✅ AppArmor profile loaded successfully"
           
           # Enable userns restrictions with bwrap exception
           sudo tee /etc/sysctl.d/99-codex-apparmor-hardening.conf >/dev/null <<'EOF'
@@ -282,25 +429,27 @@ jobs:
           
           echo "::group::Verifying installation"
           # Verify bubblewrap is installed
-          bwrap --version || echo "⚠️  bwrap version check failed"
+          bwrap --version
           
           # Test bubblewrap sandbox creation
           if bwrap --ro-bind / / /bin/true 2>/dev/null; then
             echo "✅ bubblewrap sandbox test passed"
           else
-            echo "⚠️  bubblewrap sandbox test failed, but continuing..."
+            echo "::error::Bubblewrap sandbox self-test failed"
+            exit 1
           fi
           
           # Check AppArmor status
           if sudo aa-status | grep -qE '(^|[[:space:]])bwrap($|[[:space:]])'; then
             echo "✅ AppArmor profile is active for bwrap"
           else
-            echo "ℹ️  AppArmor profile not active, Codex may use fallback mode"
+            echo "::error::AppArmor profile is not active for bubblewrap"
+            exit 1
           fi
           echo "::endgroup::"
 
       - name: Restore Codex ChatGPT auth
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         env:
           CODEX_AUTH_JSON: ${{ secrets.CODEX_AUTH_JSON }}
         run: |
@@ -320,13 +469,45 @@ jobs:
             exit 1
           fi
 
-          cat > "$CODEX_HOME/config.toml" <<'EOF'
+          mkdir -p "$GITHUB_WORKSPACE/.codex-runtime"
+          printf '%s\n' '.codex-runtime/' '.codex-result.json' '.codex/tmp/' >> "$GITHUB_WORKSPACE/.git/info/exclude"
+
+          cat > "$CODEX_HOME/config.toml" <<EOF
           cli_auth_credentials_store = "file"
           approval_policy = "never"
-          sandbox_mode = "workspace-write"
+          default_permissions = "codex-employee"
+          model = "$CODEX_MODEL"
+          model_reasoning_effort = "$CODEX_REASONING_EFFORT"
 
-          [sandbox_workspace_write]
-          network_access = false
+          [features]
+          network_proxy = true
+
+          [permissions.codex-employee]
+          description = "Talebook digital employee with workspace-only files and public network access."
+          extends = ":workspace"
+
+          [permissions.codex-employee.filesystem]
+          ":root" = "deny"
+          ":minimal" = "read"
+          ":tmpdir" = "deny"
+          ":slash_tmp" = "deny"
+
+          [permissions.codex-employee.filesystem.":workspace_roots"]
+          "." = "write"
+          ".github/workflows" = "read"
+          ".codex" = "read"
+          ".git" = "read"
+
+          [permissions.codex-employee.network]
+          enabled = true
+          allow_local_binding = true
+
+          [permissions.codex-employee.network.domains]
+          "*" = "allow"
+          "localhost" = "allow"
+          "127.0.0.1" = "allow"
+          "169.254.169.254" = "deny"
+          "metadata.google.internal" = "deny"
 
           [shell_environment_policy]
           inherit = "core"
@@ -341,53 +522,290 @@ jobs:
             "*SECRET*",
             "*KEY*",
           ]
+
+          [shell_environment_policy.set]
+          TMPDIR = "$GITHUB_WORKSPACE/.codex-runtime"
           EOF
 
       - name: Build Codex prompt
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         run: |
           set -euo pipefail
           mkdir -p .codex/tmp
           {
-            cat .github/codex/prompts/comment-response.md
+            cat "$CODEX_PROMPT_TEMPLATE"
             printf '\n## GitHub Request Context\n\n'
             jq . "$CODEX_REQUEST_JSON"
-            if [ -s "$CODEX_PR_FILES_JSON" ]; then
-              printf '\n## Pull Request Files\n\n```json\n'
-              jq . "$CODEX_PR_FILES_JSON"
-              printf '\n```\n'
-            fi
-            if [ -s "$CODEX_PR_DIFF" ]; then
-              printf '\n## Pull Request Diff\n\n```diff\n'
-              cat "$CODEX_PR_DIFF"
-              printf '\n```\n'
-            fi
           } > .codex/tmp/codex-prompt.md
 
       - id: run_codex
         name: Run Codex
-        if: steps.context.outputs.authorized == 'true'
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
         continue-on-error: true
+        env:
+          CODEX_PROGRESS_COMMENT_ID: ${{ steps.context.outputs.progress_comment_id }}
+          CODEX_PROGRESS_TOKEN: ${{ github.token }}
+          GITHUB_API_URL: ${{ github.api_url }}
         run: |
           set -euo pipefail
-          codex exec \
+          timeout --signal=TERM --kill-after=30s 15m env -u CODEX_PROGRESS_TOKEN codex exec \
+            --strict-config \
             --skip-git-repo-check \
             --cd "$GITHUB_WORKSPACE" \
             --output-last-message .codex/tmp/codex-final.md \
+            --json \
             --ephemeral \
-            --sandbox workspace-write \
-            < .codex/tmp/codex-prompt.md
+            < .codex/tmp/codex-prompt.md \
+            | tee .codex/tmp/codex-events.jsonl \
+            | python3 "$CODEX_PROGRESS_REPORTER"
+
+      - id: publish_gate
+        name: Validate Codex publish contract
+        if: always() && steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
+        env:
+          CODEX_OUTCOME: ${{ steps.run_codex.outcome }}
+          TARGET_SHA: ${{ steps.context.outputs.target_sha }}
+          TARGET_REF: ${{ steps.context.outputs.target_ref }}
+          IS_PR: ${{ steps.context.outputs.is_pr }}
+          ISSUE_NUMBER: ${{ steps.context.outputs.issue_number }}
+          EXISTING_ISSUE_BRANCH: ${{ steps.context.outputs.existing_issue_branch }}
+          RESULT_FILE: .codex-result.json
+        run: |
+          set -uo pipefail
+
+          ready=false
+          contract_valid=false
+          no_changes=false
+          reason=""
+          feature=""
+          commit_message=""
+          publish_branch=""
+
+          reject() {
+            if [ -z "$reason" ]; then
+              reason="$1"
+            fi
+          }
+
+          if [ "$CODEX_OUTCOME" != "success" ]; then
+            reject "Codex 执行失败或超过 15 分钟执行时限。"
+          elif [ ! -f "$RESULT_FILE" ]; then
+            reject "Codex 未生成 .codex-result.json。"
+          elif ! jq -e '
+            type == "object" and
+            (keys | sort) == ["commit_message", "feature", "ready_to_publish", "summary", "tests"] and
+            (.ready_to_publish | type == "boolean") and
+            (.feature | type == "string") and
+            (.feature | length >= 3 and length <= 48 and test("^[a-z0-9]+(-[a-z0-9]+)*$")) and
+            (.commit_message | type == "string") and
+            (.commit_message | length >= 1 and length <= 120 and (test("[\\r\\n]") | not)) and
+            (.commit_message | test("^(feat|fix|docs|style|refactor|perf|test|build|ci|chore|revert)(\\([a-z0-9._/-]+\\))?!?: .+")) and
+            (.summary | type == "string") and
+            (.summary | length >= 1 and length <= 1000) and
+            (.tests | type == "array") and
+            (.tests | length >= 1) and
+            ([.tests[] |
+              (.command | type == "string") and
+              (.command | length >= 1) and
+              (.result == "passed" or .result == "failed" or .result == "not_run") and
+              (if .result == "not_run" then (.details | type == "string" and length >= 1) else true end)
+            ] | all) and
+            (if .ready_to_publish then ([.tests[] | select(.result == "failed")] | length == 0) else true end)
+          ' "$RESULT_FILE" >/dev/null; then
+            reject "Codex 结果不符合发布契约或 Conventional Commit 规则。"
+          elif ! jq -e '.ready_to_publish == true' "$RESULT_FILE" >/dev/null; then
+            reject "Codex 将任务标记为尚不可发布。"
+          fi
+
+          current_sha="$(git rev-parse HEAD 2>/dev/null || true)"
+          if [ -z "$reason" ] && [ "$current_sha" != "$TARGET_SHA" ]; then
+            reject "Codex 修改了本地 Git 历史；仅允许 workflow 创建提交。"
+          fi
+
+          if [ -z "$reason" ] && ! git add -A; then
+            reject "Git 无法暂存候选改动。"
+          fi
+
+          if [ -z "$reason" ]; then
+            contract_valid=true
+            feature="$(jq -r '.feature' "$RESULT_FILE")"
+            commit_message="$(jq -r '.commit_message' "$RESULT_FILE")"
+            if [ "$IS_PR" = "true" ]; then
+              publish_branch="$TARGET_REF"
+            elif [ -n "$EXISTING_ISSUE_BRANCH" ]; then
+              publish_branch="$EXISTING_ISSUE_BRANCH"
+            else
+              publish_branch="codex/issue-${ISSUE_NUMBER}-${feature}"
+            fi
+          fi
+
+          if [ -z "$reason" ] && find design -type f -name '*.wip.html' -print -quit | grep -q .; then
+            reject "仓库中仍存在 WIP 方案文档。"
+          fi
+
+          if [ -z "$reason" ] && git diff --cached --quiet; then
+            no_changes=true
+            reject "未产生仓库改动。"
+          fi
+
+          if [ -z "$reason" ]; then
+            while IFS= read -r -d '' path; do
+              if [[ "$path" =~ ^\.github/workflows/ ]]; then
+                reject "数字员工不得修改 .github/workflows/ 下的文件。"
+                break
+              fi
+            done < <(git diff --cached --name-only -z)
+          fi
+
+          if [ -z "$reason" ] && ! git diff --cached --check; then
+            reject "git diff --cached --check 未通过。"
+          fi
+
+          if [ -z "$reason" ]; then
+            ready=true
+          fi
+
+          if [ "$ready" = "true" ]; then
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          fi
+          if [ "$contract_valid" = "true" ]; then
+            echo "contract_valid=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "contract_valid=false" >> "$GITHUB_OUTPUT"
+          fi
+          echo "no_changes=$no_changes" >> "$GITHUB_OUTPUT"
+          echo "reason=$reason" >> "$GITHUB_OUTPUT"
+          echo "feature=$feature" >> "$GITHUB_OUTPUT"
+          echo "commit_message=$commit_message" >> "$GITHUB_OUTPUT"
+          echo "publish_branch=$publish_branch" >> "$GITHUB_OUTPUT"
+
+      - id: app_token
+        name: Create short-lived publisher token
+        if: |
+          steps.publish_gate.outputs.ready == 'true' ||
+          (
+            steps.publish_gate.outputs.contract_valid == 'true' &&
+            steps.publish_gate.outputs.no_changes == 'true' &&
+            steps.context.outputs.is_pr != 'true' &&
+            steps.context.outputs.existing_issue_branch != '' &&
+            steps.context.outputs.existing_issue_pr_number == ''
+          )
+        # v3 recommends client-id; actionlint 1.7.12 still carries older app-id metadata.
+        uses: actions/create-github-app-token@v3
+        with:
+          client-id: ${{ secrets.CODEX_APP_CLIENT_ID }}
+          private-key: ${{ secrets.CODEX_APP_PRIVATE_KEY }}
+          permission-contents: write
+          permission-issues: write
+          permission-pull-requests: write
+
+      - id: publish
+        name: Commit and fast-forward push
+        if: steps.publish_gate.outputs.ready == 'true' && steps.app_token.outcome == 'success'
+        env:
+          APP_TOKEN: ${{ steps.app_token.outputs.token }}
+          APP_SLUG: ${{ steps.app_token.outputs.app-slug }}
+          TARGET_SHA: ${{ steps.context.outputs.target_sha }}
+          IS_PR: ${{ steps.context.outputs.is_pr }}
+          EXISTING_ISSUE_BRANCH: ${{ steps.context.outputs.existing_issue_branch }}
+          PUBLISH_BRANCH: ${{ steps.publish_gate.outputs.publish_branch }}
+          COMMIT_MESSAGE: ${{ steps.publish_gate.outputs.commit_message }}
+        run: |
+          set -euo pipefail
+
+          authenticated_remote="https://x-access-token:${APP_TOKEN}@github.com/${GITHUB_REPOSITORY}.git"
+          remote_sha="$TARGET_SHA"
+
+          if [ "$IS_PR" = "true" ] || [ -n "$EXISTING_ISSUE_BRANCH" ]; then
+            git fetch --no-tags "$authenticated_remote" "refs/heads/$PUBLISH_BRANCH"
+            remote_sha="$(git rev-parse FETCH_HEAD)"
+            if [ "$remote_sha" != "$TARGET_SHA" ]; then
+              echo "::error::Remote branch moved while Codex was running; refusing a non-fast-forward update."
+              exit 1
+            fi
+          else
+            remote_sha="$(git ls-remote "$authenticated_remote" "refs/heads/$PUBLISH_BRANCH" | awk 'NR == 1 {print $1}')"
+            if [ -n "$remote_sha" ]; then
+              echo "::error::The planned issue branch was created concurrently; refusing to overwrite it."
+              exit 1
+            fi
+          fi
+
+          bot_user="${APP_SLUG}[bot]"
+          bot_id="$(curl --fail --silent --show-error \
+            -H "Authorization: Bearer $APP_TOKEN" \
+            -H "Accept: application/vnd.github+json" \
+            -H "X-GitHub-Api-Version: 2022-11-28" \
+            "https://api.github.com/users/${APP_SLUG}%5Bbot%5D" | jq -r '.id')"
+          if ! [[ "$bot_id" =~ ^[0-9]+$ ]]; then
+            echo "::error::Could not resolve the GitHub App bot user ID."
+            exit 1
+          fi
+
+          git config user.name "$bot_user"
+          git config user.email "${bot_id}+${bot_user}@users.noreply.github.com"
+          git commit -m "$COMMIT_MESSAGE"
+          git push "$authenticated_remote" "HEAD:refs/heads/$PUBLISH_BRANCH"
+          echo "commit_sha=$(git rev-parse HEAD)" >> "$GITHUB_OUTPUT"
+
+      - id: create_issue_pr
+        name: Create Draft PR for issue work
+        if: |
+          steps.app_token.outcome == 'success' &&
+          steps.context.outputs.is_pr != 'true' &&
+          steps.context.outputs.existing_issue_pr_number == '' &&
+          (
+            steps.publish.outcome == 'success' ||
+            (
+              steps.publish_gate.outputs.contract_valid == 'true' &&
+              steps.publish_gate.outputs.no_changes == 'true' &&
+              steps.context.outputs.existing_issue_branch != ''
+            )
+          )
+        uses: actions/github-script@v7
+        env:
+          ISSUE_NUMBER: ${{ steps.context.outputs.issue_number }}
+          ISSUE_TITLE: ${{ steps.context.outputs.issue_title }}
+          DEFAULT_BRANCH: ${{ steps.context.outputs.default_branch }}
+          PUBLISH_BRANCH: ${{ steps.publish_gate.outputs.publish_branch }}
+        with:
+          github-token: ${{ steps.app_token.outputs.token }}
+          script: |
+            const title = `codex: ${process.env.ISSUE_TITLE}`.slice(0, 256);
+            const result = await github.rest.pulls.create({
+              owner: context.repo.owner,
+              repo: context.repo.repo,
+              title,
+              head: process.env.PUBLISH_BRANCH,
+              base: process.env.DEFAULT_BRANCH,
+              body: `Issue #${process.env.ISSUE_NUMBER} 的自动实现。\n\nCloses #${process.env.ISSUE_NUMBER}`,
+              draft: true,
+            });
+            core.setOutput("pull_request_number", String(result.data.number));
+            core.setOutput("pull_request_url", result.data.html_url);
 
       - id: diff
         name: Capture Codex patch
-        if: always() && steps.context.outputs.authorized == 'true'
+        if: always() && steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
+        env:
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          TARGET_SHA: ${{ steps.context.outputs.target_sha }}
         run: |
           set -euo pipefail
           mkdir -p .codex/tmp
-          if git diff --quiet; then
+
+          if [ "$PUBLISH_OUTCOME" = "success" ]; then
+            echo "has_patch=false" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
+
+          git add -A
+          if git diff --cached --quiet "$TARGET_SHA"; then
             echo "has_patch=false" >> "$GITHUB_OUTPUT"
           else
-            git diff --binary > .codex/tmp/codex.patch
+            git diff --cached --binary "$TARGET_SHA" > .codex/tmp/codex.patch
             echo "has_patch=true" >> "$GITHUB_OUTPUT"
           fi
 
@@ -400,46 +818,179 @@ jobs:
           retention-days: 7
 
       - name: Post Codex response
-        if: always() && steps.context.outputs.authorized == 'true' && steps.context.outputs.issue_number != ''
+        if: always() && steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true' && steps.context.outputs.issue_number != ''
         uses: actions/github-script@v7
         env:
           CODEX_FINAL_MESSAGE: .codex/tmp/codex-final.md
+          CODEX_RESULT_FILE: .codex-result.json
           CODEX_RUN_OUTCOME: ${{ steps.run_codex.outcome }}
+          CODEX_CONTRACT_VALID: ${{ steps.publish_gate.outputs.contract_valid }}
+          CODEX_GATE_READY: ${{ steps.publish_gate.outputs.ready }}
+          CODEX_GATE_REASON: ${{ steps.publish_gate.outputs.reason }}
+          CODEX_NO_CHANGES: ${{ steps.publish_gate.outputs.no_changes }}
+          CODEX_APP_TOKEN_OUTCOME: ${{ steps.app_token.outcome }}
+          CODEX_PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          CODEX_PUBLISH_BRANCH: ${{ steps.publish_gate.outputs.publish_branch }}
+          CODEX_COMMIT_SHA: ${{ steps.publish.outputs.commit_sha }}
+          IS_PR: ${{ steps.context.outputs.is_pr }}
+          EXISTING_ISSUE_BRANCH: ${{ steps.context.outputs.existing_issue_branch }}
+          EXISTING_PR_NUMBER: ${{ steps.context.outputs.existing_issue_pr_number }}
+          CREATED_PR_OUTCOME: ${{ steps.create_issue_pr.outcome }}
+          CREATED_PR_URL: ${{ steps.create_issue_pr.outputs.pull_request_url }}
           CODEX_HAS_PATCH: ${{ steps.diff.outputs.has_patch }}
           CODEX_ARTIFACT_NAME: codex-patch-${{ github.run_id }}
           ISSUE_NUMBER: ${{ steps.context.outputs.issue_number }}
+          CODEX_PROGRESS_COMMENT_ID: ${{ steps.context.outputs.progress_comment_id }}
         with:
           script: |
             const fs = require("fs");
 
-            let body = "";
+            const escapeHtml = (value) => String(value)
+              .replaceAll("&", "&amp;")
+              .replaceAll("<", "&lt;")
+              .replaceAll(">", "&gt;");
+
+            let finalMessage = "";
             if (fs.existsSync(process.env.CODEX_FINAL_MESSAGE)) {
-              body = fs.readFileSync(process.env.CODEX_FINAL_MESSAGE, "utf8").trim();
+              finalMessage = fs.readFileSync(process.env.CODEX_FINAL_MESSAGE, "utf8").trim();
             }
 
-            if (!body) {
-              body = process.env.CODEX_RUN_OUTCOME === "success"
-                ? "Codex finished but did not produce a final message."
-                : "Codex could not complete this request. Check the workflow logs for details.";
-            } else if (process.env.CODEX_RUN_OUTCOME !== "success") {
-              body = `Codex could not complete this request. Partial output:\n\n${body}`;
+            const validatedResult = (() => {
+              if (process.env.CODEX_CONTRACT_VALID !== "true" || !fs.existsSync(process.env.CODEX_RESULT_FILE)) {
+                return null;
+              }
+              try {
+                return JSON.parse(fs.readFileSync(process.env.CODEX_RESULT_FILE, "utf8"));
+              } catch (error) {
+                core.warning(`Could not read the validated Codex result: ${error.message}`);
+                return null;
+              }
+            })();
+
+            let body = "";
+            if (validatedResult) {
+              const testLines = validatedResult.tests.map((test) => {
+                let line = `- <code>${escapeHtml(test.command)}</code> — <strong>${escapeHtml(test.result)}</strong>`;
+                if (typeof test.details === "string" && test.details.trim()) {
+                  line += ` — ${escapeHtml(test.details.trim())}`;
+                }
+                return line;
+              });
+              body = `${escapeHtml(validatedResult.summary)}\n\n### 验证\n\n${testLines.join("\n")}`;
+            } else {
+              body = finalMessage;
+              if (!body) {
+                body = process.env.CODEX_RUN_OUTCOME === "success"
+                  ? "Codex 已结束，但未生成有效的结构化结果。"
+                  : "Codex 无法完成该请求，请查看 workflow 日志了解详情。";
+              } else if (process.env.CODEX_RUN_OUTCOME !== "success") {
+                body = `Codex 无法完成该请求，以下为部分输出：\n\n${body}`;
+              }
+            }
+
+            if (process.env.CODEX_PUBLISH_OUTCOME === "success") {
+              const shortSha = process.env.CODEX_COMMIT_SHA.slice(0, 7);
+              const commitUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/commit/${process.env.CODEX_COMMIT_SHA}`;
+              body += `\n\n---\n已发布提交 [\`${shortSha}\`](${commitUrl}) 到 \`${process.env.CODEX_PUBLISH_BRANCH}\`。`;
+
+              if (process.env.IS_PR !== "true") {
+                if (process.env.CREATED_PR_URL) {
+                  body += ` 已创建 Draft PR：${process.env.CREATED_PR_URL}`;
+                } else if (process.env.EXISTING_PR_NUMBER) {
+                  const prUrl = `${context.serverUrl}/${context.repo.owner}/${context.repo.repo}/pull/${process.env.EXISTING_PR_NUMBER}`;
+                  body += ` 已更新现有 Draft PR：${prUrl}`;
+                } else if (process.env.CREATED_PR_OUTCOME !== "success") {
+                  body += " 分支已推送，但 Draft PR 创建失败；请查看 workflow 日志。";
+                }
+              }
+            } else if (process.env.CODEX_NO_CHANGES === "true") {
+              if (process.env.IS_PR !== "true" && process.env.EXISTING_ISSUE_BRANCH && !process.env.EXISTING_PR_NUMBER) {
+                if (process.env.CREATED_PR_URL) {
+                  body += `\n\n---\n无需提交仓库改动；已补建缺失的 Draft PR：${process.env.CREATED_PR_URL}`;
+                } else {
+                  body += "\n\n---\n未发布：无法为现有 Issue 分支创建 Draft PR；请查看 workflow 日志。";
+                }
+              } else {
+                body += "\n\n---\n无需提交仓库改动。";
+              }
+            } else {
+              let reason = process.env.CODEX_GATE_REASON;
+              if (process.env.CODEX_GATE_READY === "true" && process.env.CODEX_APP_TOKEN_OUTCOME !== "success") {
+                reason = "GitHub App Token 创建失败，请检查 CODEX_APP_CLIENT_ID 和 CODEX_APP_PRIVATE_KEY。";
+              } else if (process.env.CODEX_GATE_READY === "true" && process.env.CODEX_PUBLISH_OUTCOME !== "success") {
+                reason = "受控提交或 fast-forward 推送失败，请查看 workflow 日志。";
+              }
+              body += `\n\n---\n未发布：${reason || "发布门禁未通过。"}`;
             }
 
             if (process.env.CODEX_HAS_PATCH === "true") {
-              body += `\n\n---\nCodex produced local file changes. Download the \`${process.env.CODEX_ARTIFACT_NAME}\` workflow artifact to inspect the patch.`;
+              body += `\n恢复补丁：请下载 workflow artifact \`${process.env.CODEX_ARTIFACT_NAME}\`。`;
             }
 
             if (body.length > 64000) {
-              body = `${body.slice(0, 63500)}\n\n...[truncated; see workflow logs for full output]`;
+              body = `${body.slice(0, 63500)}\n\n……[内容已截断，完整输出请查看 workflow 日志]`;
             }
 
-            await github.rest.issues.createComment({
-              owner: context.repo.owner,
-              repo: context.repo.repo,
-              issue_number: Number(process.env.ISSUE_NUMBER),
-              body,
-            });
+            const progressCommentId = Number(process.env.CODEX_PROGRESS_COMMENT_ID);
+            let responseUpdated = false;
+            if (Number.isSafeInteger(progressCommentId) && progressCommentId > 0) {
+              try {
+                await github.rest.issues.updateComment({
+                  owner: context.repo.owner,
+                  repo: context.repo.repo,
+                  comment_id: progressCommentId,
+                  body,
+                });
+                responseUpdated = true;
+              } catch (error) {
+                core.warning(`Could not replace the Codex progress comment: ${error.message}`);
+              }
+            }
 
-      - name: Fail if Codex failed
-        if: steps.context.outputs.authorized == 'true' && steps.run_codex.outcome == 'failure'
-        run: exit 1
+            if (!responseUpdated) {
+              await github.rest.issues.createComment({
+                owner: context.repo.owner,
+                repo: context.repo.repo,
+                issue_number: Number(process.env.ISSUE_NUMBER),
+                body,
+              });
+            }
+
+      - id: final_status
+        name: Fail closed when delivery is incomplete
+        if: always() && steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
+        env:
+          CODEX_OUTCOME: ${{ steps.run_codex.outcome }}
+          GATE_READY: ${{ steps.publish_gate.outputs.ready }}
+          GATE_NO_CHANGES: ${{ steps.publish_gate.outputs.no_changes }}
+          APP_TOKEN_OUTCOME: ${{ steps.app_token.outcome }}
+          PUBLISH_OUTCOME: ${{ steps.publish.outcome }}
+          IS_PR: ${{ steps.context.outputs.is_pr }}
+          EXISTING_ISSUE_BRANCH: ${{ steps.context.outputs.existing_issue_branch }}
+          EXISTING_PR_NUMBER: ${{ steps.context.outputs.existing_issue_pr_number }}
+          CREATED_PR_OUTCOME: ${{ steps.create_issue_pr.outcome }}
+        run: |
+          set -euo pipefail
+          if [ "$CODEX_OUTCOME" != "success" ]; then
+            exit 1
+          fi
+          if [ "$GATE_NO_CHANGES" = "true" ]; then
+            if [ "$IS_PR" != "true" ] && [ -n "$EXISTING_ISSUE_BRANCH" ] && [ -z "$EXISTING_PR_NUMBER" ]; then
+              if [ "$APP_TOKEN_OUTCOME" != "success" ] || [ "$CREATED_PR_OUTCOME" != "success" ]; then
+                exit 1
+              fi
+            fi
+            exit 0
+          fi
+          if [ "$GATE_READY" != "true" ]; then
+            exit 1
+          fi
+          if [ "$APP_TOKEN_OUTCOME" != "success" ]; then
+            exit 1
+          fi
+          if [ "$PUBLISH_OUTCOME" != "success" ]; then
+            exit 1
+          fi
+          if [ "$IS_PR" != "true" ] && [ -z "$EXISTING_PR_NUMBER" ] && [ "$CREATED_PR_OUTCOME" != "success" ]; then
+            exit 1
+          fi

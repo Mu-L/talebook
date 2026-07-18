@@ -42,12 +42,14 @@
             </template>
 
             <v-app-bar-nav-icon @click.stop="sidebar = !sidebar" />
-            <v-toolbar-title
-                class="ml-2 mr-4 align-center"
-                style="cursor: pointer"
-                @click="router.push('/')"
-            >
-                {{ store.sys.title }}
+            <v-toolbar-title class="ml-2 mr-4 align-center">
+                <span
+                    class="site-title"
+                    style="cursor: pointer"
+                    @click="router.push('/')"
+                >
+                    {{ store.sys.title }}
+                </span>
             </v-toolbar-title>
 
             <template v-if="display.smAndUp.value">
@@ -578,10 +580,13 @@ function toggleTheme() {
 </script>
 
 <style scoped>
+.v-app-bar :deep(.v-toolbar__content) {
+    position: relative;
+}
 .search-wrapper {
-    flex: 0 1 600px;
-    margin-left: auto;
-    margin-right: 12px;
+    position: absolute;
+    left: 50%;
+    transform: translateX(-50%);
     width: 40vw;
     max-width: 600px;
     min-width: 250px;

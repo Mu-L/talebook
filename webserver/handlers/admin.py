@@ -905,7 +905,7 @@ class AdminBookList(BaseHandler):
             end = start + num
             page_ids = all_ids[start:end]
         if page_ids:
-            books = [utils.SimpleBookFormatter(b, self.cdn_url).format() for b in self.get_books(ids=page_ids)]
+            books = [utils.SimpleBookFormatter(b, self.cdn_url, self.api_url).format() for b in self.get_books(ids=page_ids)]
 
         return {"err": "ok", "items": books, "total": total}
 

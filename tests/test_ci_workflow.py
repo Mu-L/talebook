@@ -26,3 +26,22 @@ def test_server_uses_base_checkout_and_make_without_explicit_git_config():
     assert "make lint-py" in commands
     assert "make pytest" in commands
     assert "make test" not in commands
+
+
+def test_server_inspects_slim_base_public_commands():
+    steps = load_ci_workflow()["jobs"]["test-server"]["steps"]
+    inspect = next(step for step in steps if step.get("name") == "Inspect environment")["run"]
+    command_lines = {line.strip() for line in inspect.splitlines() if line.strip()}
+
+    assert {
+        "command -v ebook-convert",
+        "ebook-convert --version",
+        "command -v calibredb",
+        "calibredb --version",
+        "command -v make",
+        "make --version",
+        "python3 --version",
+        "pip3 --version",
+    } <= command_lines
+    assert "which calibre" not in command_lines
+    assert "calibre --version" not in command_lines

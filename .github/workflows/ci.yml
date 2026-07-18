@@ -33,8 +33,12 @@ jobs:
 
       - name: Inspect environment
         run: |
-          which calibre
-          calibre --version
+          command -v ebook-convert
+          ebook-convert --version
+          command -v calibredb
+          calibredb --version
+          command -v make
+          make --version
           python3 --version
           pip3 --version
 

@@ -50,10 +50,13 @@ def test_employee_job_is_bounded_and_serialized_per_request_target():
 
 
 def test_only_repository_writers_can_trigger_the_employee():
-    job_condition = codex_job()["if"]
+    job = codex_job()
+    job_condition = job["if"]
     context_script = workflow_step(step_id="context")["with"]["script"]
 
-    assert "github.actor != 'github-actions[bot]'" in job_condition
+    assert workflow_data()["permissions"] == {"contents": "read"}
+    assert "!endsWith(github.actor, '[bot]')" in job_condition
+    assert "github.actor != 'github-actions[bot]'" not in job_condition
     assert all(role in job_condition for role in ("OWNER", "MEMBER", "COLLABORATOR"))
     assert all(trigger in job_condition for trigger in ("@codex", "/codex"))
     assert "github.rest.repos.getCollaboratorPermissionLevel" in context_script
@@ -151,7 +154,7 @@ def test_agent_contract_requires_a_validated_publish_decision():
     assert "timeout --signal=TERM --kill-after=30s 20m env -u CODEX_PROGRESS_TOKEN codex exec" in run_step["run"]
     assert "--json" in run_step["run"]
     assert "tee .codex/tmp/codex-events.jsonl" in run_step["run"]
-    assert run_step["env"]["CODEX_PROGRESS_TOKEN"] == "${{ github.token }}"
+    assert run_step["env"]["CODEX_PROGRESS_TOKEN"] == "${{ steps.interaction_token.outputs.token }}"
     assert all(field in prompt for field in ('"ready_to_publish"', '"feature"', '"commit_message"', '"summary"', '"tests"'))
     assert ".codex-result.json" in prompt
     assert ".github/workflows/" in prompt
@@ -240,6 +243,32 @@ def test_controlled_publisher_uses_a_short_lived_app_token_and_fast_forward_push
     assert 'git commit -m "$COMMIT_MESSAGE"' in publish["run"]
     assert 'git push "$authenticated_remote" "HEAD:refs/heads/$PUBLISH_BRANCH"' in publish["run"]
     assert "--force" not in publish["run"]
+
+
+def test_all_interactive_github_calls_use_the_low_privilege_app_token():
+    interaction_token = workflow_step(step_id="interaction_token")
+    steps = codex_job()["steps"]
+
+    assert interaction_token["uses"] == "actions/create-github-app-token@v3"
+    assert interaction_token["with"] == {
+        "client-id": "${{ secrets.CODEX_APP_CLIENT_ID }}",
+        "private-key": "${{ secrets.CODEX_APP_PRIVATE_KEY }}",
+        "permission-contents": "read",
+        "permission-issues": "write",
+        "permission-pull-requests": "write",
+    }
+    assert "if" not in interaction_token
+    assert steps.index(interaction_token) < steps.index(workflow_step(step_id="context"))
+
+    interaction_token_ref = "${{ steps.interaction_token.outputs.token }}"
+    assert workflow_step(step_id="context")["with"]["github-token"] == interaction_token_ref
+    assert workflow_step(name="Explain unsupported target")["with"]["github-token"] == interaction_token_ref
+    assert workflow_step(step_id="run_codex")["env"]["CODEX_PROGRESS_TOKEN"] == interaction_token_ref
+    assert workflow_step(name="Post Codex response")["with"]["github-token"] == interaction_token_ref
+
+    github_script_steps = [step for step in steps if step.get("uses", "").startswith("actions/github-script@")]
+    assert all(step["with"].get("github-token") for step in github_script_steps)
+    assert "${{ github.token }}" not in workflow_text()
 
 
 def test_first_successful_issue_run_creates_one_draft_pull_request():

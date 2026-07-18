@@ -20,7 +20,7 @@
     .subtitle { max-width:800px; color:var(--muted); font-size:18px; }
     .meta { display:flex; flex-wrap:wrap; gap:9px; margin-top:20px; font-size:12px; }
     .tag { padding:5px 9px; border:1px solid var(--line); border-radius:999px; background:var(--panel); }
-    .active { color:var(--green); border-color:#a8c6b2; background:var(--green-soft); }
+    .superseded { color:var(--amber); border-color:#d7b77f; background:var(--amber-soft); }
     .summary,.callout { margin:24px 0; padding:18px 20px; border:1px solid var(--line); background:var(--panel); }
     .summary { border-left:4px solid var(--blue); background:var(--blue-soft); }
     .danger { border-color:#dfaca3; background:var(--red-soft); }
@@ -43,7 +43,7 @@
     <h1>Codex PR 评审与 CI 加固</h1>
     <p class="subtitle">关闭 sandbox 退路、修复 PR 上下文边界与受信任资源版本漂移，并清除 CodeQL 与 Codex Actions 红灯。</p>
     <div class="meta">
-      <span class="tag active">状态 · ACTIVE</span>
+      <span class="tag superseded">状态 · SUPERSEDED</span>
       <span class="tag">创建日期 · 2026-07-16</span>
       <span class="tag">所属模块 · project</span>
       <span class="tag">需求来源 · PR #870 评审与 CI</span>
@@ -127,7 +127,7 @@
     <p>发布继续使用当前 PR 分支，不 force push。回滚时恢复上一提交并新建替代方案；不得把 sandbox 探测改回软失败。新方案验证并激活后，<code>20260716-codex-live-progress.active.html</code> 改为 SUPERSEDED 并链接本方案。</p>
   </section>
 
-  <footer>替代：design/project/20260716-codex-live-progress.superseded.html 。本方案经用户确认后实施并通过本地验证；GitHub 托管检查结果见 PR #870。</footer>
+  <footer>历史上替代：design/project/20260716-codex-live-progress.superseded.html 。后续由 design/project/20260717-codex-runtime-tuning.active.html 替代，以调整 Codex 时间预算与默认推理强度。</footer>
 </main>
 </body>
 </html>

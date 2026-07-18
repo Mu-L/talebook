@@ -77,7 +77,7 @@ npx playwright test               # E2E 测试（需先启动 mock server）
 
 如果希望完全脱离 Docker 运行，以下是完整的手动搭建步骤。**推荐在 Linux 环境下进行**，Mac / Windows 未经完整测试。
 
-随着版本更新，部分命令可能不及时更新；遇到问题可参考 [基础镜像 Dockerfile.base](../Dockerfile.base) 和 [本仓库 Dockerfile](../Dockerfile)。
+随着版本更新，部分命令可能不及时更新；遇到问题可参考 [独立基础镜像仓库](https://github.com/talebook/talebook-base) 和 [本仓库 Dockerfile](../Dockerfile)。
 
 ### 准备目录
 
@@ -97,7 +97,7 @@ cd talebook
 
 ### 安装 Calibre 基础环境
 
-参考 [基础镜像 Dockerfile.base](../Dockerfile.base)：
+参考 [talebook-base 的 Dockerfile](https://github.com/talebook/talebook-base/blob/master/Dockerfile)：
 
 ```bash
 apt-get install -y tzdata

@@ -408,7 +408,8 @@ class BaseHandler(web.RequestHandler):
         self.write(self.render_string(template, **vals))
 
     def get_book(self, book_id, raise_exception=True):
-        books = self.get_books(ids=[int(book_id)])
+        book_id = int(book_id)
+        books = self.get_books(ids=[book_id], check_permission=False) if self.can_view_book(book_id) else []
         if not books:
             if raise_exception:
                 self.write({"err": "not_found", "msg": _("抱歉，这本书不存在")})
@@ -418,8 +419,30 @@ class BaseHandler(web.RequestHandler):
                 return None
         return books[0]
 
+    def get_book_or_404(self, book_id):
+        """获取当前访问者可见的图书，否则返回适用于文件和阅读入口的 HTTP 404。"""
+        book = self.get_book(book_id, raise_exception=False)
+        if not book:
+            raise web.HTTPError(404, reason=_("书籍不存在"))
+        return book
+
+    def can_view_book(self, book_id):
+        """返回当前访问者是否有权查看指定图书。"""
+        if self.is_admin():
+            return True
+
+        item = self.session.get(Item, int(book_id))
+        if not item or item.scope != "private":
+            return True
+
+        user_id = self.user_id()
+        return bool(user_id and item.collector_id == user_id)
+
     def _get_private_book_ids(self):
         """返回当前用户无权查看的 scope=private 书籍 ID 集合"""
+        if self.is_admin():
+            return set()
+
         user_id = self.user_id()
         if user_id:
             return set(
@@ -509,6 +532,7 @@ class BaseHandler(web.RequestHandler):
             return {"err": "internal", "msg": _("同步元数据时发生错误: %s") % str(e)}
 
     def get_books(self, *args, **kwargs):
+        check_permission = kwargs.pop("check_permission", True)
         _ts = time.time()
         books = self.db.get_data_as_dict(*args, **kwargs)
         logging.debug("[%5d ms] select books from library  (count = %d)" % (int(1000 * (time.time() - _ts)), len(books)))
@@ -526,6 +550,9 @@ class BaseHandler(web.RequestHandler):
             maps[b.book_id] = d
         for book in books:
             book.update(maps.get(book["id"], empty_item))
+        if check_permission:
+            private_book_ids = self._get_private_book_ids()
+            books = [book for book in books if book["id"] not in private_book_ids]
         logging.debug("[%5d ms] select books from database (count = %d)" % (int(1000 * (time.time() - _ts)), len(books)))
         return books
 
@@ -633,7 +660,7 @@ class ListHandler(BaseHandler):
         if ids:
             ids = [book_id for book_id in ids if book_id not in private_book_ids]
             count = len(ids)
-            books = self.get_books(ids=ids[start : start + delta])
+            books = self.get_books(ids=ids[start : start + delta], check_permission=False)
             if sort_by_id:
                 # 归一化，按照 id 从大到小排列。
                 self.do_sort(books, "id", False)
@@ -658,7 +685,7 @@ class ListHandler(BaseHandler):
         if ids:
             ids = [book_id for book_id in ids if book_id not in private_book_ids]
             count = len(ids)
-            books = self.get_books(ids=ids[start : start + delta])
+            books = self.get_books(ids=ids[start : start + delta], check_permission=False)
             if sort_by_id:
                 self.do_sort(books, "id", False)
         else:

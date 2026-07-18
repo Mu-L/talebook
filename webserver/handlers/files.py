@@ -46,6 +46,8 @@ class ImageHandler(BaseHandler):
             id = int(match.group())
         if not self.db.has_id(id):
             raise web.HTTPError(404, "id:%d does not exist in database" % id)
+        if not self.can_view_book(id):
+            raise web.HTTPError(404, "id:%d does not exist in database" % id)
         if fmt == "thumb" or fmt.startswith("thumb_"):
             try:
                 width, height = map(int, fmt.split("_")[1:])
@@ -165,7 +167,7 @@ class EpubReader(BaseHandler):
             else:
                 raise web.HTTPError(403, reason=_("无权在线阅读"))
 
-        book = self.get_book(bid)
+        book = self.get_book_or_404(bid)
         fpath = book.get("fmt_epub", None)
         if not fpath:
             raise web.HTTPError(404)

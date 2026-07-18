@@ -8,8 +8,8 @@
   </style>
 </head>
 <body><article class="doc">
-  <header><div class="eyebrow">TALEBOOK · PROJECT DESIGN</div><h1>Codex GitHub Actions 配置</h1><p class="subtitle">让维护者从 issue 与 PR 触发受限的 Codex 任务，同时隔离未信任代码、登录态与写权限</p><div class="meta"><span>状态 · ACTIVE</span><span>原日期 · 2026-06-22</span><span>迁移 · 2026-07-13</span></div></header>
-  <div class="tldr"><div class="label">TL;DR</div><code>.github/workflows/codex.yml</code> 接受维护者通过 <code>@codex</code> 或 <code>/codex</code> 发起任务。workflow 只 checkout 可信 master，将 PR diff 作为文本交给 Codex；顶层 token 已声明 <code>contents: write</code>，但 checkout 不持久化凭据，agent 环境排除 GitHub token，当前脚本也不执行 commit 或 push，修改仍以 patch artifact 交付。</div>
+  <header><div class="eyebrow">TALEBOOK · PROJECT DESIGN</div><h1>Codex GitHub Actions 配置</h1><p class="subtitle">让维护者从 issue 与 PR 触发受限的 Codex 任务，同时隔离未信任代码、登录态与写权限</p><div class="meta"><span>状态 · SUPERSEDED</span><span>原日期 · 2026-06-22</span><span>迁移 · 2026-07-13</span><span>替代日期 · 2026-07-16</span></div></header>
+  <div class="tldr"><div class="label">SUPERSEDED</div>本方案已由 <code>design/project/20260716-codex-digital-employee.active.html</code> 替代。替代原因为交付模式从 patch artifact 升级为隔离 GitHub App 凭据后的受控 commit、fast-forward push 与 issue Draft PR；以下内容保留为历史记录。</div>
   <section><h2><span class="num">01</span>原始诉求</h2><p>需要让仓库维护者在 issue 评论、PR 评论、PR review 和 review thread 中直接触发 Codex 协助分析或修改代码，同时避免 privileged comment workflow 执行未信任 PR 代码或泄露 ChatGPT 登录态。</p></section>
   <section><h2><span class="num">02</span>目标</h2><ul><li>只允许具有 write、maintain 或 admin 权限的评论者触发。</li><li>PR 上下文可被分析，但 PR head 与 merge ref 不进入带 secret 的执行环境。</li><li>Codex 只能在 workspace-write 沙箱中修改工作区，agent 阶段关闭网络并排除仓库 token。</li><li>当前不自动 push；变更作为 artifact 输出，由维护者审阅。</li></ul></section>
   <section><h2><span class="num">03</span>方案</h2>
@@ -20,5 +20,5 @@
   </section>
   <section><h2><span class="num">04</span>当前实现核对</h2><table><thead><tr><th>项目</th><th>2026-07-13 状态</th></tr></thead><tbody><tr><td>触发与授权</td><td>issue 评论、review 评论和 review 均支持；先按 author association 过滤，再调用 API 确认 write、maintain 或 admin。</td></tr><tr><td>未信任代码隔离</td><td>固定 checkout master；PR 文件和 diff 通过 GitHub API 写入临时文件，只作为提示词文本。</td></tr><tr><td>Codex 沙箱</td><td>Codex CLI 版本固定为 0.141.0；workspace-write、网络关闭、认证文件位于 runner 临时目录。</td></tr><tr><td>变更交付</td><td>用 <code>git diff --binary</code> 生成 patch，artifact 保留 7 天，并在评论中提示下载；没有自动提交或推送步骤。</td></tr><tr><td>权限差异</td><td>原文“无写权限”不准确。workflow token 拥有 contents write，但当前没有向 agent 暴露持久化 Git 凭据。</td></tr></tbody></table></section>
   <section><h2><span class="num">05</span>测试结果</h2><p>本次完成 workflow 静态核对，确认触发条件、权限声明、checkout 参数、Codex 配置、patch artifact 与评论步骤。未触发真实 GitHub Actions，未验证 <code>CODEX_AUTH_JSON</code> secret、bubblewrap/AppArmor runner 行为或外部 API 权限。</p></section>
-  <footer>迁移来源：document/20260622/codex_actions.md · 仓库级自动化归入 project。</footer>
+  <footer>迁移来源：document/20260622/codex_actions.md · 替代方案：design/project/20260716-codex-digital-employee.active.html 。</footer>
 </article></body></html>

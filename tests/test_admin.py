@@ -8,7 +8,14 @@ import tempfile
 import urllib.parse
 from unittest import mock
 
-from tests.test_main import TestWithAdminUser, TestWithUserLogin, get_db
+from tests.test_main import (
+    BID_EPUB,
+    TestWithAdminUser,
+    TestWithUserLogin,
+    get_db,
+    temporary_book_scope,
+    temporary_static_host,
+)
 from tests.test_main import setUpModule as init
 from webserver import loader
 
@@ -22,6 +29,19 @@ class TestAdmin(TestWithUserLogin):
         d = self.json("/api/admin/book/list?sort=id&num=10")
         self.assertEqual(d["err"], "ok")
         self.assertEqual(len(d["items"]), 10)
+
+
+class TestAdminPrivateBookResources(TestWithAdminUser):
+    def test_private_book_cover_uses_authenticated_origin_when_static_host_is_set(self):
+        with temporary_book_scope(BID_EPUB, "private", collector_id=2):
+            with temporary_static_host("cdn.example"):
+                d = self.json(
+                    "/api/admin/book/list?search=A&num=0",
+                    headers={"X-Forwarded-Host": "books.example"},
+                )
+            book = next(book for book in d["items"] if book["id"] == BID_EPUB)
+            self.assertEqual(urllib.parse.urlsplit(book["img"]).netloc, "books.example")
+            self.assertEqual(urllib.parse.urlsplit(book["thumb"]).netloc, "books.example")
 
 
 class TestAdminSettingsSecurity(TestWithAdminUser):

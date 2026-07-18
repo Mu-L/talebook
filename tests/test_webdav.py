@@ -10,6 +10,7 @@ Run with the dependency installed: ``pip install -r requirements.txt``.
 """
 
 import logging
+from unittest import mock
 
 import pytest
 
@@ -31,16 +32,18 @@ def setUpModule():
     from webserver.models import Reader
 
     session = get_db()
-    if not session.query(Reader).filter(Reader.username == "admin").first():
+    user = session.query(Reader).filter(Reader.username == "admin").first()
+    if not user:
         user = Reader()
         user.username = "admin"
         user.name = "Admin"
         user.email = "admin@talebook.local"
-        user.permission = "admin"
+        user.permission = ""
         user.create_time = datetime.now()
         user.set_secure_password("admin")
         session.add(user)
-        session.commit()
+    user.admin = True
+    session.commit()
 
 
 class TestWebDav(TestApp):
@@ -88,6 +91,30 @@ class TestWebDav(TestApp):
         )
         # 207 Multi-Status is the WebDAV success code for PROPFIND.
         self.assertEqual(rsp.code, 207)
+
+    def test_admin_has_no_invisible_private_books(self):
+        """WebDAV 管理员应能看到其他用户的私藏书。"""
+        from webserver.models import Item, Reader
+        from webserver.webdav.dav_provider import MyBooksDavProvider
+
+        session = get_db()
+        admin = session.query(Reader).filter(Reader.username == "admin").first()
+        item = session.query(Item).filter(Item.book_id == 1).first()
+        original_scope = item.scope
+        original_collector_id = item.collector_id
+        item.scope = "private"
+        item.collector_id = 2
+        session.commit()
+
+        try:
+            provider = MyBooksDavProvider(mock.Mock(), get_session_func=get_db)
+            self.assertNotIn(1, provider._get_other_private_book_ids(admin.id))
+        finally:
+            session = get_db()
+            item = session.query(Item).filter(Item.book_id == 1).first()
+            item.scope = original_scope
+            item.collector_id = original_collector_id
+            session.commit()
 
 
 if __name__ == "__main__":

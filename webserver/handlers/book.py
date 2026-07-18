@@ -68,31 +68,22 @@ class Index(BaseHandler):
         random_books = []
         new_books = []
 
-        # 过滤掉其他用户标记为 scope=private 的书籍
-        user_id = self.user_id()
         if ids:
-            if user_id:
-                private_book_ids = set(
-                    item.book_id
-                    for item in self.session.query(Item).filter(Item.scope == "private", Item.collector_id != user_id).all()
-                )
-                ids = [book_id for book_id in ids if book_id not in private_book_ids]
-            else:
-                private_book_ids = set(item.book_id for item in self.session.query(Item).filter(Item.scope == "private").all())
-                ids = [book_id for book_id in ids if book_id not in private_book_ids]
+            private_book_ids = self._get_private_book_ids()
+            ids = [book_id for book_id in ids if book_id not in private_book_ids]
 
         if ids:
             # 如果配置为 0，则不显示随机推荐
             if cnt_random > 0:
                 random_ids = random.sample(ids, min(cnt_random, len(ids)))
-                random_books = [b for b in self.get_books(ids=random_ids)]
+                random_books = [b for b in self.get_books(ids=random_ids, check_permission=False)]
                 random_books.sort(key=lambda x: x["id"], reverse=True)
 
             ids.sort(reverse=True)
             # 确保不会尝试从空列表中取样
             sample_ids = ids[0:100] if len(ids) > 100 else ids
             new_ids = random.sample(sample_ids, min(cnt_recent, len(sample_ids)))
-            new_books = [b for b in self.get_books(ids=new_ids)]
+            new_books = [b for b in self.get_books(ids=new_ids, check_permission=False)]
             new_books.sort(key=lambda x: x["id"], reverse=True)
 
         return {
@@ -106,12 +97,10 @@ class Index(BaseHandler):
 class BookDetail(BaseHandler):
     @js
     def get(self, id):
-        book = self.get_book(id)
-        item = self.session.query(Item).filter(Item.book_id == int(id)).first()
-        if item and item.scope == "private":
-            user_id = self.user_id()
-            if not user_id or item.collector_id != user_id:
-                return {"err": "book.not_found", "msg": _("书籍不存在")}
+        book_id = int(id)
+        if not self.can_view_book(book_id):
+            return {"err": "book.not_found", "msg": _("书籍不存在")}
+        book = self.get_book(book_id)
         book_info = utils.BookFormatter(self, book).format(with_files=True, with_perms=True)
         reading_state = None
         user_id = self.user_id()
@@ -578,10 +567,8 @@ class BookRefer(BaseHandler):
     @auth
     async def get(self, id):
         book_id = int(id)
-        item = self.session.query(Item).filter(Item.book_id == book_id).first()
-        if item and item.scope == "private":
-            if item.collector_id != self.user_id():
-                return {"err": "book.not_found", "msg": _("书籍不存在")}
+        if not self.can_view_book(book_id):
+            return {"err": "book.not_found", "msg": _("书籍不存在")}
         mi = self.db.get_metadata(book_id, index_is_id=True)
 
         stream = self.get_argument("stream", None)
@@ -957,7 +944,7 @@ class BookDownload(BaseHandler, web.StaticFileHandler):
         bid, fmt = filename.split(".")
         fmt = fmt.lower()
         logging.error("download %s bid=%s, fmt=%s" % (filename, bid, fmt))
-        book = self.get_book(bid)
+        book = self.get_book_or_404(bid)
         book_id = book["id"]
         self.user_history("download_history", book)
         self.count_increase(book_id, count_download=1)
@@ -1076,8 +1063,10 @@ class HotBook(ListHandler):
         title = _("热度榜单")
         user_id = self.user_id()
 
-        # 过滤掉其他用户标记为 scope=private 的书籍
-        if user_id:
+        # 管理员可查看全部私藏图书，普通用户只可查看自己的私藏图书。
+        if self.is_admin():
+            db_items = self.session.query(Item).filter(Item.count_visit > 1).order_by(Item.count_download.desc())
+        elif user_id:
             db_items = (
                 self.session.query(Item)
                 .filter(Item.count_visit > 1, (Item.scope != "private") | (Item.collector_id == user_id))
@@ -1503,7 +1492,7 @@ class BookRead(BaseHandler):
             else:
                 raise web.HTTPError(403, reason=_("无权在线阅读"))
 
-        book = self.get_book(id)
+        book = self.get_book_or_404(id)
         book_id = book["id"]
         self.user_history("read_history", book)
         self.count_increase(book_id, count_download=1)

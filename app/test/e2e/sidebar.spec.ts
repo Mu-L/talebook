@@ -59,6 +59,11 @@ test.describe('Navigation Sidebar', () => {
         const readBooksLink = page.locator('nav').getByRole('link', { name: /已读书目/ });
         await expect(readBooksLink).toBeVisible();
         await expect(readBooksLink).toHaveAttribute('href', '/user/history?tab=finished');
+        const readBooksFollowsCategoryHeading = await page.locator('nav').getByText('分类浏览', { exact: true }).evaluate((heading) => {
+            const link = document.querySelector('nav a[href="/user/history?tab=finished"]');
+            return !!link && Boolean(heading.compareDocumentPosition(link) & Node.DOCUMENT_POSITION_FOLLOWING);
+        });
+        expect(readBooksFollowsCategoryHeading).toBe(true);
 
         // 5. System Links (if sidebar_sys is true)
         await expect(page.locator('nav').getByRole('link', { name: 'OPDS 介绍' })).toBeVisible();
@@ -70,7 +75,8 @@ test.describe('Navigation Sidebar', () => {
     });
 
     test('Read books link opens the finished tab with its count', async ({ page }) => {
-        await page.goto('/');
+        await page.goto('/user/history');
+        await expect(page.getByRole('tab', { name: /正在阅读 \[0\]/ })).toHaveAttribute('aria-selected', 'true');
 
         const readBooksLink = page.locator('nav').getByRole('link', { name: /已读书目/ });
         await expect(readBooksLink).toContainText('1');

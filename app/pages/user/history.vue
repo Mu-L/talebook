@@ -63,7 +63,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, watch } from 'vue';
 import BookCoverGrid from '@/components/BookCoverGrid.vue';
 import { useMainStore } from '@/stores/main';
 import { useI18n } from 'vue-i18n';
@@ -80,6 +80,10 @@ const finishedBooks = ref([]);
 
 const readingCount = computed(() => readingBooks.value.length);
 const finishedCount = computed(() => finishedBooks.value.length);
+
+watch(() => route.query.tab, (tab) => {
+    activeTab.value = tab === 'finished' ? 1 : 0;
+});
 
 useHead({
     title: t('user.readingRecord.pageTitle'),

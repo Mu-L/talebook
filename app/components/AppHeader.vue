@@ -480,10 +480,7 @@ const items = computed(() => {
         { icon: 'mdi-cloud-search', href: '/network', text: $t('navigation.networkLibrary') },
     ];
     var shelf_links = store.user.is_login
-        ? [
-            { icon: 'mdi-bookshelf', href: '/user/shelf', text: $t('navigation.myShelf') },
-            { icon: 'mdi-check-circle', href: '/user/history?tab=finished', text: $t('navigation.readBooks'), count: readDoneCount.value },
-        ]
+        ? [{ icon: 'mdi-bookshelf', href: '/user/shelf', text: $t('navigation.myShelf') }]
         : [];
     var admin_links = [
         {
@@ -503,6 +500,14 @@ const items = computed(() => {
     ];
     var nav_links = [
         { heading: $t('navigation.categories') },
+        ...(store.user.is_login
+            ? [{
+                icon: 'mdi-check-circle',
+                href: '/user/history?tab=finished',
+                text: $t('navigation.readBooks'),
+                count: readDoneCount.value,
+            }]
+            : []),
         { icon: 'mdi-widgets', href: '/nav', text: $t('navigation.browse'), count: store.sys.books },
         { icon: 'mdi-home-group', href: '/publisher', text: $t('navigation.publishers'), count: store.sys.publishers },
         { icon: 'mdi-human-greeting', href: '/author', text: $t('navigation.authors'), count: store.sys.authors },

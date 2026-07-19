@@ -4,7 +4,7 @@
 import json
 from unittest import mock
 
-from tests.test_main import BID_EPUB, TestWithUserLogin, get_db, setUpModule as init
+from tests.test_main import BID_EPUB, TestWithUserLogin, get_db, setUpModule as init, temporary_book_scope
 
 
 def setUpModule():
@@ -293,8 +293,22 @@ class TestBookListReadState(TestWithUserLogin):
             d = self.json("/api/index?random=1&recent=30")
             books = d["new_books"] + d["random_books"]
             book = next((b for b in books if b["id"] == BID_EPUB), None)
-            if book is not None:
-                self.assertIn("state", book)
+            self.assertIsNotNone(book)
+            self.assertIn("state", book)
+            self.assertEqual(book["state"]["read_state"], 2)
+        finally:
+            self._clear_reading_state(BID_EPUB)
+
+    def test_scopedbooks_stream_marks_read_done_book(self):
+        self._set_read_state(BID_EPUB, 2)
+        try:
+            with temporary_book_scope(BID_EPUB, "private", collector_id=1):
+                rsp = self.fetch("/api/scopedbooks?stream=1")
+                self.assertEqual(rsp.code, 200)
+                lines = [json.loads(line) for line in rsp.body.decode("utf-8").splitlines()]
+                self.assertEqual(lines[0]["err"], "ok")
+                book = next((line for line in lines[1:] if line["id"] == BID_EPUB), None)
+                self.assertIsNotNone(book)
                 self.assertEqual(book["state"]["read_state"], 2)
         finally:
             self._clear_reading_state(BID_EPUB)

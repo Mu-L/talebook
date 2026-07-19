@@ -896,10 +896,8 @@ class BookDelete(BaseHandler):
     def post(self, bid):
         book = self.get_book(bid)
         bid = book["id"]
-        if not self.current_user.can_edit() or not (self.is_admin() or self.is_book_owner(bid, self.user_id())):
-            return {"err": "permission", "msg": _("无权操作")}
-
-        if not self.current_user.can_delete() or not (self.is_admin() or self.is_book_owner(bid, self.user_id())):
+        can_manage = self.current_user.can_edit() and self.current_user.can_delete()
+        if not can_manage or not (self.is_admin() or self.is_book_owner(bid, self.user_id())):
             return {"err": "permission", "msg": _("无权操作")}
 
         self.db.delete_book(bid)

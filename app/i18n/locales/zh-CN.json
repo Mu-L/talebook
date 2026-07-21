@@ -285,6 +285,8 @@
     "urlRequired": "请输入书源 URL",
     "jsonRequired": "请粘贴书源 JSON",
     "jsonInvalid": "书源 JSON 格式不正确：{msg}",
+    "loadFromFile": "选择本地 JSON 文件",
+    "fileReadError": "读取文件失败，请重试",
     "overwrite": "覆盖同 URL 的已有书源",
     "test": "测试",
     "testResult": "测试结果",

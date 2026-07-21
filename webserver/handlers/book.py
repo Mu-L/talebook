@@ -736,11 +736,7 @@ class BookEdit(BaseHandler):
     def post(self, bid):
         book = self.get_book(bid)
         bid = book["id"]
-        if isinstance(book["collector"], dict):
-            cid = book["collector"]["id"]
-        else:
-            cid = book["collector"].id
-        if not self.current_user.can_edit() or not (self.is_admin() or self.is_book_owner(bid, cid)):
+        if not self.current_user.can_edit() or not (self.is_admin() or self.is_book_owner(bid, self.user_id())):
             return {"err": "permission", "msg": _("无权操作")}
 
         # 处理封面图上传
@@ -900,14 +896,8 @@ class BookDelete(BaseHandler):
     def post(self, bid):
         book = self.get_book(bid)
         bid = book["id"]
-        if isinstance(book["collector"], dict):
-            cid = book["collector"]["id"]
-        else:
-            cid = book["collector"].id
-        if not self.current_user.can_edit() or not (self.is_admin() or self.is_book_owner(bid, cid)):
-            return {"err": "permission", "msg": _("无权操作")}
-
-        if not self.current_user.can_delete() or not (self.is_admin() or self.is_book_owner(bid, cid)):
+        can_manage = self.current_user.can_edit() and self.current_user.can_delete()
+        if not can_manage or not (self.is_admin() or self.is_book_owner(bid, self.user_id())):
             return {"err": "permission", "msg": _("无权操作")}
 
         self.db.delete_book(bid)
@@ -1867,11 +1857,7 @@ class BookSetScope(BaseHandler):
             return {"err": "params.book.invalid", "msg": _("书籍已不存在")}
 
         bid = book["id"]
-        if isinstance(book["collector"], dict):
-            cid = book["collector"]["id"]
-        else:
-            cid = book["collector"].id
-        if not self.current_user.can_edit() or not (self.is_admin() or self.is_book_owner(bid, cid)):
+        if not self.current_user.can_edit() or not (self.is_admin() or self.is_book_owner(bid, self.user_id())):
             return {"err": "permission", "msg": _("无权操作")}
 
         succeed = False
@@ -1882,6 +1868,7 @@ class BookSetScope(BaseHandler):
             else:
                 item = Item()
                 item.book_id = bid
+                item.collector_id = self.user_id()
                 item.scope = "private"
                 try:
                     item.create_time = self.cache.field_for("timestamp", bid)
@@ -1909,11 +1896,7 @@ class BookDeleteFormat(BaseHandler):
             return {"err": "params.book.invalid", "msg": _("书籍已不存在")}
         bid = book["id"]
 
-        if isinstance(book["collector"], dict):
-            cid = book["collector"]["id"]
-        else:
-            cid = book["collector"].id
-        if not self.current_user.can_edit() or not (self.is_admin() or self.is_book_owner(bid, cid)):
+        if not self.current_user.can_edit() or not (self.is_admin() or self.is_book_owner(bid, self.user_id())):
             return {"err": "permission", "msg": _("无权操作")}
 
         try:
@@ -1953,11 +1936,7 @@ class BookSeparate(BaseHandler):
         if not book:
             return {"err": "params.book.invalid", "msg": _("书籍已不存在")}
 
-        if isinstance(book["collector"], dict):
-            cid = book["collector"]["id"]
-        else:
-            cid = book["collector"].id
-        if not self.current_user.can_edit() or not (self.is_admin() or self.is_book_owner(book_id, cid)):
+        if not self.current_user.can_edit() or not (self.is_admin() or self.is_book_owner(book_id, self.user_id())):
             return {"err": "permission", "msg": _("无权操作")}
 
         try:

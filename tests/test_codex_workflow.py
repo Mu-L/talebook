@@ -119,6 +119,30 @@ def test_employee_job_is_bounded_and_serialized_per_request_target():
     }
 
 
+def test_codex_runtime_installs_declared_test_tools_before_agent_execution():
+    steps = codex_job()["steps"]
+    checkout = workflow_step(name="Checkout repository")
+    setup_python = workflow_step(name="Setup Python for Codex validation")
+    install_tools = workflow_step(name="Install Codex test tools")
+    run_codex = workflow_step(name="Run Codex")
+    context_script = workflow_step(step_id="context")["with"]["script"]
+
+    assert "const codexTestRequirements = `${runnerTemp}/codex-requirements-test.txt`;" in context_script
+    assert 'core.exportVariable("CODEX_TEST_REQUIREMENTS", codexTestRequirements);' in context_script
+    assert 'path: "requirements-test.txt"' in context_script
+    assert "ref: workflowSha" in context_script
+
+    assert setup_python["uses"] == "actions/setup-python@v5"
+    assert setup_python["with"] == {"python-version": "3.13"}
+
+    install_script = install_tools["run"]
+    assert 'python3 -m pip install --disable-pip-version-check -r "$CODEX_TEST_REQUIREMENTS"' in install_script
+    assert "-r requirements-test.txt" not in install_script
+    assert "ruff --version" in install_script
+    assert "python3 -m pytest --version" in install_script
+    assert steps.index(checkout) < steps.index(setup_python) < steps.index(install_tools) < steps.index(run_codex)
+
+
 def test_only_repository_writers_can_trigger_the_employee():
     job = codex_job()
     job_condition = job["if"]
@@ -185,7 +209,8 @@ def test_trusted_assets_follow_the_immutable_workflow_version_and_acknowledge_fi
     assert "const workflowSha = process.env.WORKFLOW_SHA;" in script
     assert 'path: ".github/codex/prompts/comment-response.md"' in script
     assert 'path: ".github/codex/scripts/codex_progress_reporter.py"' in script
-    assert script.count("ref: workflowSha") == 2
+    assert 'path: "requirements-test.txt"' in script
+    assert script.count("ref: workflowSha") == 3
     assert "ref: defaultBranch" not in script
     assert script.index("reactions.createForIssueComment") < script.index("issues.createComment")
     assert script.index("issues.createComment") < script.index('path: ".github/codex/prompts/comment-response.md"')

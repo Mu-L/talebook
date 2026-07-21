@@ -80,12 +80,14 @@ jobs:
             const codexHome = `${runnerTemp}/codex-home`;
             const codexPromptTemplate = `${runnerTemp}/codex-comment-response.md`;
             const codexProgressReporter = `${runnerTemp}/codex-progress-reporter.py`;
+            const codexTestRequirements = `${runnerTemp}/codex-requirements-test.txt`;
             const codexRequestJson = `${runnerTemp}/codex-request.json`;
             const workflowSha = process.env.WORKFLOW_SHA;
 
             core.exportVariable("CODEX_HOME", codexHome);
             core.exportVariable("CODEX_PROMPT_TEMPLATE", codexPromptTemplate);
             core.exportVariable("CODEX_PROGRESS_REPORTER", codexProgressReporter);
+            core.exportVariable("CODEX_TEST_REQUIREMENTS", codexTestRequirements);
             core.exportVariable("CODEX_REQUEST_JSON", codexRequestJson);
 
             let body = "";
@@ -365,6 +367,21 @@ jobs:
                   Buffer.from(progressReporterResult.data.content, "base64"),
                   { mode: 0o600 },
                 );
+
+                const testRequirementsResult = await github.rest.repos.getContent({
+                  owner,
+                  repo,
+                  path: "requirements-test.txt",
+                  ref: workflowSha,
+                });
+                if (Array.isArray(testRequirementsResult.data) || !testRequirementsResult.data.content) {
+                  throw new Error("Trusted Codex test requirements are missing from the workflow commit.");
+                }
+                fs.writeFileSync(
+                  codexTestRequirements,
+                  Buffer.from(testRequirementsResult.data.content, "base64"),
+                  { mode: 0o600 },
+                );
               } catch (error) {
                 if (progressCommentId) {
                   try {
@@ -423,6 +440,20 @@ jobs:
           ref: ${{ steps.context.outputs.target_sha }}
           fetch-depth: 0
           persist-credentials: false
+
+      - name: Setup Python for Codex validation
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.13"
+
+      - name: Install Codex test tools
+        if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'
+        run: |
+          set -euo pipefail
+          python3 -m pip install --disable-pip-version-check -r "$CODEX_TEST_REQUIREMENTS"
+          ruff --version
+          python3 -m pytest --version
 
       - name: Install Codex CLI
         if: steps.context.outputs.authorized == 'true' && steps.context.outputs.supported_target == 'true'

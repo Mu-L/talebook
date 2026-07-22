@@ -228,12 +228,6 @@ RUN rm -rf /var/www/talebook/app/.output/public/logo && \
 
 
 # ----------------------------------------
-# 生产环境（spa版，作为默认 docker build 结果）
-FROM production AS production-spa
-# no more actions
-
-
-# ----------------------------------------
 # 开发环境（前端使用 npm run dev，可将本地 app/ 目录挂载进来实时开发）
 # 构建：docker build --target dev -t talebook/talebook:dev .
 # 使用：docker-compose -f dev.yml up
@@ -327,3 +321,9 @@ EXPOSE 80 443
 VOLUME ["/data"]
 
 CMD ["/var/www/talebook/docker/start-dev.sh"]
+
+
+# ----------------------------------------
+# 生产环境（spa版，作为默认 docker build 结果）
+FROM production AS production-spa
+# no more actions

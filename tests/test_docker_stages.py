@@ -117,6 +117,16 @@ def test_dev_stage_is_a_complete_agent_development_environment():
     )
 
 
+def test_production_spa_is_the_final_default_stage():
+    stages = re.findall(
+        r"^FROM\s+\S+\s+AS\s+(\S+)\s*$",
+        read("Dockerfile"),
+        re.MULTILINE | re.IGNORECASE,
+    )
+
+    assert stages[-1] == "production-spa"
+
+
 def test_pyproject_declares_test_tools_as_optional_dependencies():
     with (ROOT / "pyproject.toml").open("rb") as file:
         project = tomllib.load(file)["project"]

@@ -97,6 +97,43 @@ def test_test_stage_installs_the_test_requirements_only_after_server():
     assert "pip install -r /tmp/requirements-test.txt" in test
 
 
+def test_dev_stage_is_a_complete_agent_development_environment():
+    dev = docker_stage("dev")
+
+    assert dev.startswith("FROM test AS dev")
+    assert all(tool in dev for tool in ("git", "jq", "bubblewrap", "uidmap"))
+    assert 'ARG CODEX_VERSION="0.144.6"' in dev
+    assert 'npm install -g "@openai/codex@${CODEX_VERSION}"' in dev
+    assert all(
+        probe in dev
+        for probe in (
+            "node --version",
+            "npm --version",
+            "codex --version",
+            "python3 -m pytest --version",
+            "ruff --version",
+            "bwrap --version",
+        )
+    )
+
+
+def test_dev_stage_uses_node_24_active_lts():
+    dev = docker_stage("dev")
+
+    assert "https://deb.nodesource.com/setup_24.x" in dev
+    assert "https://deb.nodesource.com/setup_20.x" not in dev
+
+
+def test_production_spa_is_the_final_default_stage():
+    stages = re.findall(
+        r"^FROM\s+\S+\s+AS\s+(\S+)\s*$",
+        read("Dockerfile"),
+        re.MULTILINE | re.IGNORECASE,
+    )
+
+    assert stages[-1] == "production-spa"
+
+
 def test_pyproject_declares_test_tools_as_optional_dependencies():
     with (ROOT / "pyproject.toml").open("rb") as file:
         project = tomllib.load(file)["project"]

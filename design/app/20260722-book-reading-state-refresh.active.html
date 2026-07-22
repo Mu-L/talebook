@@ -222,12 +222,12 @@
       <table>
         <thead><tr><th>层级</th><th>验证内容</th><th>实际命令 / 页面</th><th>实际结果</th></tr></thead>
         <tbody>
-          <tr><td>单元测试</td><td>登录/退出重置、重新登录恢复、旧响应丢弃、阅读天数推导</td><td><code>npx vitest run test/composables/useBookReadingState.spec.ts</code></td><td><strong>通过</strong>：3 passed，3.22 秒</td></tr>
+          <tr><td>单元测试</td><td>登录/退出重置、重新登录恢复、旧响应丢弃、阅读天数推导</td><td><code>npx vitest run test/composables/useBookReadingState.spec.ts</code></td><td><strong>通过</strong>：3 passed，2.79 秒</td></tr>
           <tr><td>E2E</td><td>书架硬刷新、阅读状态与天数硬刷新、客户端路由换书隔离</td><td><code>MOCK_API_URL=http://127.0.0.1:18182 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3002 npx playwright test test/e2e/shelf.spec.ts --project=chromium</code></td><td><strong>通过</strong>：3 passed，30.6 秒</td></tr>
           <tr><td>交互验收</td><td>刷新恢复、登录态切换和跨书籍状态</td><td>Chrome DevTools MCP，浅色主题，<code>1440 × 1000</code>：<code>/book/1</code>、<code>/book/2</code></td><td><strong>通过</strong>：刷新后显示“移除书架 / 标记读完 / 在读”；退出时隐藏并清空用户操作区，再登录恢复；第二本书保持未读</td></tr>
           <tr><td>网络证据</td><td>页面确实以服务端真值恢复</td><td>Chrome DevTools Network：<code>GET /api/book/1/readstate</code></td><td><strong>通过</strong>：HTTP 200，返回 <code>wants: true</code>、<code>read_state: 1</code>，页面状态一致</td></tr>
           <tr><td>前端检查</td><td>目标回归、lint 与 production build</td><td><code>npm run lint</code>；<code>npm run build</code></td><td><strong>通过</strong>：lint 0 error（196 条仓库既有 warning）；Nuxt client、SSR 与 Nitro 构建成功</td></tr>
-          <tr><td>后端回归</td><td>完整 Python 测试与格式检查</td><td><code>make lint-py</code>；在 <code>talebook/talebook-base:latest</code> 中执行 <code>make init &amp;&amp; make pytest</code></td><td><strong>通过</strong>：ruff 全通过；642 passed，2 skipped，31 warnings，101.15 秒</td></tr>
+          <tr><td>后端回归</td><td>完整 Python 测试与格式检查</td><td><code>make lint-py</code>；在 <code>talebook/talebook-base:latest</code> 中执行 <code>make init &amp;&amp; make pytest</code></td><td><strong>通过</strong>：ruff 全通过；646 passed，2 skipped，31 warnings，80.01 秒</td></tr>
           <tr><td>工程门禁</td><td>设计文档与补丁完整性</td><td><code>make check-design</code>；<code>git diff --check</code></td><td><strong>通过</strong></td></tr>
         </tbody>
       </table>

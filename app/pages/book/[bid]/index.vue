@@ -747,6 +747,7 @@
                                         {{ author }}
                                     </v-chip>
                                     <v-chip
+                                        v-if="book.publisher"
                                         class="ma-1"
                                         size="small"
                                         color="primary"
@@ -1771,10 +1772,6 @@ onMounted(async () => {
 
 .tag-chips a {
     margin: 4px 2px;
-}
-
-.tag-chips :deep(.v-chip) {
-    color: white !important;
 }
 
 /* 减小管理菜单图标和文字的间距 */

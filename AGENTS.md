@@ -87,6 +87,8 @@ make dev     # 挂载 webserver/ 进容器，用于后端开发调试
 
 - 修改前端交互、样式、主题、页面布局或弹窗时，除单元/组件测试外，必须使用 Chrome DevTools MCP 在浏览器中做实际渲染验证，并在回复中说明验证过的页面、主题或关键状态。
 - 前端改动完成后，如果需要 dev server 才能体验，必须启动本地 dev server，并在最终回复中提供可访问地址（例如 `http://127.0.0.1:3000/` ）。
+- 永远禁止设置 `CHOKIDAR_USEPOLLING=true` 启动 Nuxt、Vite 或其他前端开发服务，不允许在交互命令、脚本、Makefile、CI 或文档示例中启用该轮询模式，也不为 Docker、worktree、网络文件系统或热更新故障设置例外。
+- 文件监听或热更新异常时，必须停止 dev server 并报告现象，改用原生文件事件、手动刷新或其他不启用 Chokidar polling 的方案。发现由智能体启动的 dev server 异常占用 CPU 时，应立即停止该进程并检查残留。
 - 前端本地体验默认启动方式：
   ```bash
   cd app

@@ -117,6 +117,13 @@ def test_dev_stage_is_a_complete_agent_development_environment():
     )
 
 
+def test_dev_stage_uses_node_24_active_lts():
+    dev = docker_stage("dev")
+
+    assert "https://deb.nodesource.com/setup_24.x" in dev
+    assert "https://deb.nodesource.com/setup_20.x" not in dev
+
+
 def test_production_spa_is_the_final_default_stage():
     stages = re.findall(
         r"^FROM\s+\S+\s+AS\s+(\S+)\s*$",

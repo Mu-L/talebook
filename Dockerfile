@@ -250,7 +250,7 @@ RUN apt-get update -y && \
         jq \
         uidmap && \
     if [ "$TARGETARCH" = "amd64" ] || [ "$TARGETARCH" = "arm64" ]; then \
-        curl -fsSL https://deb.nodesource.com/setup_20.x | bash - && \
+        curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
         apt-get install -y nodejs; \
     fi && \
     apt-get clean && \

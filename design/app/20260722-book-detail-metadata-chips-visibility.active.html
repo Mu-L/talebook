@@ -164,13 +164,13 @@
         <thead><tr><th>层级</th><th>验证内容</th><th>计划命令 / 页面</th><th>当前状态</th></tr></thead>
         <tbody>
           <tr><td>E2E 回归</td><td>作者、出版社、系列、普通标签可见，链接正确，默认浅色 tonal 前景未被强制为白色</td><td><code>npx playwright test test/e2e/book-detail.spec.ts --project=chromium</code></td><td class="passed">通过 · 2 passed</td></tr>
-          <tr><td>真实渲染</td><td>默认主题 + light-gray / minimal / graphite / brass / warm-red，共六种主题的浅色与深色模式</td><td>Chrome DevTools MCP，真实 dev 后端与 production preview 访问 <code>/book/13</code>；逐项检查作者、出版社、ISBN、普通标签、公有状态</td><td class="passed">通过 · 12 / 12 组合</td></tr>
+          <tr><td>真实渲染</td><td>默认主题 + light-gray / minimal / graphite / brass / warm-red，共六种主题的浅色与深色模式</td><td>Chrome DevTools MCP，真实 dev 后端与 production preview 访问 <code>/book/13</code>；逐项检查作者、出版社、ISBN、普通标签与状态 Chip</td><td class="passed">通过 · 公有状态 12 / 12 组合；默认浅色另验私有状态</td></tr>
           <tr><td>交互</td><td>作者、出版社、普通标签 Chip 跳转地址仍正确</td><td>Chrome DevTools MCP 检查真实渲染链接</td><td class="passed">通过</td></tr>
           <tr><td>前端检查</td><td>目标测试、全量 lint 与 production build</td><td><code>cd app &amp;&amp; npm run lint</code>；<code>cd app &amp;&amp; npm run build</code></td><td class="passed">通过 · lint 0 errors；build 成功</td></tr>
           <tr><td>工程门禁</td><td>方案、HTML 单文件资源与补丁完整性</td><td><code>make check-design</code>；<code>git diff --check</code></td><td class="passed">通过</td></tr>
         </tbody>
       </table>
-      <p>真实验收使用 Docker 中的 Talebook dev 后端（13 本书）与当前前端 production preview。先将安装状态切为未安装，经安装页创建 <code>admin</code> 管理员并完成真实登录，再由主题管理页面逐个激活主题。样本“北风”实际包含作者、出版社、ISBN、普通标签与公有状态；五个内置主题的明暗模式均记录到非透明、可辨认的计算前景色与背景色，最终恢复默认浅色主题。样本没有系列字段，系列由 E2E fixture 单独覆盖。</p>
+      <p>真实验收使用 Docker 中的 Talebook dev 后端（13 本书）与当前前端 production preview。先将安装状态切为未安装，经安装页创建 <code>admin / demodemo</code> 并完成真实登录，再由主题管理页面逐个激活主题。样本“北风”实际包含作者、出版社、ISBN、普通标签与公有状态；五个内置主题的明暗模式均记录到非透明、可辨认的计算前景色与背景色。随后在默认浅色主题将书籍切为私有，确认“私有书籍” Chip 可见且计算样式为黑字橙底，再恢复为公有；最终恢复默认浅色主题。样本没有系列字段，系列由 E2E fixture 单独覆盖。</p>
       <p>检查中没有与本次改动相关的失败项；eslint 保留仓库既有 warning，但错误数为 0。原生 Nuxt dev watcher 曾因工作区文件数量触发 <code>EMFILE</code>，按工程约束未启用 Chokidar polling，改用同一构建产物的 production preview 完成真实浏览器验收。</p>
     </section>
 

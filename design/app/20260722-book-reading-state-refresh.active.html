@@ -223,8 +223,9 @@
         <thead><tr><th>层级</th><th>验证内容</th><th>实际命令 / 页面</th><th>实际结果</th></tr></thead>
         <tbody>
           <tr><td>单元测试</td><td>登录/退出重置、重新登录恢复、旧响应丢弃、阅读天数推导</td><td><code>npx vitest run test/composables/useBookReadingState.spec.ts</code></td><td><strong>通过</strong>：3 passed，2.79 秒</td></tr>
-          <tr><td>E2E</td><td>书架硬刷新、阅读状态与天数硬刷新、客户端路由换书隔离</td><td><code>MOCK_API_URL=http://127.0.0.1:18182 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3002 npx playwright test test/e2e/shelf.spec.ts --project=chromium</code></td><td><strong>通过</strong>：3 passed，30.6 秒</td></tr>
+          <tr><td>E2E</td><td>书架硬刷新、阅读状态与天数硬刷新、客户端路由换书隔离</td><td><code>MOCK_API_URL=http://127.0.0.1:18183 PLAYWRIGHT_BASE_URL=http://127.0.0.1:3005 npx playwright test test/e2e/shelf.spec.ts --project=chromium</code></td><td><strong>通过</strong>：改用公开浏览器 History API 触发 SPA 换书，3 passed，3.3 秒</td></tr>
           <tr><td>交互验收</td><td>刷新恢复、登录态切换和跨书籍状态</td><td>Chrome DevTools MCP，浅色主题，<code>1440 × 1000</code>：<code>/book/1</code>、<code>/book/2</code></td><td><strong>通过</strong>：刷新后显示“移除书架 / 标记读完 / 在读”；退出时隐藏并清空用户操作区，再登录恢复；第二本书保持未读</td></tr>
+          <tr><td>真实后端复验</td><td>排除 mock 行为差异，确认书架与在读状态均由真实服务持久化并在刷新后恢复</td><td>Chrome DevTools MCP：Docker Talebook dev 后端 <code>127.0.0.1:8080</code> + production preview <code>127.0.0.1:3004/book/13</code>；使用安装流程创建的 <code>admin / demodemo</code> 登录</td><td><strong>通过</strong>：加入书架后清缓存刷新仍显示“移除书架”，验收后恢复未加入；点击“设为在读”后显示“标记读完 / 在读 / 已阅读不足一天”，清缓存刷新后三项仍完整恢复</td></tr>
           <tr><td>网络证据</td><td>页面确实以服务端真值恢复</td><td>Chrome DevTools Network：<code>GET /api/book/1/readstate</code></td><td><strong>通过</strong>：HTTP 200，返回 <code>wants: true</code>、<code>read_state: 1</code>，页面状态一致</td></tr>
           <tr><td>前端检查</td><td>目标回归、lint 与 production build</td><td><code>npm run lint</code>；<code>npm run build</code></td><td><strong>通过</strong>：lint 0 error（196 条仓库既有 warning）；Nuxt client、SSR 与 Nitro 构建成功</td></tr>
           <tr><td>后端回归</td><td>完整 Python 测试与格式检查</td><td><code>make lint-py</code>；在 <code>talebook/talebook-base:latest</code> 中执行 <code>make init &amp;&amp; make pytest</code></td><td><strong>通过</strong>：ruff 全通过；646 passed，2 skipped，31 warnings，80.01 秒</td></tr>
@@ -233,7 +234,7 @@
       </table>
       <p class="callout success">本方案已完成实现和验证。Chrome DevTools 验收截图保留为提交过程证据，PR 正文提供本 ACTIVE 方案的 GitHub 与 RawGitHack 固定提交预览链接。</p>
       <h3>验收环境说明</h3>
-      <p>mock 未实现 <code>/api/book/txt/init</code> 与 <code>/api/user/devices</code>，因此浏览器验收中这两个既有请求返回 404，并触发现有错误弹窗；同时开发模式存在详情页 SSR hydration warning。它们在本次改动前已存在，不涉及 <code>/readstate</code>，目标 E2E、目标网络请求和 production build 均通过。本次不扩展修复范围。</p>
+      <p>自动化浏览器覆盖使用的 mock 未实现 <code>/api/book/txt/init</code> 与 <code>/api/user/devices</code>，因此这两个既有请求返回 404，并触发现有错误弹窗；同时开发模式存在详情页 SSR hydration warning。它们在本次改动前已存在，不涉及 <code>/readstate</code>。后续已在真实 Docker dev 后端完成独立复验，真实验收不使用 mock；因原生 Nuxt watcher 在当前 worktree 触发 <code>EMFILE</code>，且工程约束禁止 polling，前端使用同一源码的 production preview。</p>
     </section>
 
     <section>

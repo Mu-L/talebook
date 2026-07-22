@@ -12,20 +12,19 @@ const book = books[0];
 const mockApiUrl = process.env.MOCK_API_URL || 'http://127.0.0.1:8080';
 
 const navigateWithinApp = async (page: Page, target: string) => {
-    await page.evaluate(async (path) => {
-        const root = document.querySelector('#__nuxt') as Element & {
-            __vue_app__?: {
-                config: {
-                    globalProperties: {
-                        $router: { push: (location: string) => Promise<unknown> };
-                    };
-                };
-            };
+    await page.evaluate((path) => {
+        const currentState = window.history.state || {};
+        const nextState = {
+            ...currentState,
+            back: `${window.location.pathname}${window.location.search}${window.location.hash}`,
+            current: path,
+            forward: null,
+            position: Number(currentState.position || 0) + 1,
+            replaced: false,
+            scroll: null,
         };
-        if (!root?.__vue_app__) {
-            throw new Error('Nuxt application is not mounted');
-        }
-        await root.__vue_app__.config.globalProperties.$router.push(path);
+        window.history.pushState(nextState, '', path);
+        window.dispatchEvent(new PopStateEvent('popstate', { state: nextState }));
     }, target);
 };
 

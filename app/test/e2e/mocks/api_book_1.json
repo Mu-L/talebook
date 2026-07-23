@@ -43,13 +43,19 @@
     "count_visit": 0,
     "count_download": 0,
     "available_formats": [
-      "epub"
+      "epub",
+      "txt"
     ],
     "files": [
       {
         "format": "epub",
         "size": 440912,
         "href": "/api/book/1.epub"
+      },
+      {
+        "format": "txt",
+        "size": 120000,
+        "href": "/api/book/1.txt"
       }
     ],
     "is_public": true,

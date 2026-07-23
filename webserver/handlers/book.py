@@ -1484,6 +1484,17 @@ class BookUploadComplete(BookUploadBase):
 
 
 class BookRead(BaseHandler):
+    def render_epub(self, book, is_ready):
+        return self.html_page(
+            "book/" + CONF["EPUB_VIEWER"],
+            {
+                "book": book,
+                "epub_dir": "/get/extract/%s" % book["id"],
+                "is_ready": is_ready,
+                "CANDLE_READER_SERVER": CONF["CANDLE_READER_SERVER"],
+            },
+        )
+
     def get(self, id):
         if not CONF["ALLOW_GUEST_READ"] and not self.current_user:
             return self.redirect("/login")
@@ -1499,6 +1510,9 @@ class BookRead(BaseHandler):
         book_id = book["id"]
         self.user_history("read_history", book)
         self.count_increase(book_id, count_download=1)
+
+        if book.get("fmt_epub"):
+            return self.render_epub(book, is_ready=True)
 
         if "fmt_pdf" in book:
             # PDF类书籍需要检查下载权限。
@@ -1518,25 +1532,13 @@ class BookRead(BaseHandler):
             return self.redirect(txt_reader_url)
 
         # 其他格式，转换为EPUB进行在线阅读
-        for fmt in ["epub", "mobi", "azw", "azw3", "txt"]:
+        for fmt in ["mobi", "azw", "azw3"]:
             fpath = book.get("fmt_%s" % fmt, None)
             if not fpath:
                 continue
 
-            if fmt != "epub":
-                ConvertService().convert_and_save(self.user_id(), book, fpath, "epub")
-
-            # epub_dir is for javascript
-            epub_dir = "/get/extract/%s" % book["id"]
-            return self.html_page(
-                "book/" + CONF["EPUB_VIEWER"],
-                {
-                    "book": book,
-                    "epub_dir": epub_dir,
-                    "is_ready": (fmt == "epub"),
-                    "CANDLE_READER_SERVER": CONF["CANDLE_READER_SERVER"],
-                },
-            )
+            ConvertService().convert_and_save(self.user_id(), book, fpath, "epub")
+            return self.render_epub(book, is_ready=False)
         raise web.HTTPError(404, reason=_("抱歉，在线阅读器暂不支持该格式的书籍"))
 
 

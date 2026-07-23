@@ -50,4 +50,20 @@ test.describe('Book Detail Page', () => {
         await expect(page.getByText('可转换')).toBeVisible();
         await expect(page.getByRole('button', { name: '开始转换' })).toBeEnabled();
     });
+
+    test('uses the unified reader when EPUB and TXT both exist', async ({ page }) => {
+        await page.goto(`/book/${bookId}`);
+
+        const readLinks = page.getByRole('link').filter({ hasText: /^(阅读|在线阅读)$/ });
+        await expect(readLinks).toHaveCount(2);
+        await expect(readLinks.nth(0)).toHaveAttribute('href', `/read/${bookId}`);
+        await expect(readLinks.nth(1)).toHaveAttribute('href', `/read/${bookId}`);
+    });
+
+    test('redirects a legacy TXT reader URL when EPUB exists', async ({ page }) => {
+        await page.goto(`/book/${bookId}/readtxt`);
+        await page.waitForURL(`**/read/${bookId}`);
+
+        expect(new URL(page.url()).pathname).toBe(`/read/${bookId}`);
+    });
 });

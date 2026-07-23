@@ -515,7 +515,7 @@
                             color="primary"
                             variant="elevated"
                             class="mx-2"
-                            :href="is_txt ? '/book/' + book.id + '/readtxt' : '/read/' + book.id"
+                            :href="'/read/' + book.id"
                             target="_blank"
                         >
                             <v-icon start>
@@ -840,7 +840,7 @@
             <v-col cols="12">
                 <v-row justify="space-around">
                     <v-col
-                        v-if="book.id > 0 && !is_txt"
+                        v-if="book.id > 0 && hasCompatibleFormats"
                         cols="12"
                         sm="6"
                         md="auto"
@@ -864,39 +864,6 @@
                                         </v-avatar>
                                     </template>
                                     <v-list-item-title>{{ t('book.onlineRead') }}</v-list-item-title>
-                                    <template #append>
-                                        <v-icon>mdi-chevron-right</v-icon>
-                                    </template>
-                                </v-list-item>
-                            </v-list>
-                        </v-card>
-                    </v-col>
-
-                    <v-col
-                        v-if="book.id > 0 && is_txt"
-                        cols="12"
-                        sm="6"
-                        md="auto"
-                        class="flex-grow-1"
-                    >
-                        <v-card
-                            variant="outlined"
-                            class="mb-2 h-100"
-                        >
-                            <v-list density="compact">
-                                <v-list-item
-                                    :href="'/book/' + book.id + '/readtxt'"
-                                    target="_blank"
-                                    class="w-100"
-                                >
-                                    <template #prepend>
-                                        <v-avatar color="primary">
-                                            <v-icon color="white">
-                                                mdi-text-box
-                                            </v-icon>
-                                        </v-avatar>
-                                    </template>
-                                    <v-list-item-title>{{ t('book.txtOnlineRead') }}({{ txt_parse_inited ? t('book.parsed') : t('book.unparsed') }})</v-list-item-title>
                                     <template #append>
                                         <v-icon>mdi-chevron-right</v-icon>
                                     </template>
@@ -1081,9 +1048,6 @@ const refer_books_loading = ref(false);
 const refer_books_setting_btn_loading = ref(false);
 const refer_books = ref([]);
 
-// TXT
-const txt_parse_inited = ref(false);
-
 // Upload format
 const dialog_upload_format = ref(false);
 const upload_format_file = ref(null);
@@ -1104,18 +1068,6 @@ const pending = ref(true);
 const error = ref(null);
 
 store.setNavbar(true);
-
-// Methods
-const get_txt_parse_status = async () => {
-    try {
-        const res = await $backend(`/book/txt/init?id=${bookid}&test=1`);
-        if (res.err === 'ok' && res.msg === '已解析') {
-            txt_parse_inited.value = true;
-        }
-    } catch (e) {
-        console.error(e);
-    }
-};
 
 // 数据获取逻辑
 const { data: fetchData, error: fetchError, pending: fetchPending, refresh } = useAsyncData(`book-${bookid}`, async () => {
@@ -1140,9 +1092,6 @@ watch(() => fetchData.value, (newData) => {
         Object.assign(book.value, newData.book);
         kindle_sender.value = newData.kindle_sender || '';
         conversion_options.value = newData.conversion_options || [];
-
-        // 获取 TXT 解析状态
-        get_txt_parse_status();
     }
 }, { immediate: true });
 
@@ -1165,12 +1114,6 @@ const pub_year = computed(() => {
         return 'N/A';
     }
     return book.value.pubdate.split('-')[0];
-});
-
-const is_txt = computed(() => {
-    if (!book.value || !book.value.files) return false;
-    const formats = book.value.files.map(x => x.format.toLowerCase());
-    return formats.includes('txt');
 });
 
 const hasCompatibleFormats = computed(() => {

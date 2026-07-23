@@ -19,6 +19,7 @@ services:
       - ./app:/var/www/talebook/app
       # 挂载本地 webserver/ 目录，修改后端代码后 tornado 自动重启
       - ./webserver:/var/www/talebook/webserver
+      - ./vendor/txt2epub:/var/www/talebook/vendor/txt2epub:ro
     ports:
       - "8080:80"
       - "8443:443"

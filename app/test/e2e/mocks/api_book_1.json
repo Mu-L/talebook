@@ -1,6 +1,15 @@
 {
   "err": "ok",
   "kindle_sender": "",
+  "conversion_options": [
+    {
+      "source_format": "txt",
+      "target_format": "epub",
+      "converter": "txt2epub",
+      "available": false,
+      "reason": "target_exists"
+    }
+  ],
   "book": {
     "id": 1,
     "title": "百年孤独",

@@ -1,11 +1,14 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
+import importlib.util
 import logging
 import os
 import subprocess
+import sys
 import time
 import traceback
+from pathlib import Path
 
 import psutil
 
@@ -18,11 +21,82 @@ from webserver.services.mail import MailService
 
 EBOOK_CONVERT_CMD = "ebook-convert"
 DEFAULT_CONVERT_TIMEOUT = 3000
+CONVERSION_ROUTES = (("txt", "epub", "txt2epub"),)
 
 CONF = loader.get_settings()
 
 
+def get_txt2epub_converter():
+    """Load the vendored TXT-to-EPUB converter only when it is needed."""
+    package_dir = Path(__file__).resolve().parents[2] / "vendor" / "txt2epub" / "src"
+    package_init = package_dir / "__init__.py"
+    if not package_init.is_file():
+        raise RuntimeError("txt2epub submodule is missing at %s; rebuild the image or mount vendor/txt2epub" % package_dir)
+
+    module_name = "_talebook_txt2epub"
+
+    def clear_partial_import():
+        for cached_name in tuple(sys.modules):
+            if cached_name == module_name or cached_name.startswith(module_name + "."):
+                sys.modules.pop(cached_name, None)
+
+    module = sys.modules.get(module_name)
+    if module is not None and hasattr(module, "Txt2Epub"):
+        return module.Txt2Epub
+
+    # A failed package import can leave a half-initialized module in
+    # sys.modules. Remove the package and its children before retrying.
+    clear_partial_import()
+
+    spec = importlib.util.spec_from_file_location(
+        module_name,
+        package_init,
+        submodule_search_locations=[str(package_dir)],
+    )
+    if spec is None or spec.loader is None:
+        raise RuntimeError("unable to load txt2epub from %s" % package_init)
+    module = importlib.util.module_from_spec(spec)
+    sys.modules[module_name] = module
+    try:
+        spec.loader.exec_module(module)
+    except ModuleNotFoundError as err:
+        clear_partial_import()
+        raise RuntimeError(
+            "txt2epub dependency %r is missing; rebuild the Docker image after updating requirements.txt" % err.name
+        ) from err
+    except Exception:
+        clear_partial_import()
+        raise
+
+    converter = getattr(module, "Txt2Epub", None)
+    if converter is None:
+        sys.modules.pop(module_name, None)
+        raise RuntimeError("txt2epub package at %s does not export Txt2Epub" % package_init)
+    return converter
+
+
 class ConvertService(AsyncService):
+    @staticmethod
+    def get_conversion_options(book):
+        """Describe supported conversion routes for the current book formats."""
+        options = []
+        for source_format, target_format, converter in CONVERSION_ROUTES:
+            reason = None
+            if book.get(f"fmt_{target_format}"):
+                reason = "target_exists"
+            elif not book.get(f"fmt_{source_format}"):
+                reason = "source_missing"
+            options.append(
+                {
+                    "source_format": source_format,
+                    "target_format": target_format,
+                    "converter": converter,
+                    "available": reason is None,
+                    "reason": reason,
+                }
+            )
+        return options
+
     def get_path_of_fmt(self, book, fmt):
         """for mock test"""
         from calibre.utils.filenames import ascii_filename
@@ -49,8 +123,33 @@ class ConvertService(AsyncService):
                 pass
         return found
 
-    def do_ebook_convert(self, old_path, new_path, log_path):
+    def do_txt_to_epub(self, old_path, new_path, book=None):
+        """Create an EPUB from a TXT source with the vendored txt2epub library."""
+        book = book or {}
+        authors = book.get("authors") or []
+        author = ", ".join(authors) if isinstance(authors, (list, tuple)) else str(authors)
+        return bool(
+            get_txt2epub_converter().create_epub(
+                input_file=Path(old_path),
+                output_file=Path(new_path),
+                book_title=book.get("title"),
+                book_author=author or None,
+                overwrite=True,
+            )
+        )
+
+    def do_ebook_convert(self, old_path, new_path, log_path, book=None):
         """convert book, and block, and wait"""
+        if old_path.lower().endswith(".txt") and new_path.lower().endswith(".epub"):
+            try:
+                ok = self.do_txt_to_epub(old_path, new_path, book)
+            except Exception:
+                logging.exception("txt2epub failed: %s => %s", old_path, new_path)
+                ok = False
+            with open(log_path, "w") as log:
+                log.write("txt2epub finish: %s\n" % new_path if ok else "txt2epub conversion failed\n")
+            return ok
+
         args = [EBOOK_CONVERT_CMD, old_path, new_path]
         args += [
             "--book-producer",
@@ -139,7 +238,7 @@ class ConvertService(AsyncService):
             title = title[0:19] + "..."
         service_item = f"[{book['id']}]{title}"
         task = BackgroundService().add_task(BackgroundTask.SERVICE_TYPE_CONVERT, service_item, book_id=book["id"])
-        ok = ConvertService().do_ebook_convert(fpath, new_path, progress_file)
+        ok = ConvertService().do_ebook_convert(fpath, new_path, progress_file, book=book)
         if task:
             BackgroundService().complete_task(task.id)
         if not ok:

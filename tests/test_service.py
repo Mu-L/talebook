@@ -1,9 +1,17 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
+import os
+import sys
+import tempfile
+import types
+import zipfile
+from pathlib import Path
+from unittest import mock
+
 from tests.test_main import TestWithUserLogin, testdir
 from tests.test_main import setUpModule as init
-from webserver.services.convert import ConvertService
+from webserver.services.convert import ConvertService, get_txt2epub_converter
 from webserver.services.extract import ExtractService
 
 
@@ -12,6 +20,69 @@ def setUpModule():
 
 
 class TestConvert(TestWithUserLogin):
+    def test_conversion_options_reflect_book_formats(self):
+        available = ConvertService.get_conversion_options({"fmt_txt": "/tmp/story.txt"})
+        missing_source = ConvertService.get_conversion_options({})
+        existing_target = ConvertService.get_conversion_options({"fmt_txt": "/tmp/story.txt", "fmt_epub": "/tmp/story.epub"})
+
+        self.assertEqual(available[0]["reason"], None)
+        self.assertTrue(available[0]["available"])
+        self.assertEqual(missing_source[0]["reason"], "source_missing")
+        self.assertEqual(existing_target[0]["reason"], "target_exists")
+
+    def test_txt_to_epub_generates_epub(self):
+        service = ConvertService()
+        with tempfile.TemporaryDirectory() as directory:
+            source = os.path.join(directory, "story.txt")
+            output = os.path.join(directory, "story.epub")
+            with open(source, "w", encoding="utf-8") as text:
+                text.write("第一章 开始\n\n这是正文。")
+
+            ok = service.do_txt_to_epub(source, output, {"title": "Talebook TXT", "authors": ["Alice"]})
+
+            self.assertTrue(ok)
+            self.assertTrue(os.path.isfile(output))
+            with zipfile.ZipFile(output) as epub:
+                self.assertIn("mimetype", epub.namelist())
+
+    def test_txt2epub_loader_recovers_from_partial_module(self):
+        module_name = "_talebook_txt2epub"
+        sys.modules[module_name] = types.ModuleType(module_name)
+        try:
+            converter = get_txt2epub_converter()
+            self.assertEqual(converter.__name__, "Txt2Epub")
+        finally:
+            for cached_name in tuple(sys.modules):
+                if cached_name == module_name or cached_name.startswith(module_name + "."):
+                    sys.modules.pop(cached_name, None)
+
+    def test_txt_to_epub_uses_vendored_converter(self):
+        service = ConvertService()
+        book = {"title": "Talebook TXT", "authors": ["Alice", "Bob"]}
+        with mock.patch("webserver.services.convert.get_txt2epub_converter") as get_converter:
+            get_converter.return_value.create_epub.return_value = True
+
+            ok = service.do_txt_to_epub("/tmp/story.txt", "/tmp/story.epub", book)
+
+        self.assertTrue(ok)
+        get_converter.return_value.create_epub.assert_called_once_with(
+            input_file=Path("/tmp/story.txt"),
+            output_file=Path("/tmp/story.epub"),
+            book_title="Talebook TXT",
+            book_author="Alice, Bob",
+            overwrite=True,
+        )
+
+    def test_txt_to_epub_routes_away_from_calibre(self):
+        service = ConvertService()
+        with mock.patch.object(service, "do_txt_to_epub", return_value=True) as convert_txt:
+            with tempfile.TemporaryDirectory() as directory:
+                log_path = os.path.join(directory, "txt2epub.log")
+                ok = service.do_ebook_convert("/tmp/story.txt", "/tmp/story.epub", log_path, {"title": "TXT"})
+
+        self.assertTrue(ok)
+        convert_txt.assert_called_once_with("/tmp/story.txt", "/tmp/story.epub", {"title": "TXT"})
+
     def test_convert(self):
         fin = testdir + "/cases/old.epub"
         fout = "/tmp/output.mobi"

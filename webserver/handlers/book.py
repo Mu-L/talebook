@@ -30,7 +30,6 @@ from webserver.constants import (
     META_SOURCE_QIMAO,
     META_SOURCE_TOMATO,
     META_SOURCE_XHSD,
-    SUPPORTED_EBOOK_FORMATS,
 )
 from webserver.handlers.base import BaseHandler, ListHandler, auth, js
 from webserver.i18n import _
@@ -121,6 +120,7 @@ class BookDetail(BaseHandler):
             "err": "ok",
             "kindle_sender": CONF["smtp_username"],
             "book": book_info,
+            "conversion_options": ConvertService.get_conversion_options(book),
         }
 
 
@@ -136,33 +136,38 @@ class BookConverter(BaseHandler):
         if not self.is_admin() and not self.is_book_owner(book_id, self.user_id()):
             return {"err": "user.no_permission", "msg": _("无权限")}
 
-        fmts = []
-        paths = []
-        for fmt in SUPPORTED_EBOOK_FORMATS:
-            book_path = book.get("fmt_%s" % fmt, None)
-            if book_path:
-                fmts.append(fmt)
-                paths.append(book_path)
+        source_format = self.get_argument("source_format", "").strip().lower()
+        target_format = self.get_argument("target_format", "").strip().lower()
+        option = next(
+            (
+                item
+                for item in ConvertService.get_conversion_options(book)
+                if item["source_format"] == source_format and item["target_format"] == target_format
+            ),
+            None,
+        )
+        if not option:
+            return {
+                "err": "params.convert.unsupported",
+                "msg": _("不支持从 %s 转换为 %s") % (source_format.upper() or "?", target_format.upper() or "?"),
+            }
+        if option["reason"] == "source_missing":
+            return {
+                "err": "params.convert.source_missing",
+                "msg": _("本书没有 %s 格式") % source_format.upper(),
+            }
+        if option["reason"] == "target_exists":
+            return {
+                "err": "params.convert.target_exists",
+                "msg": _("本书已有 %s 格式，无需重复转换") % target_format.upper(),
+            }
 
-        if not fmts:
-            return {"err": "params.book.invalid", "msg": _("本书没有支持的电子书格式")}
-
-        if ("epub" in fmts) and ("azw3" in fmts):
-            return {"err": "params.book.invalid", "msg": _("本书已有EPUB及Kindle版本, 不需要转换")}
-
-        if fmts[0] == "epub":
-            fmt = "azw3"
-        elif fmts[0] == "pdf":
-            fmt = "epub"
-        else:
-            fmt = "epub"
-
-        fpath = paths[0]
+        fpath = book[f"fmt_{source_format}"]
 
         service = ConvertService()
         if service.is_book_converting(book):
             return {"err": "params.book.converting", "msg": _("本书正在转换中，请稍后再试")}
-        service.convert_and_save(self.user_id(), book, fpath, fmt)
+        service.convert_and_save(self.user_id(), book, fpath, target_format)
         return {"err": "ok", "content": "%s" % _("转换成功，请稍后刷新页面查看")}
 
 

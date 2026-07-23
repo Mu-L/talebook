@@ -38,4 +38,16 @@ test.describe('Book Detail Page', () => {
         // Check download button (dialog trigger)
         await expect(page.getByText('下载').first()).toBeVisible();
     });
+
+    test('opens the unified conversion dialog for a TXT book', async ({ page }) => {
+        await page.goto('/book/2');
+        await page.getByText('文件处理').click();
+        await page.getByText('转换书籍').click();
+
+        await expect(page.getByText('当前文件格式')).toBeVisible();
+        await expect(page.getByText('TXT').first()).toBeVisible();
+        await expect(page.getByText('EPUB').first()).toBeVisible();
+        await expect(page.getByText('可转换')).toBeVisible();
+        await expect(page.getByRole('button', { name: '开始转换' })).toBeEnabled();
+    });
 });

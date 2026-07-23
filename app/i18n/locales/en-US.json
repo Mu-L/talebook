@@ -290,6 +290,8 @@
     "urlRequired": "Please enter a book source URL",
     "jsonRequired": "Please paste book source JSON",
     "jsonInvalid": "Invalid book source JSON: {msg}",
+    "loadFromFile": "Select local JSON file",
+    "fileReadError": "Failed to read file, please try again",
     "overwrite": "Overwrite existing sources with same URL",
     "test": "Test",
     "testResult": "Test result",

@@ -60,6 +60,21 @@ make dev     # 挂载 webserver/ 进容器，用于后端开发调试
 
 自然语言中输出文件路径、目录路径或 URL 时，路径与后续中英文标点之间必须留一个空格。例如“请查看 `design/project/example.active.html` 。”代码块、命令、HTML 属性和 Markdown 链接语法内部不插入额外空格。
 
+### Pull Request 提交规范
+
+- PR 标题应准确概括改动，正文不得为空或只重复提交消息。正文至少包含：背景或目标、关键改动、实际验证结果、风险或兼容性，以及方案路径或豁免原因。
+- 测试结果必须列出实际执行的命令与结果；未执行的项目应说明原因和风险，不得写成已通过。
+- 涉及界面、布局、交互或其他可视结果时必须附带截图；其他改动在截图有助于评审理解时也应优先附带。无法截图时在正文说明原因。
+- PR 引用 `design/` 下的 ACTIVE 单文件 HTML 方案时，必须同时提供 GitHub 文件链接和 RawGitHack 在线预览链接。两个链接都使用已推送提交的完整 commit SHA，不得使用会漂移的分支名或 `HEAD`。新增提交导致方案内容变化后，应同步更新链接。
+- 固定链接按以下格式转换：
+  ```text
+  https://github.com/<owner>/<repo>/blob/<commit-sha>/<path>
+  https://raw.githack.com/<owner>/<repo>/<commit-sha>/<path>
+  ```
+- 示例：
+  - GitHub 文件：`https://github.com/talebook/talebook/blob/18113f147aefa0ad79e8c7efd93f1c882610b3ed/design/webserver/20260721-booksource-large-json-import.active.html`
+  - RawGitHack 预览：`https://raw.githack.com/talebook/talebook/18113f147aefa0ad79e8c7efd93f1c882610b3ed/design/webserver/20260721-booksource-large-json-import.active.html`
+
 ### 测试
 
 - **每次新增或修改功能，必须附带对应的测试用例**，不允许只改业务代码不写测试。

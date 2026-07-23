@@ -75,7 +75,8 @@ fi && \
 
 # ----------------------------------------
 # Python wheel 构建阶段
-# ARMv7 上 psutil、cffi 等依赖没有可用的预编译 wheel；工具链只保留在本阶段。
+# ARMv7 上 psutil、cffi、pillow 等依赖没有可用的预编译 wheel；
+# 工具链只保留在本阶段。
 FROM application-base AS python-wheel-build
 ARG TARGETARCH
 ARG TARGETVARIANT
@@ -86,6 +87,14 @@ RUN if [ "$TARGETARCH" = "arm" ] && [ "$TARGETVARIANT" = "v7" ]; then \
         apt-get install -y --no-install-recommends \
             build-essential \
             libffi-dev \
+            libjpeg-dev \
+            libpng-dev \
+            libtiff-dev \
+            libfreetype-dev \
+            liblcms2-dev \
+            libwebp-dev \
+            libopenjp2-7-dev \
+            zlib1g-dev \
             python3-dev \
             python3-wheel; \
     fi && \
@@ -93,7 +102,8 @@ RUN if [ "$TARGETARCH" = "arm" ] && [ "$TARGETVARIANT" = "v7" ]; then \
 
 COPY requirements.txt /tmp/
 RUN --mount=type=cache,target=/root/.cache/pip \
-    python3 -m pip wheel --wheel-dir /opt/wheels psutil "cffi>=2.0.0"
+    python3 -m pip wheel --wheel-dir /opt/wheels \
+        psutil "cffi>=2.0.0" "pillow>=10.4.0"
 
 
 # ----------------------------------------
@@ -107,7 +117,7 @@ RUN --mount=from=python-wheel-build,source=/opt/wheels,target=/tmp/talebook-whee
     python3 -m pip install \
         --no-index \
         --find-links=/tmp/talebook-wheels \
-        psutil cffi && \
+        psutil cffi "pillow>=10.4.0" && \
     python3 -m pip install -r /tmp/requirements.txt
 
 

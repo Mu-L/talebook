@@ -750,6 +750,7 @@
                                         {{ author }}
                                     </v-chip>
                                     <v-chip
+                                        v-if="book.publisher"
                                         class="ma-1"
                                         size="small"
                                         color="primary"
@@ -995,6 +996,7 @@ import { useAsyncData, useNuxtApp } from 'nuxt/app';
 import { useMainStore } from '@/stores/main';
 import BookCards_Small from '~/components/BookCards_Small.vue';
 import BookConvertDialog from '~/components/BookConvertDialog.vue';
+import { READING_STATE, useBookReadingState } from '~/composables/useBookReadingState';
 
 const route = useRoute();
 const router = useRouter();
@@ -1002,7 +1004,7 @@ const store = useMainStore();
 const { $backend, $backend_stream, $alert } = useNuxtApp();
 const { t } = useI18n();
 
-const bookid = route.params.bid;
+const bookid = computed(() => route.params.bid);
 const book = ref({
     id: 0,
     title: '',
@@ -1070,8 +1072,9 @@ const error = ref(null);
 store.setNavbar(true);
 
 // 数据获取逻辑
-const { data: fetchData, error: fetchError, pending: fetchPending, refresh } = useAsyncData(`book-${bookid}`, async () => {
-    const response = await $backend(`/book/${bookid}`);
+const bookDataKey = computed(() => `book-${bookid.value}`);
+const { data: fetchData, error: fetchError, pending: fetchPending, refresh } = useAsyncData(bookDataKey, async () => {
+    const response = await $backend(`/book/${bookid.value}`);
     
     if (response.err === 'ok') {
         return response;
@@ -1081,8 +1084,7 @@ const { data: fetchData, error: fetchError, pending: fetchPending, refresh } = u
 }, {
     lazy: false,
     default: () => null,
-    server: true,
-    getCachedData: key => useNuxtData(key).data.value
+    server: true
 });
 
 // 监听数据变化并更新 book.value
@@ -1106,7 +1108,7 @@ watch(() => fetchError.value, (newError) => {
 // 监听加载状态
 watch(() => fetchPending.value, (newPending) => {
     pending.value = newPending;
-});
+}, { immediate: true });
 
 // Computed properties
 const pub_year = computed(() => {
@@ -1252,7 +1254,7 @@ const sendToDevice = async () => {
             };
         }
 
-        const response = await $backend(`/book/${bookid}/send_to_device`, {
+        const response = await $backend(`/book/${bookid.value}/send_to_device`, {
             method: 'POST',
             body: JSON.stringify(requestBody),
         });
@@ -1277,7 +1279,7 @@ const get_refer = async () => {
 
     let firstLine = true;
     try {
-        for await (const data of $backend_stream(`/book/${bookid}/refer?stream=1`)) {
+        for await (const data of $backend_stream(`/book/${bookid.value}/refer?stream=1`)) {
             if (firstLine) {
                 firstLine = false;
                 refer_books_loading.value = false;
@@ -1308,7 +1310,7 @@ const set_refer = async (provider_key, provider_value, opt = {}) => {
     data.append('provider_value', provider_value);
 
     try {
-        const rsp = await $backend(`/book/${bookid}/refer`, {
+        const rsp = await $backend(`/book/${bookid.value}/refer`, {
             method: 'POST',
             body: data,
         });
@@ -1316,7 +1318,7 @@ const set_refer = async (provider_key, provider_value, opt = {}) => {
         dialog_refer.value = false;
         if (rsp.err === 'ok') {
             if ($alert) $alert('success', t('book.setSuccess'));
-            router.push(`/book/${bookid}`);
+            router.push(`/book/${bookid.value}`);
             location.reload();
         } else {
             if ($alert) $alert('error', rsp.msg);
@@ -1330,13 +1332,13 @@ const set_refer = async (provider_key, provider_value, opt = {}) => {
 
 const set_scope = async () => {
     try {
-        const rsp = await $backend(`/book/${bookid}/setscope`, {
+        const rsp = await $backend(`/book/${bookid.value}/setscope`, {
             method: 'POST',
         });
 
         if (rsp.err === 'ok') {
             if ($alert) $alert('success', rsp.msg);
-            const refreshRsp = await $backend(`/book/${bookid}`);
+            const refreshRsp = await $backend(`/book/${bookid.value}`);
             if (refreshRsp.err === 'ok' && refreshRsp.book) {
                 Object.assign(book.value, refreshRsp.book);
             }
@@ -1352,7 +1354,7 @@ const delete_book = async () => {
     if (!confirm(t('book.confirmDelete'))) return;
 
     try {
-        const rsp = await $backend(`/book/${bookid}/delete`, {
+        const rsp = await $backend(`/book/${bookid.value}/delete`, {
             method: 'POST',
         });
 
@@ -1559,36 +1561,17 @@ watch(selectedDeviceOption, (newValue) => {
     }
 });
 
-const READING_STATE = { UNREAD: 0, READING: 1, FINISHED: 2 };
-
-const isInShelf = ref(false);
-const readingState = ref(0);
 const readingStateLoading = ref(false);
-const readDays = ref(0);
-const lastReadTime = ref('');
-
-const loadReadingState = async () => {
-    if (!store.user.is_login || !book.value.id) return;
-    try {
-        const rsp = await $backend(`/book/${book.value.id}/readstate`);
-        if (rsp.err === 'ok') {
-            isInShelf.value = !!rsp.wants;
-            readingState.value = rsp.read_state || 0;
-            readDays.value = rsp.read_days || 0;
-            lastReadTime.value = rsp.read_date || '';
-        }
-        if (book.value.state) {
-            if (!rsp || rsp.err !== 'ok') {
-                isInShelf.value = !!book.value.state.wants;
-                readingState.value = book.value.state.read_state || 0;
-            }
-            readDays.value = book.value.state.read_days || 0;
-            lastReadTime.value = book.value.state.last_read_time || '';
-        }
-    } catch (e) {
-        console.error('Failed to load reading state:', e);
-    }
-};
+const {
+    isInShelf,
+    readingState,
+    readDays,
+    lastReadTime,
+} = useBookReadingState({
+    bookId: computed(() => Number(bookid.value) || 0),
+    isLogin: computed(() => store.user?.is_login),
+    backend: $backend,
+});
 
 const toggleShelf = async () => {
     readingStateLoading.value = true;
@@ -1671,12 +1654,6 @@ const readingStateButtonText = computed(() => {
     return t('readingState.setReading');
 });
 
-watch(() => book.value.id, (newId) => {
-    if (newId) {
-        loadReadingState();
-    }
-});
-
 // Load devices on mount
 const loadDevices = async () => {
     if (store.user?.is_login) {
@@ -1727,10 +1704,6 @@ onMounted(async () => {
 
 .tag-chips a {
     margin: 4px 2px;
-}
-
-.tag-chips :deep(.v-chip) {
-    color: white !important;
 }
 
 /* 减小管理菜单图标和文字的间距 */

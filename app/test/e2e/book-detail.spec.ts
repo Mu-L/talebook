@@ -11,15 +11,24 @@ const mockDir = path.join(__dirname, 'mocks');
 const books = JSON.parse(fs.readFileSync(path.join(mockDir, 'books.json'), 'utf-8'));
 const bookId = books[0].id;
 const apiBook = JSON.parse(fs.readFileSync(path.join(mockDir, `api_book_${bookId}.json`), 'utf-8'));
+const mockApiUrl = process.env.MOCK_API_URL || 'http://127.0.0.1:8080';
 
 test.describe('Book Detail Page', () => {
-    // No page.route, relying on real mock server
+    test.beforeEach(async ({ page, request }) => {
+        await request.post(`${mockApiUrl}/_test/reset`, {
+            data: { installed: true },
+        });
+        await page.context().clearCookies();
+        await page.addInitScript(() => {
+            window.localStorage.removeItem('talebook.activeTheme');
+        });
+    });
 
     test('displays book details', async ({ page }) => {
         await page.goto(`/book/${bookId}`);
 
         // Check title
-        await expect(page.getByText(apiBook.book.title).first()).toBeVisible();
+        await expect(page.getByText(apiBook.book.title).first()).toBeVisible({ timeout: 15_000 });
 
         // Check author
         if (apiBook.book.authors && apiBook.book.authors.length > 0) {
@@ -65,5 +74,34 @@ test.describe('Book Detail Page', () => {
         await page.waitForURL(`**/read/${bookId}`);
 
         expect(new URL(page.url()).pathname).toBe(`/read/${bookId}`);
+    });
+
+    test('keeps metadata chips readable and linked in the default light theme', async ({ page }) => {
+        await page.goto(`/book/${bookId}`);
+        await expect(page.getByText(apiBook.book.title).first()).toBeVisible({ timeout: 15_000 });
+
+        const metadata = page.locator('.tag-chips');
+        const author = apiBook.book.authors[0];
+        const tag = apiBook.book.tags[0];
+        const authorChip = metadata.locator(`a[href="/author/${encodeURIComponent(author)}"]`);
+        const tagChip = metadata.locator(`a[href="/tag/${encodeURIComponent(tag)}"]`);
+        const publisherChip = metadata.locator('a', { hasText: apiBook.book.publisher });
+
+        await expect(authorChip).toBeVisible();
+        await expect(authorChip).toContainText(author);
+        await expect(tagChip).toBeVisible();
+        await expect(tagChip).toContainText(tag);
+
+        const authorTextColor = await authorChip.evaluate(element => getComputedStyle(element).color);
+        expect(authorTextColor).not.toBe('rgb(255, 255, 255)');
+
+        await expect(publisherChip).toBeVisible();
+        await expect(publisherChip).toHaveAttribute('href', `/publisher/${encodeURIComponent(apiBook.book.publisher)}`);
+
+        if (apiBook.book.series) {
+            const seriesChip = metadata.locator(`a[href="/series/${encodeURIComponent(apiBook.book.series)}"]`);
+            await expect(seriesChip).toBeVisible();
+            await expect(seriesChip).toContainText(apiBook.book.series);
+        }
     });
 });

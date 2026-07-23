@@ -2,6 +2,7 @@ import hashlib
 import json
 import re
 import zipfile
+from collections import Counter
 from pathlib import Path, PurePosixPath
 from xml.etree import ElementTree
 
@@ -81,23 +82,27 @@ def combined_text_resources(archive):
     return "\n".join(chunks)
 
 
-def test_preset_collection_contains_exactly_ten_epubs(source_manifest):
+def test_preset_collection_contains_exactly_ten_books_in_expected_formats(source_manifest):
     books = source_manifest["books"]
     expected_files = {book["filename"] for book in books}
-    actual_files = {path.name for path in BOOK_DIR.glob("*.epub")}
+    actual_files = {path.name for path in BOOK_DIR.iterdir() if path.name != SOURCE_MANIFEST.name}
+    format_counts = Counter(path.suffix.lower() for path in BOOK_DIR.iterdir() if path.name != SOURCE_MANIFEST.name)
 
-    assert source_manifest["schema_version"] == 1
+    assert source_manifest["schema_version"] == 2
     assert len(books) == 10
     assert len(expected_files) == 10
     assert actual_files == expected_files
-    assert {path.name for path in BOOK_DIR.iterdir() if path.suffix != ".epub"} == {"sources.json"}
+    assert format_counts == {".epub": 6, ".mobi": 1, ".azw3": 1, ".txt": 1, ".pdf": 1}
     assert sum(book["language"] == "zh-CN" for book in books) == 5
     assert sum(book["language"] == "en-GB" for book in books) == 5
+    assert all(Path(book["filename"]).suffix.lower() == f".{book['format'].lower()}" for book in books)
 
 
 def test_source_manifest_is_auditable(source_manifest):
     assert source_manifest["generated_on"] == "2026-07-23"
     assert source_manifest["chinese_conversion"]["configuration"] == "t2s"
+    assert source_manifest["format_conversion"]["version"] == "8.5.0"
+    assert "TXT and PDF" in source_manifest["format_conversion"]["metadata_limit"]
 
     for book in source_manifest["books"]:
         assert book["source"] in {"Project Gutenberg", "Standard Ebooks"}
@@ -108,6 +113,13 @@ def test_source_manifest_is_auditable(source_manifest):
         assert re.fullmatch(r"[0-9a-f]{64}", book["sha256"])
         assert "public domain" in book["rights"].lower()
         assert isinstance(book["transformations"], list)
+        assert book["format"] in {"EPUB", "MOBI", "AZW3", "TXT", "PDF"}
+
+
+def test_preset_artifact_hashes_match_source_manifest(source_manifest):
+    for book in source_manifest["books"]:
+        artifact = BOOK_DIR / book["filename"]
+        assert hashlib.sha256(artifact.read_bytes()).hexdigest() == book["sha256"]
 
 
 @pytest.mark.parametrize(
@@ -118,18 +130,12 @@ def test_source_manifest_is_auditable(source_manifest):
         "san-guo-zhi-yan-yi.epub",
         "shui-hu-zhuan.epub",
         "dao-de-jing.epub",
-        "pride-and-prejudice.epub",
-        "alices-adventures-in-wonderland.epub",
-        "frankenstein.epub",
-        "the-picture-of-dorian-gray.epub",
         "the-adventures-of-sherlock-holmes.epub",
     ],
 )
 def test_preset_epub_structure_metadata_cover_and_content(source_manifest, filename):
     record = next(book for book in source_manifest["books"] if book["filename"] == filename)
     epub_path = BOOK_DIR / filename
-
-    assert hashlib.sha256(epub_path.read_bytes()).hexdigest() == record["sha256"]
 
     with zipfile.ZipFile(epub_path) as archive:
         first_entry = archive.infolist()[0]
@@ -198,10 +204,6 @@ def test_chinese_editions_are_simplified_and_keep_gutenberg_notice(filename, tra
 @pytest.mark.parametrize(
     "filename",
     [
-        "pride-and-prejudice.epub",
-        "alices-adventures-in-wonderland.epub",
-        "frankenstein.epub",
-        "the-picture-of-dorian-gray.epub",
         "the-adventures-of-sherlock-holmes.epub",
     ],
 )
@@ -210,3 +212,44 @@ def test_standard_ebooks_editions_keep_cc0_notice(filename):
         text = combined_text_resources(archive)
 
     assert "creativecommons.org/publicdomain/zero/1.0" in text
+
+
+@pytest.mark.parametrize(
+    ("filename", "title", "author", "minimum_size"),
+    [
+        ("pride-and-prejudice.mobi", b"Pride and Prejudice", b"Jane Austen", 900_000),
+        ("the-picture-of-dorian-gray.azw3", b"The Picture of Dorian Gray", b"Oscar Wilde", 600_000),
+    ],
+)
+def test_kindle_formats_have_palm_database_signature_and_metadata(filename, title, author, minimum_size):
+    data = (BOOK_DIR / filename).read_bytes()
+
+    assert data[60:68] == b"BOOKMOBI"
+    assert title in data
+    assert author in data
+    assert len(data) > minimum_size
+
+
+def test_frankenstein_txt_is_complete_utf8_with_visible_metadata_and_rights():
+    data = (BOOK_DIR / "frankenstein.txt").read_bytes()
+    text = data.decode("utf-8")
+
+    assert data.startswith(b"Frankenstein\n")
+    assert "\r\n" not in text
+    assert "Mary Shelley" in text[:500]
+    assert re.search(r"Chapter\s+I\b", text)
+    assert re.search(r"Chapter\s+XXIV\b", text)
+    assert "CC0 1.0 Universal Public Domain Dedication" in text
+    assert len(text.splitlines()) == 2087
+    assert len(data) > 400_000
+
+
+def test_alice_pdf_has_valid_signature_complete_file_and_illustrations(source_manifest):
+    data = (BOOK_DIR / "alices-adventures-in-wonderland.pdf").read_bytes()
+    record = next(book for book in source_manifest["books"] if book["format"] == "PDF")
+
+    assert data.startswith(b"%PDF-1.7")
+    assert data.rstrip().endswith(b"%%EOF")
+    assert data.count(b"/Subtype /Image") >= 80
+    assert len(data) > 10_000_000
+    assert record["page_count"] == 102

@@ -248,6 +248,7 @@ RUN apt-get update -y && \
         curl \
         git \
         jq \
+        unzip \
         uidmap && \
     if [ "$TARGETARCH" = "amd64" ] || [ "$TARGETARCH" = "arm64" ]; then \
         curl -fsSL https://deb.nodesource.com/setup_24.x | bash - && \
@@ -263,7 +264,8 @@ RUN --mount=type=cache,target=/root/.npm \
     codex --version && \
     python3 -m pytest --version && \
     ruff --version && \
-    bwrap --version
+    bwrap --version && \
+    unzip -v
 
 ENV TZ=Asia/Shanghai
 ENV LANG=C.UTF-8

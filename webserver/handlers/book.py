@@ -39,7 +39,7 @@ from webserver.plugins.meta.ai.api import KEY as AI_KEY
 from webserver.plugins.meta.ai.api import AIBookApi
 from webserver.plugins.parser.txt import get_content_encoding
 from webserver.services.autofill import AutoFillService
-from webserver.services.convert import ConvertService
+from webserver.services.convert import CONVERSION_TARGETS, ConvertService
 from webserver.services.extract import ExtractService
 from webserver.services.mail import MailService
 
@@ -138,28 +138,31 @@ class BookConverter(BaseHandler):
 
         source_format = self.get_argument("source_format", "").strip().lower()
         target_format = self.get_argument("target_format", "").strip().lower()
-        option = next(
-            (
-                item
-                for item in ConvertService.get_conversion_options(book)
-                if item["source_format"] == source_format and item["target_format"] == target_format
-            ),
+        # Validate the requested (source, target) is a supported conversion route.
+        # `get_conversion_options` only returns one option per target (with a
+        # fallback source), so looking up the user-supplied pair there would
+        # falsely report `unsupported` whenever the book lacks every source
+        # format for that target. Build the option against CONVERSION_TARGETS
+        # directly so we can distinguish "route doesn't exist" from "book
+        # doesn't carry the source".
+        valid_sources_for_target = next(
+            (sources for target, sources in CONVERSION_TARGETS if target == target_format),
             None,
         )
-        if not option:
+        if not valid_sources_for_target or source_format not in valid_sources_for_target:
             return {
                 "err": "params.convert.unsupported",
                 "msg": _("不支持从 %s 转换为 %s") % (source_format.upper() or "?", target_format.upper() or "?"),
             }
-        if option["reason"] == "source_missing":
-            return {
-                "err": "params.convert.source_missing",
-                "msg": _("本书没有 %s 格式") % source_format.upper(),
-            }
-        if option["reason"] == "target_exists":
+        if book.get(f"fmt_{target_format}"):
             return {
                 "err": "params.convert.target_exists",
                 "msg": _("本书已有 %s 格式，无需重复转换") % target_format.upper(),
+            }
+        if not book.get(f"fmt_{source_format}"):
+            return {
+                "err": "params.convert.source_missing",
+                "msg": _("本书没有 %s 格式") % source_format.upper(),
             }
 
         fpath = book[f"fmt_{source_format}"]

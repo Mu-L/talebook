@@ -1,16 +1,15 @@
 #!/usr/bin/env python3
 # -*- coding: UTF-8 -*-
 
-import importlib.util
 import logging
 import os
 import subprocess
-import sys
 import time
 import traceback
 from pathlib import Path
 
 import psutil
+from txt2epub_next import Txt2Epub
 
 from webserver import loader, utils
 from webserver.i18n import _
@@ -27,52 +26,8 @@ CONF = loader.get_settings()
 
 
 def get_txt2epub_converter():
-    """Load the vendored TXT-to-EPUB converter only when it is needed."""
-    package_dir = Path(__file__).resolve().parents[2] / "vendor" / "txt2epub" / "src"
-    package_init = package_dir / "__init__.py"
-    if not package_init.is_file():
-        raise RuntimeError("txt2epub submodule is missing at %s; rebuild the image or mount vendor/txt2epub" % package_dir)
-
-    module_name = "_talebook_txt2epub"
-
-    def clear_partial_import():
-        for cached_name in tuple(sys.modules):
-            if cached_name == module_name or cached_name.startswith(module_name + "."):
-                sys.modules.pop(cached_name, None)
-
-    module = sys.modules.get(module_name)
-    if module is not None and hasattr(module, "Txt2Epub"):
-        return module.Txt2Epub
-
-    # A failed package import can leave a half-initialized module in
-    # sys.modules. Remove the package and its children before retrying.
-    clear_partial_import()
-
-    spec = importlib.util.spec_from_file_location(
-        module_name,
-        package_init,
-        submodule_search_locations=[str(package_dir)],
-    )
-    if spec is None or spec.loader is None:
-        raise RuntimeError("unable to load txt2epub from %s" % package_init)
-    module = importlib.util.module_from_spec(spec)
-    sys.modules[module_name] = module
-    try:
-        spec.loader.exec_module(module)
-    except ModuleNotFoundError as err:
-        clear_partial_import()
-        raise RuntimeError(
-            "txt2epub dependency %r is missing; rebuild the Docker image after updating requirements.txt" % err.name
-        ) from err
-    except Exception:
-        clear_partial_import()
-        raise
-
-    converter = getattr(module, "Txt2Epub", None)
-    if converter is None:
-        sys.modules.pop(module_name, None)
-        raise RuntimeError("txt2epub package at %s does not export Txt2Epub" % package_init)
-    return converter
+    """Return the TXT-to-EPUB converter installed from PyPI."""
+    return Txt2Epub
 
 
 class ConvertService(AsyncService):
@@ -124,7 +79,7 @@ class ConvertService(AsyncService):
         return found
 
     def do_txt_to_epub(self, old_path, new_path, book=None):
-        """Create an EPUB from a TXT source with the vendored txt2epub library."""
+        """Create an EPUB from a TXT source with the PyPI txt2epub-next library."""
         book = book or {}
         authors = book.get("authors") or []
         author = ", ".join(authors) if isinstance(authors, (list, tuple)) else str(authors)

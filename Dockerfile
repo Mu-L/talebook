@@ -128,7 +128,6 @@ COPY requirements-test.txt /tmp/
 RUN --mount=type=cache,target=/root/.cache/pip pip install -r /tmp/requirements-test.txt
 COPY webserver/ /var/www/talebook/webserver/
 COPY tests/ /var/www/talebook/tests/
-COPY vendor/ /var/www/talebook/vendor/
 CMD ["pytest", "/var/www/talebook/tests"]
 
 
@@ -171,7 +170,6 @@ RUN mkdir -p /data/log/nginx/ && \
 COPY server.py /var/www/talebook/
 COPY docker/ /var/www/talebook/docker/
 COPY webserver/ /var/www/talebook/webserver/
-COPY vendor/ /var/www/talebook/vendor/
 COPY conf/nginx/ssl.* /data/books/ssl/
 COPY conf/nginx/talebook.conf /etc/nginx/conf.d/
 COPY conf/supervisor/talebook.conf /etc/supervisor/conf.d/
@@ -301,7 +299,6 @@ RUN mkdir -p /data/log/nginx/ && \
 COPY server.py /var/www/talebook/
 COPY docker/ /var/www/talebook/docker/
 COPY webserver/ /var/www/talebook/webserver/
-COPY vendor/ /var/www/talebook/vendor/
 COPY conf/nginx/ssl.* /data/books/ssl/
 COPY conf/nginx/dev.conf /etc/nginx/conf.d/talebook.conf
 COPY conf/supervisor/dev.conf /etc/supervisor/conf.d/talebook.conf

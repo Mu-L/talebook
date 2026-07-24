@@ -2,9 +2,7 @@
 # -*- coding: UTF-8 -*-
 
 import os
-import sys
 import tempfile
-import types
 import zipfile
 from pathlib import Path
 from unittest import mock
@@ -13,6 +11,7 @@ from tests.test_main import TestWithUserLogin, testdir
 from tests.test_main import setUpModule as init
 from webserver.services.convert import ConvertService, get_txt2epub_converter
 from webserver.services.extract import ExtractService
+from txt2epub_next import Txt2Epub
 
 
 def setUpModule():
@@ -45,18 +44,10 @@ class TestConvert(TestWithUserLogin):
             with zipfile.ZipFile(output) as epub:
                 self.assertIn("mimetype", epub.namelist())
 
-    def test_txt2epub_loader_recovers_from_partial_module(self):
-        module_name = "_talebook_txt2epub"
-        sys.modules[module_name] = types.ModuleType(module_name)
-        try:
-            converter = get_txt2epub_converter()
-            self.assertEqual(converter.__name__, "Txt2Epub")
-        finally:
-            for cached_name in tuple(sys.modules):
-                if cached_name == module_name or cached_name.startswith(module_name + "."):
-                    sys.modules.pop(cached_name, None)
+    def test_txt2epub_loader_uses_published_package(self):
+        self.assertIs(get_txt2epub_converter(), Txt2Epub)
 
-    def test_txt_to_epub_uses_vendored_converter(self):
+    def test_txt_to_epub_uses_published_converter(self):
         service = ConvertService()
         book = {"title": "Talebook TXT", "authors": ["Alice", "Bob"]}
         with mock.patch("webserver.services.convert.get_txt2epub_converter") as get_converter:

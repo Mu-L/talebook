@@ -2,22 +2,23 @@
 <html lang="zh-CN">
 <head>
   <meta charset="utf-8">
-  <title>接入 txt2epub TXT 转 EPUB 转换器</title>
+  <title>接入 txt2epub TXT 转 EPUB 转换器（已替代）</title>
   <style>
     body { max-width: 960px; margin: 2rem auto; padding: 0 1rem; color: #1f2937; font: 16px/1.65 system-ui, sans-serif; }
     h1, h2 { color: #0f3d68; } code { background: #eef4f8; padding: .1em .3em; } table { width: 100%; border-collapse: collapse; } th, td { border: 1px solid #b9c8d3; padding: .55rem; text-align: left; vertical-align: top; } th { background: #e8f1f7; } .meta { display: grid; grid-template-columns: 7em 1fr; gap: .3rem 1rem; } .status { color: #9a3412; font-weight: 700; }
   </style>
 </head>
 <body>
-  <h1>接入 txt2epub TXT 转 EPUB 转换器</h1>
+  <h1>接入 txt2epub TXT 转 EPUB 转换器（已替代）</h1>
   <div class="meta">
     <strong>创建日期</strong><span>2026-07-23</span>
     <strong>所属模块</strong><span>webserver（影响 app、Docker 构建与 Python 依赖）</span>
-    <strong>状态</strong><span class="status">ACTIVE</span>
+    <strong>状态</strong><span class="status">SUPERSEDED</span>
     <strong>需求来源</strong><span>用户请求：将 hehetoshang/txt2epub 加入 Talebook 的格式转换模块，可作为子模块使用。</span>
   </div>
 
   <h2>原始诉求与目标</h2>
+  <p><strong>状态：SUPERSEDED。</strong>本方案的 Git 子模块依赖设计已由 <code>design/webserver/20260724-txt2epub-next-pypi.active.html</code> 替代，原因是上游已发布并更名为 PyPI 包 <code>txt2epub-next</code>。其余 TXT 转 EPUB 交互与 API 设计仍作为历史背景保留。</p>
   <p>使用 <code>txt2epub</code> 为 Talebook 的 TXT 转 EPUB 场景生成更适合小说章节识别、编码识别和目录组织的 EPUB。将书籍页分散的格式转换入口合并为“转换书籍”，在弹窗中展示当前格式、可用路径与不可转换原因；转换请求必须明确提交源格式和目标格式，避免后端猜测错误。</p>
 
   <h2>设计决策与边界</h2>

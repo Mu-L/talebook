@@ -1,3 +1,0 @@
-[submodule "vendor/txt2epub"]
-	path = vendor/txt2epub
-	url = https://github.com/hehetoshang/txt2epub.git

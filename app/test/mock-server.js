@@ -306,6 +306,11 @@ router.post('/api/book/:id/delete', eventHandler(() => ({
   msg: 'Book deleted'
 })));
 
+router.post('/api/book/:id/convert', eventHandler(() => ({
+  err: 'ok',
+  msg: 'Conversion started'
+})));
+
 router.post('/api/book/:id/edit', eventHandler(() => ({
   err: 'ok',
   msg: 'Book updated'

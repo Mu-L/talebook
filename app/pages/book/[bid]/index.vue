@@ -3,6 +3,15 @@
         <!-- Main Content -->
         <v-row align="start">
             <v-col cols="12">
+                <BookConvertDialog
+                    v-model="dialog_convert"
+                    :book-title="book.title"
+                    :files="book.files"
+                    :options="conversion_options"
+                    :loading="converting_book"
+                    @confirm="confirm_conversion"
+                />
+
                 <!-- Send to Device Dialog -->
                 <v-dialog
                     v-model="dialog_send_to_device"
@@ -506,7 +515,7 @@
                             color="primary"
                             variant="elevated"
                             class="mx-2"
-                            :href="is_txt ? '/book/' + book.id + '/readtxt' : '/read/' + book.id"
+                            :href="'/read/' + book.id"
                             target="_blank"
                         >
                             <v-icon start>
@@ -540,17 +549,11 @@
                                         </template>
                                         <v-list-item-title>{{ t('book.saveMetaToFile') }}</v-list-item-title>
                                     </v-list-item>
-                                    <v-list-item :disabled="!hasEBooks" @click="convert_book">
+                                    <v-list-item @click="show_conversion_dialog">
                                         <template #prepend>
                                             <v-icon>mdi-swap-horizontal</v-icon>
                                         </template>
                                         <v-list-item-title>{{ t('book.convert') }}</v-list-item-title>
-                                    </v-list-item>
-                                    <v-list-item :disabled="!hasEBooks || hasPDF" @click="convert_to_pdf">
-                                        <template #prepend>
-                                            <v-icon>mdi-file-pdf-box</v-icon>
-                                        </template>
-                                        <v-list-item-title>{{ t('book.convert_to_pdf') }}</v-list-item-title>
                                     </v-list-item>
                                     <v-list-item @click="seperate_book" :disabled="book.files && book.files.length <= 1">
                                         <template #prepend>
@@ -838,7 +841,7 @@
             <v-col cols="12">
                 <v-row justify="space-around">
                     <v-col
-                        v-if="book.id > 0 && !is_txt"
+                        v-if="book.id > 0 && hasCompatibleFormats"
                         cols="12"
                         sm="6"
                         md="auto"
@@ -862,39 +865,6 @@
                                         </v-avatar>
                                     </template>
                                     <v-list-item-title>{{ t('book.onlineRead') }}</v-list-item-title>
-                                    <template #append>
-                                        <v-icon>mdi-chevron-right</v-icon>
-                                    </template>
-                                </v-list-item>
-                            </v-list>
-                        </v-card>
-                    </v-col>
-
-                    <v-col
-                        v-if="book.id > 0 && is_txt"
-                        cols="12"
-                        sm="6"
-                        md="auto"
-                        class="flex-grow-1"
-                    >
-                        <v-card
-                            variant="outlined"
-                            class="mb-2 h-100"
-                        >
-                            <v-list density="compact">
-                                <v-list-item
-                                    :href="'/book/' + book.id + '/readtxt'"
-                                    target="_blank"
-                                    class="w-100"
-                                >
-                                    <template #prepend>
-                                        <v-avatar color="primary">
-                                            <v-icon color="white">
-                                                mdi-text-box
-                                            </v-icon>
-                                        </v-avatar>
-                                    </template>
-                                    <v-list-item-title>{{ t('book.txtOnlineRead') }}({{ txt_parse_inited ? t('book.parsed') : t('book.unparsed') }})</v-list-item-title>
                                     <template #append>
                                         <v-icon>mdi-chevron-right</v-icon>
                                     </template>
@@ -1025,6 +995,7 @@ import { useRoute, useRouter } from 'vue-router';
 import { useAsyncData, useNuxtApp } from 'nuxt/app';
 import { useMainStore } from '@/stores/main';
 import BookCards_Small from '~/components/BookCards_Small.vue';
+import BookConvertDialog from '~/components/BookConvertDialog.vue';
 import { READING_STATE, useBookReadingState } from '~/composables/useBookReadingState';
 
 const route = useRoute();
@@ -1056,6 +1027,9 @@ const book = ref({
 const dialog_download = ref(false);
 const dialog_send_to_device = ref(false);
 const dialog_refer = ref(false);
+const dialog_convert = ref(false);
+const converting_book = ref(false);
+const conversion_options = ref([]);
 
 // Kindle sender for reference
 const kindle_sender = ref('');
@@ -1075,9 +1049,6 @@ const deviceTypes = ref([]);
 const refer_books_loading = ref(false);
 const refer_books_setting_btn_loading = ref(false);
 const refer_books = ref([]);
-
-// TXT
-const txt_parse_inited = ref(false);
 
 // Upload format
 const dialog_upload_format = ref(false);
@@ -1099,18 +1070,6 @@ const pending = ref(true);
 const error = ref(null);
 
 store.setNavbar(true);
-
-// Methods
-const get_txt_parse_status = async () => {
-    try {
-        const res = await $backend(`/book/txt/init?id=${bookid.value}&test=1`);
-        if (res.err === 'ok' && res.msg === '已解析') {
-            txt_parse_inited.value = true;
-        }
-    } catch (e) {
-        console.error(e);
-    }
-};
 
 // 数据获取逻辑
 const bookDataKey = computed(() => `book-${bookid.value}`);
@@ -1134,9 +1093,7 @@ watch(() => fetchData.value, (newData) => {
         // 直接更新 book.value 的所有属性，保持响应式
         Object.assign(book.value, newData.book);
         kindle_sender.value = newData.kindle_sender || '';
-
-        // 获取 TXT 解析状态
-        get_txt_parse_status();
+        conversion_options.value = newData.conversion_options || [];
     }
 }, { immediate: true });
 
@@ -1159,12 +1116,6 @@ const pub_year = computed(() => {
         return 'N/A';
     }
     return book.value.pubdate.split('-')[0];
-});
-
-const is_txt = computed(() => {
-    if (!book.value || !book.value.files) return false;
-    const formats = book.value.files.map(x => x.format.toLowerCase());
-    return formats.includes('txt');
 });
 
 const hasCompatibleFormats = computed(() => {
@@ -1198,21 +1149,6 @@ const canSendToDevice = computed(() => {
     if (!device) return false;
     if (device.type === 'kindle') return !!device.mailbox;
     return !!(device.ip && device.port);
-});
-
-const hasEBooks = computed(() => {
-    if (!book.value || !book.value.files) {
-        return false;
-    }
-    if (book.value.files.length === 0) {
-        return false;
-    }
-    return true;
-});
-
-const hasPDF = computed(() => {
-    if (!book.value || !book.value.files) return false;
-    return book.value.files.some(file => file.format.toLowerCase() === 'pdf');
 });
 
 const hasEpubAzw3OrPDF = computed(() => {
@@ -1433,33 +1369,29 @@ const delete_book = async () => {
     }
 };
 
-const convert_book = () => {
-    // 转换书籍格式
-    $backend('/book/' + book.value.id + '/convert', {
-        method: 'POST',
-        body: new URLSearchParams({reset: 'yes'}),
-    }).then((rsp) => {
-        if (rsp.err === 'ok') {
-            $alert('success', t('book.convertSuccessful'));
-            router.push('/book/' + book.value.id);
-        } else {
-            $alert('error', rsp.msg);
-        }
-    });
+const show_conversion_dialog = () => {
+    dialog_convert.value = true;
 };
 
-const convert_to_pdf = () => {
-    // 转换为PDF
-    $backend('/book/' + book.value.id + '/topdf', {
-        method: 'POST',
-        body: new URLSearchParams({reset: 'yes'}),
-    }).then((rsp) => {
+const confirm_conversion = async (option) => {
+    converting_book.value = true;
+    try {
+        const rsp = await $backend('/book/' + book.value.id + '/convert', {
+            method: 'POST',
+            body: new URLSearchParams({
+                source_format: option.source_format,
+                target_format: option.target_format,
+            }),
+        });
         if (rsp.err === 'ok') {
             $alert('success', t('book.convertSuccessful'));
+            dialog_convert.value = false;
         } else {
             $alert('error', rsp.msg);
         }
-    });
+    } finally {
+        converting_book.value = false;
+    }
 };
 
 const save_meta_to_file = () => {

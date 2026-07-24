@@ -8,6 +8,20 @@
       "converter": "txt2epub",
       "available": false,
       "reason": "target_exists"
+    },
+    {
+      "source_format": "epub",
+      "target_format": "azw3",
+      "converter": "ebook-convert",
+      "available": true,
+      "reason": null
+    },
+    {
+      "source_format": "epub",
+      "target_format": "pdf",
+      "converter": "ebook-convert",
+      "available": true,
+      "reason": null
     }
   ],
   "book": {

@@ -91,7 +91,7 @@
     "conversionTargetExists": "已有 EPUB 文件",
     "conversionUnavailable": "暂不可转换",
     "txt2epubDescription": "使用 txt2epub 识别章节、整理目录并生成 EPUB 文件",
-    "noAvailableConversions": "当前书籍没有可用的转换路径，请先上传 TXT 文件，或检查是否已经存在 EPUB 文件。",
+    "noAvailableConversions": "当前书籍没有可转换的格式。可支持的目标格式已存在，或缺少可用源文件。",
     "startConversion": "开始转换",
     "sendToDevice": "发送到设备",
     "selectDevice": "选择设备",

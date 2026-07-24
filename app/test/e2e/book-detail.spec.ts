@@ -60,6 +60,25 @@ test.describe('Book Detail Page', () => {
         await expect(page.getByRole('button', { name: '开始转换' })).toBeEnabled();
     });
 
+    test('shows EPUB conversion routes without unavailable routes', async ({ page }) => {
+        await page.goto('/book/1');
+        await page.getByText('文件处理').click();
+        await page.getByText('转换书籍').click();
+
+        await expect(page.locator('.conversion-option')).toHaveCount(2);
+        await expect(page.getByText('AZW3')).toBeVisible();
+        await expect(page.getByText('PDF')).toBeVisible();
+    });
+
+    test('shows the empty state when every target format already exists', async ({ page }) => {
+        await page.goto('/book/3');
+        await page.getByText('文件处理').click();
+        await page.getByText('转换书籍').click();
+
+        await expect(page.locator('.conversion-option')).toHaveCount(0);
+        await expect(page.locator('.v-alert')).toBeVisible();
+    });
+
     test('uses the unified reader when EPUB and TXT both exist', async ({ page }) => {
         await page.goto(`/book/${bookId}`);
 

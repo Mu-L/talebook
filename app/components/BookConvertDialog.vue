@@ -54,16 +54,14 @@
                     class="conversion-options"
                 >
                     <v-sheet
-                        v-for="option in options"
+                        v-for="option in availableOptions"
                         :key="routeKey(option)"
                         rounded="lg"
                         border
                         class="conversion-option pa-4 mb-3"
-                        :class="{ 'conversion-option--disabled': !option.available }"
                     >
                         <v-radio
                             :value="routeKey(option)"
-                            :disabled="!option.available"
                             color="primary"
                         >
                             <template #label>
@@ -80,15 +78,12 @@
                                             {{ option.target_format.toUpperCase() }}
                                         </strong>
                                         <v-chip
-                                            :color="option.available ? 'success' : 'default'"
+                                            color="success"
                                             size="x-small"
                                             variant="tonal"
                                         >
-                                            {{ option.available ? t('book.conversionReady') : reasonText(option.reason) }}
+                                            {{ t('book.conversionReady') }}
                                         </v-chip>
-                                    </div>
-                                    <div class="text-body-2 text-medium-emphasis mt-1">
-                                        {{ t('book.txt2epubDescription') }}
                                     </div>
                                 </div>
                             </template>
@@ -172,14 +167,6 @@ const selectedOption = computed(() => (
     availableOptions.value.find(option => routeKey(option) === selectedRoute.value) || null
 ));
 
-const reasonText = (reason) => {
-    const keys = {
-        source_missing: 'book.conversionSourceMissing',
-        target_exists: 'book.conversionTargetExists',
-    };
-    return t(keys[reason] || 'book.conversionUnavailable');
-};
-
 watch(
     () => [props.modelValue, props.options],
     () => {
@@ -214,10 +201,6 @@ const confirm = () => {
 .conversion-option:has(.v-selection-control--dirty) {
     border-color: rgb(var(--v-theme-primary));
     background: rgba(var(--v-theme-primary), 0.06);
-}
-
-.conversion-option--disabled {
-    background: rgba(var(--v-theme-on-surface), 0.035);
 }
 
 .conversion-option__content {

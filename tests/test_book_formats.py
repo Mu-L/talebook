@@ -268,6 +268,42 @@ class TestBookConvert(TestWithUserLogin):
                     self.assertEqual(d["err"], "ok")
                     mock_convert.assert_called_once_with(1, mock_book, "/tmp/test.txt", "epub")
 
+    def test_convert_epub_to_azw3(self):
+        mock_book = {
+            "id": BID_EPUB,
+            "title": "Test",
+            "fmt_epub": "/tmp/test.epub",
+        }
+        with mock.patch.object(BaseHandler, "get_book", return_value=mock_book):
+            with mock.patch("webserver.services.convert.ConvertService.is_book_converting", return_value=False):
+                with mock.patch("webserver.services.convert.ConvertService.convert_and_save") as mock_convert:
+                    d = self.json(
+                        f"/api/book/{BID_EPUB}/convert",
+                        method="POST",
+                        body="source_format=epub&target_format=azw3",
+                    )
+
+        self.assertEqual(d["err"], "ok")
+        mock_convert.assert_called_once_with(1, mock_book, "/tmp/test.epub", "azw3")
+
+    def test_convert_epub_to_pdf(self):
+        mock_book = {
+            "id": BID_EPUB,
+            "title": "Test",
+            "fmt_epub": "/tmp/test.epub",
+        }
+        with mock.patch.object(BaseHandler, "get_book", return_value=mock_book):
+            with mock.patch("webserver.services.convert.ConvertService.is_book_converting", return_value=False):
+                with mock.patch("webserver.services.convert.ConvertService.convert_and_save") as mock_convert:
+                    d = self.json(
+                        f"/api/book/{BID_EPUB}/convert",
+                        method="POST",
+                        body="source_format=epub&target_format=pdf",
+                    )
+
+        self.assertEqual(d["err"], "ok")
+        mock_convert.assert_called_once_with(1, mock_book, "/tmp/test.epub", "pdf")
+
 
 class TestBookToPDF(TestWithUserLogin):
     """POST /api/book/:id/topdf"""

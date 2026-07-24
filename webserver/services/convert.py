@@ -20,7 +20,13 @@ from webserver.services.mail import MailService
 
 EBOOK_CONVERT_CMD = "ebook-convert"
 DEFAULT_CONVERT_TIMEOUT = 3000
-CONVERSION_ROUTES = (("txt", "epub", "txt2epub"),)
+# Each target exposes one preferred source. This keeps the conversion dialog
+# actionable when a book holds multiple input formats for the same target.
+CONVERSION_TARGETS = (
+    ("epub", ("azw3", "mobi", "pdf", "txt", "azw")),
+    ("azw3", ("epub",)),
+    ("pdf", ("epub", "azw3", "mobi", "azw")),
+)
 
 CONF = loader.get_settings()
 
@@ -35,8 +41,13 @@ class ConvertService(AsyncService):
     def get_conversion_options(book):
         """Describe supported conversion routes for the current book formats."""
         options = []
-        for source_format, target_format, converter in CONVERSION_ROUTES:
+        for target_format, source_formats in CONVERSION_TARGETS:
             reason = None
+            source_format = next(
+                (fmt for fmt in source_formats if book.get(f"fmt_{fmt}")),
+                source_formats[0],
+            )
+            converter = "txt2epub" if source_format == "txt" and target_format == "epub" else "ebook-convert"
             if book.get(f"fmt_{target_format}"):
                 reason = "target_exists"
             elif not book.get(f"fmt_{source_format}"):

@@ -53,12 +53,15 @@ describe('BookConvertDialog.vue', () => {
         expect(document.body.textContent).toContain('EPUB');
         expect(document.body.textContent).toContain('book.conversionReady');
 
-        await wrapper.get('[data-testid="conversion-confirm"]').trigger('click');
+        const confirmButton = document.body.querySelector('[data-testid="conversion-confirm"]') as HTMLButtonElement;
+        expect(confirmButton).not.toBeNull();
+        confirmButton.click();
+        await wrapper.vm.$nextTick();
         expect(wrapper.emitted('confirm')?.[0]?.[0]).toEqual(availableOption);
         wrapper.unmount();
     });
 
-    it('explains why conversion is unavailable', async () => {
+    it('hides unavailable routes and shows an empty-state message', async () => {
         const wrapper = mountDialog([{
             ...availableOption,
             available: false,
@@ -66,9 +69,11 @@ describe('BookConvertDialog.vue', () => {
         }]);
         await wrapper.vm.$nextTick();
 
-        expect(document.body.textContent).toContain('book.conversionSourceMissing');
         expect(document.body.textContent).toContain('book.noAvailableConversions');
-        expect(wrapper.get('[data-testid="conversion-confirm"]').attributes('disabled')).toBeDefined();
+        expect(document.body.querySelectorAll('.conversion-option')).toHaveLength(0);
+        const confirmButton = document.body.querySelector('[data-testid="conversion-confirm"]') as HTMLButtonElement;
+        expect(confirmButton).not.toBeNull();
+        expect(confirmButton.disabled).toBe(true);
         wrapper.unmount();
     });
 });

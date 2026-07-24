@@ -24,10 +24,33 @@ class TestConvert(TestWithUserLogin):
         missing_source = ConvertService.get_conversion_options({})
         existing_target = ConvertService.get_conversion_options({"fmt_txt": "/tmp/story.txt", "fmt_epub": "/tmp/story.epub"})
 
-        self.assertEqual(available[0]["reason"], None)
-        self.assertTrue(available[0]["available"])
-        self.assertEqual(missing_source[0]["reason"], "source_missing")
-        self.assertEqual(existing_target[0]["reason"], "target_exists")
+        available_epub = next(option for option in available if option["target_format"] == "epub")
+        missing_epub = next(option for option in missing_source if option["target_format"] == "epub")
+        existing_epub = next(option for option in existing_target if option["target_format"] == "epub")
+
+        self.assertEqual(available_epub["source_format"], "txt")
+        self.assertEqual(available_epub["reason"], None)
+        self.assertTrue(available_epub["available"])
+        self.assertEqual(missing_epub["reason"], "source_missing")
+        self.assertEqual(existing_epub["reason"], "target_exists")
+
+    def test_conversion_options_restore_epub_outputs(self):
+        options = ConvertService.get_conversion_options({"fmt_epub": "/tmp/story.epub"})
+        available = {(option["source_format"], option["target_format"]) for option in options if option["available"]}
+
+        self.assertEqual(available, {("epub", "azw3"), ("epub", "pdf")})
+
+    def test_conversion_options_choose_one_source_for_each_target(self):
+        options = ConvertService.get_conversion_options(
+            {
+                "fmt_epub": "/tmp/story.epub",
+                "fmt_azw3": "/tmp/story.azw3",
+                "fmt_mobi": "/tmp/story.mobi",
+            }
+        )
+        pdf = next(option for option in options if option["target_format"] == "pdf")
+
+        self.assertEqual(pdf["source_format"], "epub")
 
     def test_txt_to_epub_generates_epub(self):
         service = ConvertService()
